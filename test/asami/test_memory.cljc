@@ -1,9 +1,9 @@
 (ns asami.test-memory
-  #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern query]]
+  #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern count-pattern query]]
                      [asami.core :refer [empty-store first-group min-join-path]]
                      [clojure.test :as t :refer [testing is run-tests]]
                      [schema.test :as st :refer [deftest]])
-     :cljs (:require [naga.store :refer [assert-data resolve-pattern query]]
+     :cljs (:require [naga.store :refer [assert-data resolve-pattern count-pattern query]]
                      [asami.core :refer [empty-store first-group min-join-path]]
                      [clojure.test :as t :refer-macros [testing is run-tests]]
                      [schema.test :as st :refer-macros [deftest]])))
@@ -32,7 +32,10 @@
         r4 (unordered-resolve s '[?a :p2 :z])
         r5 (unordered-resolve s '[:a ?a :x])
         r6 (unordered-resolve s '[:a :p4 ?a])
-        r7 (unordered-resolve s '[:c :p4 :t])]
+        r7 (unordered-resolve s '[:c :p4 :t])
+        s' (assert-data s [[:d :p2 :z] [:a :p4 :y]])
+        r8 (unordered-resolve s' '[:a ?a ?b])
+        r9 (unordered-resolve s' '[?a :p2 ?b])]
     (is (= #{[:p1 :x]
              [:p1 :y]
              [:p2 :z]
@@ -45,7 +48,37 @@
     (is (= #{[:p1]
              [:p3]} r5))
     (is (empty? r6))
-    (is (= #{[]} r7))))
+    (is (= #{[]} r7))
+    (is (= #{[:p1 :x]
+             [:p1 :y]
+             [:p2 :z]
+             [:p3 :x]
+             [:p4 :y]} r8))
+    (is (= #{[:a :z]
+             [:b :x]
+             [:d :z]} r9))))
+
+(deftest test-count
+  (let [s (assert-data empty-store data)
+        r1 (count-pattern s '[:a ?a ?b])
+        r2 (count-pattern s '[?a :p2 ?b])
+        r3 (count-pattern s '[:a :p1 ?a])
+        r4 (count-pattern s '[?a :p2 :z])
+        r5 (count-pattern s '[:a ?a :x])
+        r6 (count-pattern s '[:a :p4 ?a])
+        r7 (count-pattern s '[:c :p4 :t])
+        s' (assert-data s [[:d :p2 :z] [:a :p4 :y]])
+        r8 (count-pattern s' '[:a ?a ?b])
+        r9 (count-pattern s' '[?a :p2 ?b])]
+    (is (= 4 r1))
+    (is (= 2 r2))
+    (is (= 2 r3))
+    (is (= 1 r4))
+    (is (= 2 r5))
+    (is (zero? r6))
+    (is (= 1 r7))
+    (is (= 5 r8))
+    (is (= 3 r9))))
 
 (def jdata
   [[:a :p1 :x]
