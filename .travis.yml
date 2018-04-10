@@ -1,0 +1,9 @@
+language: clojure
+lein: 2.8.1
+before_script:
+- mkdir -p out/asami
+- touch out/asami/core.js out/asami/test_memory.js
+- touch src/asami/* test/asami/*
+script:
+- lein test
+- lein cljsbuild test
