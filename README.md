@@ -1,4 +1,4 @@
-# asami
+# asami [![Build Status](https://travis-ci.org/threatgrid/asami.svg?branch=master)](https://travis-ci.org/threatgrid/asami)
 
 An implementation of the Naga storage protocol in memory.
 
