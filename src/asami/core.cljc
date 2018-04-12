@@ -3,19 +3,20 @@
     asami.core
     (:require [clojure.set :as set]
               [clojure.string :as str]
-              [naga.schema.store-structs :as st :refer [EPVPattern FilterPattern Pattern Results Value Axiom]]
+              [naga.schema.store-structs :as st
+                                         :refer [EPVPattern FilterPattern Pattern
+                                                 Results Value Axiom]]
               [naga.util :as u]
               [naga.storage.store-util :as store-util]
               [asami.index :as mem]
+              [naga.store :as store :refer [Storage StorageType]]
+              [naga.store-registry :as registry]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
-              #?(:clj [naga.store :as store :refer [Storage]]
-                 :cljs [naga.store :as store :refer [Storage]])
               #?(:clj [clojure.core.cache :as c])
               #?(:cljs [cljs.core :refer [Symbol PersistentVector List LazySeq]]))
     #?(:clj
-        (:import [clojure.lang Symbol IPersistentVector IPersistentList]
-                 #_[naga-store.core Storage])))
+        (:import [clojure.lang Symbol IPersistentVector IPersistentList])))
 
 (defprotocol Constraint
   (get-vars [c] "Returns a seq of the vars in a constraint")
@@ -370,9 +371,9 @@
 
 (def empty-store (->MemoryStore nil mem/empty-graph))
 
-(s/defn create-store :- Storage
+(s/defn create-store :- StorageType
   "Factory function to create a store"
   [config]
   empty-store)
 
-(store/register-storage! :memory create-store)
+(registry/register-storage! :memory create-store)
