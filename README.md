@@ -2,6 +2,8 @@
 
 An implementation of the Naga storage protocol in memory.
 
+[![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
+
 This has a query API that looks very similar to a simplified Datomic.
 
 ## Usage
