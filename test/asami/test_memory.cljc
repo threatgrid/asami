@@ -1,9 +1,9 @@
 (ns asami.test-memory
-  #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern count-pattern query]]
+  #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
                      [asami.core :refer [empty-store first-group min-join-path]]
                      [clojure.test :as t :refer [testing is run-tests]]
                      [schema.test :as st :refer [deftest]])
-     :cljs (:require [naga.store :refer [assert-data resolve-pattern count-pattern query]]
+     :cljs (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
                      [asami.core :refer [empty-store first-group min-join-path]]
                      [clojure.test :as t :refer-macros [testing is run-tests]]
                      [schema.test :as st :refer-macros [deftest]])))
@@ -79,6 +79,27 @@
     (is (= 1 r7))
     (is (= 5 r8))
     (is (= 3 r9))))
+
+(def data-entities (map (fn [x] [x :naga/entity true]) [:a :b :c]))
+
+(deftest test-tx
+  (let [s1 (assert-data empty-store (concat data data-entities))
+        s2 (start-tx s1)
+        s3 (assert-data s2 [[:d :p2 :z] [:c :p4 :z] [:a :p4 :y]])
+        s4 (commit-tx s3)
+        r1 (unordered-resolve s4 '[:a ?a ?b])
+        r2 (unordered-resolve s4 '[?a :p2 ?b])
+        r3 (set (deltas s4))]
+    (is (= #{[:p1 :x]
+             [:p1 :y]
+             [:p2 :z]
+             [:p3 :x]
+             [:p4 :y]
+             [:naga/entity true]} r1))
+    (is (= #{[:a :z]
+             [:b :x]
+             [:d :z]} r2))
+    (is (= #{:a :c} r3))))
 
 (def jdata
   [[:a :p1 :x]
