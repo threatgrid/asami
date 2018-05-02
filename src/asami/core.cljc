@@ -320,9 +320,11 @@
   (commit-tx [this] this)
 
   (deltas [this]
+    ;; sort responses by the number in the node ID, since these are known to be ordered
     (when-let [previous-graph (or (:data (meta this)) before-graph)]
-      (let [subjects (mem/graph-diff graph previous-graph)]
-        (filter (fn [s] (seq (mem/resolve-pattern graph [s :naga/entity '?]))) subjects))))
+      (->> (mem/graph-diff graph previous-graph)
+           (filter (fn [s] (seq (mem/resolve-pattern graph [s :naga/entity '?]))))
+           (sort-by #(subs (name %) 5)))))
 
   (new-node [this]
     (->> "node-"

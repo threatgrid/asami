@@ -80,14 +80,25 @@
     (is (= 5 r8))
     (is (= 3 r9))))
 
-(def data-entities (map (fn [x] [x :naga/entity true]) [:a :b :c]))
+(def id-data
+  [[:mem/node-1 :p1 :x]
+   [:mem/node-1 :p1 :y]
+   [:mem/node-1 :p2 :z]
+   [:mem/node-1 :p3 :x]
+   [:mem/node-2 :p1 :x]
+   [:mem/node-2 :p2 :x]
+   [:mem/node-2 :p3 :z]
+   [:mem/node-3 :p4 :t]])
+
+
+(def data-entities (map (fn [x] [x :naga/entity true]) [:mem/node-1 :mem/node-2 :mem/node-3]))
 
 (deftest test-tx
-  (let [s1 (assert-data empty-store (concat data data-entities))
+  (let [s1 (assert-data empty-store (concat id-data data-entities))
         s2 (start-tx s1)
-        s3 (assert-data s2 [[:d :p2 :z] [:c :p4 :z] [:a :p4 :y]])
+        s3 (assert-data s2 [[:d :p2 :z] [:mem/node-3 :p4 :z] [:mem/node-1 :p4 :y]])
         s4 (commit-tx s3)
-        r1 (unordered-resolve s4 '[:a ?a ?b])
+        r1 (unordered-resolve s4 '[:mem/node-1 ?a ?b])
         r2 (unordered-resolve s4 '[?a :p2 ?b])
         r3 (set (deltas s4))]
     (is (= #{[:p1 :x]
@@ -96,10 +107,10 @@
              [:p3 :x]
              [:p4 :y]
              [:naga/entity true]} r1))
-    (is (= #{[:a :z]
-             [:b :x]
+    (is (= #{[:mem/node-1 :z]
+             [:mem/node-2 :x]
              [:d :z]} r2))
-    (is (= #{:a :c} r3))))
+    (is (= #{:mem/node-1 :mem/node-3} r3))))
 
 (def jdata
   [[:a :p1 :x]
