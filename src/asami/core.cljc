@@ -1,6 +1,7 @@
 (ns ^{:doc "A storage implementation over in-memory indexing. Includes full query engine."
       :author "Paula Gearon"}
     asami.core
+    #?(:clj (:refer-clojure :exclude [eval]))
     (:require [clojure.set :as set]
               [clojure.string :as str]
               [naga.schema.store-structs :as st
@@ -9,6 +10,7 @@
               [naga.util :as u]
               [naga.storage.store-util :as store-util]
               [asami.index :as mem]
+              [asami.util :refer [c-eval]]
               [naga.store :as store :refer [Storage StorageType]]
               [naga.store-registry :as registry]
               #?(:clj  [schema.core :as s]
@@ -193,10 +195,11 @@
    part :- Results
    fltr :- FilterPattern]
   (let [m (meta part)
-        vars (:cols m)
-        filter-fn (eval `(fn [~vars] ~fltr))]
+        vars (vec (:cols m))
+        filter-fn (c-eval (list 'fn [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
+(s/defn find-vars [f] (set (filter st/vartest? f)))
 
 ;; protocol dispatch for patterns and filters in queries
 #?(
@@ -210,7 +213,7 @@
 
   ;; Filters are implemented in lists
   IPersistentList
-  (get-vars [f] (:vars (meta f)))
+  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
 
   (left-join [f results graph] (filter-join graph results f)))
 
@@ -224,15 +227,15 @@
 
   ;; Filters are implemented in lists
   List
-  (get-vars [f] (:vars (meta f)))
+  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
   (left-join [f results graph] (filter-join graph results f))
   
   ;; Clojurescript needs to handle various lists separately
   EmptyList
-  (get-vars [f] (:vars (meta f)))
+  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
   (left-join [f results graph] (filter-join graph results f))
   LazySeq
-  (get-vars [f] (:vars (meta f)))
+  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
   (left-join [f results graph] (filter-join graph results f))))
 
 
