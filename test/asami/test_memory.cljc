@@ -1,10 +1,12 @@
 (ns asami.test-memory
   #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
-                     [asami.core :refer [empty-store first-group min-join-path]]
+                     [asami.core :refer [empty-store first-group min-join-path merge-filters]]
                      [clojure.test :as t :refer [testing is run-tests]]
+                     [asami.util :as u]
                      [schema.test :as st :refer [deftest]])
      :cljs (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
-                     [asami.core :refer [empty-store first-group min-join-path]]
+                     [asami.core :refer [empty-store first-group min-join-path merge-filters]]
+                     [asami.util :as u]
                      [clojure.test :as t :refer-macros [testing is run-tests]]
                      [schema.test :as st :refer-macros [deftest]])))
 
@@ -246,6 +248,46 @@
              [?h :v2 ?v2]
              [?i :i ?h]
              [?other :id "id"]] path))))
+
+(def j3data
+  [[:a :p1 :b]
+   [:a :p1 :b]
+   [:a :p2 :z]
+   [:a :p3 :x]
+   [:a :p3 :z]
+   [:b :px :c]
+   [:b :px :d]
+   [:b :py :c]
+   [:c :pa :t]
+   [:c :pb :u]
+   [:d :pz :l]
+   [:x :q2 :m]
+   [:y :q1 :l]
+   [:y :q3 :n]
+   [:y :q1 :b]])
+
+(deftest test-merge-filters
+  (is (= '[[:a ?a ?b] (= ?b :z)] (merge-filters '[[:a ?a ?b]] '[(= ?b :z)])))
+  (is (= '[[:x ?c ?a] [:a ?a ?b] (= ?b :z)] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?b :z)])))
+  (is (= '[[:x ?c ?a] (= ?a :z) [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?a :z)]))))
+
+#?(:clj
+   (deftest test-eval
+     (is (= 5 (u/c-eval 5)))
+     (is ((u/c-eval '(fn [[?a ?b]] (= ?b :z))) [0 :z]))))
+
+#?(:clj
+   (deftest test-filter
+     []
+     (let [s (assert-data empty-store j3data)
+           r1 (unordered-query s '[?a] '[[:a ?a ?b] (= ?b :z)])
+           r2 (unordered-query s '[?a ?b] '[[:a ?a ?b] [?b :px ?d] (= ?d :c)])
+           r3 (unordered-query s '[?d] '[[:a ?a ?b] [?b :px ?d] (not= ?d :c)])
+           r4 (unordered-query s '[?z] '[[?z :p1 ?x] [:y :q1 ?y] (= ?x ?y)])]
+       (is (= #{[:p2] [:p3]} r1))
+       (is (= #{[:p1 :b]} r2))
+       (is (= #{[:d]} r3))
+       (is (= #{[:a]} r4)))))
 
 #?(:cljs (run-tests))
 
