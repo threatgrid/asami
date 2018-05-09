@@ -1,10 +1,10 @@
 (ns asami.test-memory-index
   #?(:clj
-      (:require [asami.index :refer [graph-add empty-graph resolve-pattern]]
+      (:require [asami.index :refer [graph-add empty-graph resolve-pattern count-pattern]]
                 [schema.test :as st :refer [deftest]]
                 [clojure.test :as t :refer [testing is run-tests]])
      :cljs
-      (:require [asami.index :refer [graph-add empty-graph resolve-pattern]]
+      (:require [asami.index :refer [graph-add empty-graph resolve-pattern count-pattern]]
                 [schema.test :as st :refer-macros [deftest]]
                 [clojure.test :as t :refer-macros [testing is run-tests]])))
 
@@ -34,7 +34,10 @@
         r3 (unordered-resolve g '[:a :p1 ?a])
         r4 (unordered-resolve g '[?a :p2 :z])
         r5 (unordered-resolve g '[:a ?a :x])
-        r6 (unordered-resolve g '[:a :p4 ?a])]
+        r6 (unordered-resolve g '[:a :p4 ?a])
+        r7 (unordered-resolve g '[:a :p1 :x])
+        r8 (unordered-resolve g '[:a :p1 :b])
+        r9 (unordered-resolve g '[?a ?b ?c])]
     (is (= #{[:p1 :x]
              [:p1 :y]
              [:p2 :z]
@@ -46,7 +49,31 @@
     (is (= #{[:a]} r4))
     (is (= #{[:p1]
              [:p3]} r5))
-    (is (empty? r6))))
+    (is (empty? r6))
+    (is (= #{[]} r7))
+    (is (empty? r8))
+    (is (= (into #{} data) r9))))
+
+(deftest test-count
+  (let [g (assert-data empty-graph data)
+        r1 (count-pattern g '[:a ?a ?b])
+        r2 (count-pattern g '[?a :p2 ?b])
+        r3 (count-pattern g '[:a :p1 ?a])
+        r4 (count-pattern g '[?a :p2 :z])
+        r5 (count-pattern g '[:a ?a :x])
+        r6 (count-pattern g '[:a :p4 ?a])
+        r7 (count-pattern g '[:a :p1 :x])
+        r8 (count-pattern g '[:a :p1 :b])
+        r9 (count-pattern g '[?a ?b ?c])]
+    (is (= 4 r1))
+    (is (= 2 r2))
+    (is (= 2 r3))
+    (is (= 1 r4))
+    (is (= 2 r5))
+    (is (zero? r6))
+    (is (= 1 r7))
+    (is (zero? r8))
+    (is (= 8 r9))))
 
 #?(:cljs (run-tests))
 

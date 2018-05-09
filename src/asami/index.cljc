@@ -31,9 +31,14 @@
 
 (defn- simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
 
-(defmulti get-from-index "Lookup an index in the graph for the requested data" simplify)
+(defmulti get-from-index
+  "Lookup an index in the graph for the requested data.
+   Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
+  simplify)
 
-(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (let [os (get-in idx [s p])] (if (get os o) [[]] [])))
+;; Extracts the required index (idx), and looks up the requested fields.
+;; If an embedded index is pulled out, then this is referred to as edx.
+(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) [[]] []))
 (defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (get-in idx [s p])))
 (defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (get-in idx [o s])))
 (defmethod get-from-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o])))
@@ -42,11 +47,31 @@
 (defmethod get-from-index [ ?  ? :v] [{idx :osp} s p o] (let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
 
+
+(defn count-embedded-index
+  "Adds up the counts of embedded indexes"
+  [edx]
+  (apply + (map count (vals edx))))
+
+(defmulti count-from-index
+  "Lookup an index in the graph for the requested data and count the results."
+  simplify)
+
+(defmethod count-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) 1 0))
+(defmethod count-from-index [:v :v  ?] [{idx :spo} s p o] (count (get-in idx [s p])))
+(defmethod count-from-index [:v  ? :v] [{idx :osp} s p o] (count (get-in idx [o s])))
+(defmethod count-from-index [:v  ?  ?] [{idx :spo} s p o] (count-embedded-index (idx s)))
+(defmethod count-from-index [ ? :v :v] [{idx :pos} s p o] (count (get-in idx [p o])))
+(defmethod count-from-index [ ? :v  ?] [{idx :pos} s p o] (count-embedded-index (idx p)))
+(defmethod count-from-index [ ?  ? :v] [{idx :osp} s p o] (count-embedded-index (idx o)))
+(defmethod count-from-index [ ?  ?  ?] [{idx :spo} s p o] (apply + (map count-embedded-index (vals idx))))
+
 (defprotocol Graph
   (graph-add [this subj pred obj] "Adds triples to the graph")
   (graph-delete [this subj pred obj] "Removes triples from the graph")
   (graph-diff [this other] "Returns all subjects that have changed in this graph, compared to other")
-  (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only"))
+  (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only")
+  (count-triple [this subj pred obj] "Resolves patterns from the graph, and returns the size of the resolution"))
 
 (defrecord GraphIndexed [spo pos osp]
   Graph
@@ -66,11 +91,18 @@
                        spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
-    (get-from-index this subj pred obj)))
+    (get-from-index this subj pred obj))
+  (count-triple [this subj pred obj]
+    (count-from-index this subj pred obj)))
 
 (defn resolve-pattern
   "Convenience function to extract elements out of a pattern to query for it"
   [graph [s p o :as pattern]]
   (resolve-triple graph s p o))
+
+(defn count-pattern
+  "Convenience function to extract elements out of a pattern to count the resolution"
+  [graph [s p o :as pattern]]
+  (count-triple graph s p o))
 
 (def empty-graph (->GraphIndexed {} {} {}))
