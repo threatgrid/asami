@@ -355,7 +355,7 @@
   (count-pattern [_ pattern]
     (if-let [count-fn (get-count-fn graph)]
       (count-fn pattern)
-      (count (mem/resolve-pattern graph pattern))))
+      (mem/count-pattern graph pattern)))
 
   (query [this output-pattern patterns]
     (store-util/project this output-pattern (join-patterns graph patterns)))
