@@ -1,7 +1,8 @@
 (ns asami.test-query
   "Tests internals of the query portion of the memory storage"
-  (:require [asami.core :refer [min-join-path plan-path]]
+  (:require [asami.query :refer [first-group min-join-path plan-path merge-filters]]
             [asami.index :refer [Graph]]
+            [asami.util :as u]
             [naga.storage.store-util :refer [matching-vars]]
             #?(:clj  [clojure.test :refer [deftest is use-fixtures]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures]])
@@ -9,6 +10,74 @@
                :cljs [schema.test :as st :refer-macros [deftest]])))
 
 (use-fixtures :once st/validate-schemas)
+
+
+(deftest test-query-path
+  (let [simple-p '[[?a :a :b] [?b :c :d]]
+        simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
+        [g] (first-group simple-p)
+        p (min-join-path simple-p simple-cm)
+        simple-p2 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm2 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
+        [g2] (first-group simple-p2)
+        p2 (min-join-path simple-p2 simple-cm2)
+        patterns '[[?a :a :b]
+                   [?b :c ?d]
+                   [?d :d ?e]
+                   [?d :e ?f]
+                   [?f :f ?a]
+                   [?f :g ?g]
+                   [?g :v1 ?v1]
+                   [?g :v2 ?v2]
+                   [?h :v1 ?v1]
+                   [?h :v2 ?v2]
+                   [?i :i ?h]
+                   [?other :id "id"]]
+        count-map '{[?a :a :b] 1
+                    [?b :c ?d] 2
+                    [?d :d ?e] 3
+                    [?d :e ?f] 3
+                    [?f :f ?a] 3
+                    [?f :g ?g] 5
+                    [?g :v1 ?v1] 3
+                    [?g :v2 ?v2] 4
+                    [?h :v1 ?v1] 5
+                    [?h :v2 ?v2] 6
+                    [?i :i ?h] 7
+                    [?other :id "id"] 1}
+        [group] (first-group patterns)
+        path (min-join-path patterns count-map)]
+
+    (is (= '[[?a :a :b]] g))
+    (is (= '[[?a :a :b] [?b :c :d]] p))
+
+    (is (= '[[?a :a :b] [?a :c :d]] g2))
+    (is (= '[[?a :a :b] [?a :c :d] [?c :e ?b] [?b :c :d]] p2))
+
+    (is (= '[[?a :a :b]
+             [?f :f ?a]
+             [?f :g ?g]
+             [?g :v1 ?v1]
+             [?g :v2 ?v2]
+             [?h :v1 ?v1]
+             [?h :v2 ?v2]
+             [?i :i ?h]
+             [?d :e ?f]
+             [?b :c ?d]
+             [?d :d ?e]] group))
+    (is (= '[[?a :a :b]
+             [?f :f ?a]
+             [?d :e ?f]
+             [?b :c ?d]
+             [?d :d ?e]
+             [?f :g ?g]
+             [?g :v1 ?v1]
+             [?g :v2 ?v2]
+             [?h :v1 ?v1]
+             [?h :v2 ?v2]
+             [?i :i ?h]
+             [?other :id "id"]] path))))
+
 
 (defn mapto [s1 s2]
   (into {} (filter second (map vector s1 s2))))
@@ -102,6 +171,16 @@
     (is (= m2 {0 1, 2 5}))
     (is (= m3 {0 1, 2 5, 3 1, 5 4}))
     (is (= m4 {2 5, 5 4}))))
+
+(deftest test-merge-filters
+  (is (= '[[:a ?a ?b] (= ?b :z)] (merge-filters '[[:a ?a ?b]] '[(= ?b :z)])))
+  (is (= '[[:x ?c ?a] [:a ?a ?b] (= ?b :z)] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?b :z)])))
+  (is (= '[[:x ?c ?a] (= ?a :z) [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?a :z)]))))
+
+#?(:clj
+   (deftest test-eval
+     (is (= 5 (u/c-eval 5)))
+     (is ((u/c-eval '(fn [[?a ?b]] (= ?b :z))) [0 :z]))))
 
 #?(:cljs (run-tests))
 
