@@ -211,4 +211,26 @@
        (is (= #{[:d]} r3))
        (is (= #{[:a]} r4)))))
 
+
+(def j4data
+  [[:a :p1 :b]
+   [:a :p2 :z]
+   [:a :p3 :x]
+   [:a :p3 :t]
+   [:b :px :c]
+   [:b :px :d]
+   [:b :py :c]
+   [:c :pa :t]
+   [:c :px :c]
+   [:d :px :c]
+   [:x :px :c]
+   [:z :px :c]
+   [:z :q3 :n]])
+
+(deftest test-fully-qualified-constraint
+  (let [s (assert-data empty-store j4data)
+        r1 (unordered-query s '[?o] '[[:a ?p ?o] [?o :px :c]])]
+    (is (= #{[:b] [:z] [:x]} r1))))
+
+
 #?(:cljs (run-tests))

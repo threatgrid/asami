@@ -1,7 +1,7 @@
 (ns asami.test-query
   "Tests internals of the query portion of the memory storage"
-  (:require [asami.query :refer [first-group min-join-path plan-path merge-filters]]
-            [asami.index :refer [Graph]]
+  (:require [asami.query :refer [first-group min-join-path plan-path merge-filters add-to-graph pattern-left-join]]
+            [asami.index :refer [Graph empty-graph]]
             [asami.util :as u]
             [naga.storage.store-util :refer [matching-vars]]
             #?(:clj  [clojure.test :refer [deftest is use-fixtures]]
@@ -176,6 +176,27 @@
   (is (= '[[:a ?a ?b] (= ?b :z)] (merge-filters '[[:a ?a ?b]] '[(= ?b :z)])))
   (is (= '[[:x ?c ?a] [:a ?a ?b] (= ?b :z)] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?b :z)])))
   (is (= '[[:x ?c ?a] (= ?a :z) [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?a :z)]))))
+
+(def join-data
+  [[:b :px :c]
+   [:b :px :d]
+   [:c :px :c]
+   [:d :px :c]
+   [:x :px :c]
+   [:z :px :c]])
+
+(deftest test-join
+  (let [graph (add-to-graph empty-graph join-data)
+        part-result (with-meta
+                      [[:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
+                      {:cols '[?p ?o]})
+        r1 (pattern-left-join graph part-result '[?o :px :c])
+        part-result2 (with-meta [[:b]] {:cols '[?o]})
+        r2 (pattern-left-join graph part-result2 '[?o :px ?q])]
+    (is (= '[?p ?o] (:cols (meta r1))))
+    (is (= [[:p1 :b] [:p2 :z] [:p3 :x]] r1))
+    (is (= '[?o ?q] (:cols (meta r2))))
+    (is (= [[:b :c] [:b :d]] r2))))
 
 #?(:clj
    (deftest test-eval
