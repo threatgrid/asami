@@ -8,13 +8,16 @@
                                          :refer [EPVPattern FilterPattern Pattern
                                                  Results Value Axiom]]
               [naga.util :as u]
+              [naga.store :refer [Storage]]
               [naga.storage.store-util :as store-util]
               [asami.index :as mem]
               [asami.util :refer [c-eval]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
-              #?(:clj [clojure.core.cache :as c])
-              #?(:cljs [cljs.core :refer [Symbol PersistentVector List LazySeq]]))
+              #?(:clj  [clojure.core.cache :as c])
+              #?(:cljs [cljs.core :refer [Symbol PersistentVector List LazySeq]])
+              #?(:clj  [clojure.edn :as edn]
+                 :cljs [cljs.reader :as edn]))
     #?(:clj
         (:import [clojure.lang Symbol IPersistentVector IPersistentList])))
 
@@ -197,7 +200,46 @@
         filter-fn (c-eval (list 'fn [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
+(def ^:dynamic *plan-options* [:min])
+(declare plan-path)
+
+(s/defn minus
+  "Removes matches."
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (let [[path _] (plan-path graph patterns *plan-options*)  ;; TODO: update optimizer to do this
+        ljoin #(left-join %2 %1 graph)]
+    (remove (fn [part-line] (seq (reduce ljoin part path))) part)))
+
+(s/defn disjunction
+  "NOTE: This is a placeholder implementation. There is no optimization."
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (apply concat (map #(left-join % part graph) patterns)))
+
 (s/defn find-vars [f] (set (filter st/vartest? f)))
+
+(def operators
+  {'not {:get-vars #(mapcat get-vars (rest %))
+         :left-join minus}
+   'or {:get-vars #(mapcat get-vars (rest %))
+        :left-join disjunction}})
+
+(s/defn list-get-vars
+  "Gets vars from a list representation. This is either a filter or an operator."
+  [l]
+  (if-let [{:keys [get-vars]} (operators (first l))]
+    (get-vars l)
+    (or (:vars (meta l)) (find-vars l))))
+
+(s/defn list-left-join
+  "left-joins on a list representation. This is either a filter or an operator."
+  [l results graph]
+  (if-let [{:keys [left-join]} (operators (first l))]
+    (left-join graph results l)
+    (filter-join graph results l)))
 
 ;; protocol dispatch for patterns and filters in queries
 #?(
@@ -211,9 +253,9 @@
 
   ;; Filters are implemented in lists
   IPersistentList
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
+  (get-vars [f] (list-get-vars f))
 
-  (left-join [f results graph] (filter-join graph results f)))
+  (left-join [f results graph] (list-left-join f results graph)))
 
 :cljs
 (extend-protocol Constraint
@@ -225,16 +267,16 @@
 
   ;; Filters are implemented in lists
   List
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))
+  (get-vars [f] (list-get-vars f))
+  (left-join [f results graph] (list-left-join f results graph))
   
   ;; Clojurescript needs to handle various lists separately
   EmptyList
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))
+  (get-vars [f] (list-get-vars f))
+  (left-join [f results graph] (list-left-join f results graph))
   LazySeq
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))))
+  (get-vars [f] (list-get-vars f))
+  (left-join [f results graph] (list-left-join f results graph))))
 
 
 (s/defn plan-path :- [(s/one [Pattern] "Patterns in planned order")
@@ -286,3 +328,14 @@
   [graph
    data :- Results]
   (reduce (fn [acc d] (apply mem/graph-add acc d)) graph data))
+
+(s/defn query-map
+  [query]
+  (cond
+    (map? query) query
+    (string? query) (query-map (edn/read-string query))
+    (sequential? query) (->> query
+                             (partition-by #{:find :in :with :where})
+                             (partition 2)
+                             (map (fn [[[k] v]] [k v]))
+                             (into {}))))

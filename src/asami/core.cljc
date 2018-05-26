@@ -23,7 +23,7 @@
         (do
           (swap! m c/hit graph)
           f)
-        (let [f (memoize #(count (mem/resolve-pattern graph %)))]
+        (let [f (memoize #(mem/count-pattern graph %))]
           (swap! m c/miss graph f)
           f))))
 
@@ -35,7 +35,7 @@
       [graph]
       (if-let [f (get @m graph)]
         f
-        (let [f (memoize #(count (mem/resolve-pattern graph %)))]
+        (let [f (memoize #(mem/count-pattern graph %))]
           (reset! m {graph f})
           f)))))
 
@@ -105,3 +105,11 @@
   empty-store)
 
 (registry/register-storage! :memory create-store)
+
+(s/defn q
+  [query & inputs]
+  (let [{:keys [find in with where]} (query/query-map query)
+        store (or (some (partial extends? Storage)) empty-store)
+        graph (or (:graph store) mem/empty-graph)]
+    ;; TODO: read :in for bindings as provide as a part-result to join-patterns
+    (store-util/project store find (query/join-patterns graph where))))
