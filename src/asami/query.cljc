@@ -76,9 +76,20 @@
                (str "No valid paths through: " (vec patterns)))
        all-paths))))
 
+(defn list-like?
+  [e]
+  (and (sequential? e) (not (vector? e))))
 
-(def epv-pattern? vector?)
-(def filter-pattern? list?)
+(defn epv-pattern?
+  [pattern]
+  (and (vector? pattern)
+       ;(not (list-like? (first pattern)))
+       ))
+
+(defn filter-pattern?
+  [pattern]
+  ;; (list-like? (first pattern))
+  (list-like? pattern))
 
 (s/defn merge-filters
   "Merges filters into the sequence of patterns, so that they appear
