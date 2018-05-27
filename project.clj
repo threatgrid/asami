@@ -7,7 +7,7 @@
                  [org.clojure/clojurescript "1.10.238"]
                  [prismatic/schema "1.1.7"] 
                  [org.clojure/core.cache "0.7.1"]
-                 [org.clojars.quoll/naga-store "0.1.0"]]
+                 [org.clojars.quoll/naga-store "0.2.0-SNAPSHOT"]]
   :plugins [[lein-cljsbuild "1.1.7"]]
   :cljsbuild {
     :builds {

@@ -202,10 +202,10 @@
    (deftest test-filter
      []
      (let [s (assert-data empty-store j3data)
-           r1 (unordered-query s '[?a] '[[:a ?a ?b] (= ?b :z)])
-           r2 (unordered-query s '[?a ?b] '[[:a ?a ?b] [?b :px ?d] (= ?d :c)])
-           r3 (unordered-query s '[?d] '[[:a ?a ?b] [?b :px ?d] (not= ?d :c)])
-           r4 (unordered-query s '[?z] '[[?z :p1 ?x] [:y :q1 ?y] (= ?x ?y)])]
+           r1 (unordered-query s '[?a] '[[:a ?a ?b] [(= ?b :z)]])
+           r2 (unordered-query s '[?a ?b] '[[:a ?a ?b] [?b :px ?d] [(= ?d :c)]])
+           r3 (unordered-query s '[?d] '[[:a ?a ?b] [?b :px ?d] [(not= ?d :c)]])
+           r4 (unordered-query s '[?z] '[[?z :p1 ?x] [:y :q1 ?y] [(= ?x ?y)]])]
        (is (= #{[:p2] [:p3]} r1))
        (is (= #{[:p1 :b]} r2))
        (is (= #{[:d]} r3))

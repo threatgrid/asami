@@ -124,10 +124,10 @@
     (->StubResolver m)))
 
 (deftest test-filtered-query-paths
-  (let [short-patterns [(with-meta '(= ?d 5) {:vars '#{?d}})
+  (let [short-patterns [(with-meta '[(= ?d 5)] {:vars '#{?d}})
                         '[?a :b ?c]
                         '[?d :e :f]
-                        (with-meta '(not= ?e ?a) {:vars '#{?e ?a}})
+                        (with-meta '[(not= ?e ?a)] {:vars '#{?e ?a}})
                         '[?c ?d ?e]]
         [path1] (plan-path (resolver-for short-patterns [nil 1 2 nil 3])
                            short-patterns [])
@@ -139,27 +139,27 @@
                            short-patterns [])]
     (is (= '[[?a :b ?c]
              [?c ?d ?e]
-             (= ?d 5)
-             (not= ?e ?a)
+             [(= ?d 5)]
+             [(not= ?e ?a)]
              [?d :e :f]]
            path1))
     (is (= '[[?d :e :f]
-             (= ?d 5)
+             [(= ?d 5)]
              [?c ?d ?e]
              [?a :b ?c]
-             (not= ?e ?a)]
+             [(not= ?e ?a)]]
            path2))
     (is (= '[[?c ?d ?e]
-             (= ?d 5)
+             [(= ?d 5)]
              [?a :b ?c]
-             (not= ?e ?a)
+             [(not= ?e ?a)]
              [?d :e :f]]
            path3))
     (is (= '[[?c ?d ?e]
-             (= ?d 5)
+             [(= ?d 5)]
              [?d :e :f]
              [?a :b ?c]
-             (not= ?e ?a)]
+             [(not= ?e ?a)]]
            path4))))
 
 (deftest var-mapping
@@ -173,9 +173,9 @@
     (is (= m4 {2 5, 5 4}))))
 
 (deftest test-merge-filters
-  (is (= '[[:a ?a ?b] (= ?b :z)] (merge-filters '[[:a ?a ?b]] '[(= ?b :z)])))
-  (is (= '[[:x ?c ?a] [:a ?a ?b] (= ?b :z)] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?b :z)])))
-  (is (= '[[:x ?c ?a] (= ?a :z) [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[(= ?a :z)]))))
+  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-filters '[[:a ?a ?b]] '[[(= ?b :z)]])))
+  (is (= '[[:x ?c ?a] [:a ?a ?b] [(= ?b :z)]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[[(= ?b :z)]])))
+  (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[[(= ?a :z)]]))))
 
 (def join-data
   [[:b :px :c]

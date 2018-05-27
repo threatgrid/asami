@@ -6,7 +6,8 @@
               [clojure.string :as str]
               [naga.schema.store-structs :as st
                                          :refer [EPVPattern FilterPattern Pattern
-                                                 Results Value Axiom]]
+                                                 Results Value Axiom
+                                                 epv-pattern? filter-pattern? op-pattern?]]
               [naga.util :as u]
               [naga.store :refer [Storage]]
               [naga.storage.store-util :as store-util]
@@ -21,10 +22,8 @@
     #?(:clj
         (:import [clojure.lang Symbol IPersistentVector IPersistentList])))
 
-(defprotocol Constraint
-  (get-vars [c] "Returns a seq of the vars in a constraint")
-  (left-join [c r g] "Left joins a constraint onto a result. Arguments in reverse order to dispatch on constraint type"))
-
+(declare get-vars)
+(declare left-join)
 
 (s/defn without :- [s/Any]
   "Returns a sequence minus a specific element"
@@ -76,21 +75,6 @@
                (str "No valid paths through: " (vec patterns)))
        all-paths))))
 
-(defn list-like?
-  [e]
-  (and (sequential? e) (not (vector? e))))
-
-(defn epv-pattern?
-  [pattern]
-  (and (vector? pattern)
-       ;(not (list-like? (first pattern)))
-       ))
-
-(defn filter-pattern?
-  [pattern]
-  ;; (list-like? (first pattern))
-  (list-like? pattern))
-
 (s/defn merge-filters
   "Merges filters into the sequence of patterns, so that they appear
    as soon as all their variables are first bound"
@@ -110,6 +94,14 @@
           (if (seq nxt-filters)
             (recur (into plan nxt-filters) bound patterns remaining-filters)
             (recur (conj plan np) (into bound (get-vars np)) rp filters)))))))
+
+(s/defn merge-ops
+  "Merges operator patterns into the sequence of patterns, so that they appear
+   as soon as all their variables are first bound"
+  [patterns op-patterns]
+  ;; todo: similar to merge-filters above
+  ;; for now, operators are going to the back
+  (concat patterns op-patterns))
 
 (s/defn first-group* :- [(s/one [Pattern] "group") (s/one [Pattern] "remainder")]
   "Finds a group from a sequence of patterns. A group is defined by every pattern
@@ -205,7 +197,7 @@
   "Filters down results."
   [graph
    part :- Results
-   fltr :- FilterPattern]
+   [fltr] :- FilterPattern]
   (let [m (meta part)
         vars (vec (:cols m))
         filter-fn (c-eval (list 'fn [vars] fltr))]
@@ -238,56 +230,37 @@
    'or {:get-vars #(mapcat get-vars (rest %))
         :left-join disjunction}})
 
-(s/defn list-get-vars
-  "Gets vars from a list representation. This is either a filter or an operator."
-  [l]
-  (if-let [{:keys [get-vars]} (operators (first l))]
-    (get-vars l)
-    (or (:vars (meta l)) (find-vars l))))
+(defn op-error
+  [pattern]
+  (throw (ex-info "Unknown operator" {:op (first pattern)
+                                      :args (rest pattern)})))
 
-(s/defn list-left-join
-  "left-joins on a list representation. This is either a filter or an operator."
-  [l results graph]
-  (if-let [{:keys [left-join]} (operators (first l))]
-    (left-join graph results l)
-    (filter-join graph results l)))
+(defn pattern-error
+  [pattern]
+  (throw (ex-info "Unknown pattern type in query" {:pattern pattern})))
 
-;; protocol dispatch for patterns and filters in queries
-#?(
-:clj
-(extend-protocol Constraint
-  ;; EPVPatterns are implemented in vectors
-  IPersistentVector
-  (get-vars [p] (set (st/vars p)))
+(defn get-vars
+  "Returns all vars used by a pattern"
+  [pattern]
+  (cond
+    (epv-pattern? pattern) (set (st/vars pattern))
+    (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
+    (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
+                            (get-vars pattern)
+                            (op-error pattern))
+    :default (pattern-error pattern)))
 
-  (left-join [p results graph] (pattern-left-join graph results p))
-
-  ;; Filters are implemented in lists
-  IPersistentList
-  (get-vars [f] (list-get-vars f))
-
-  (left-join [f results graph] (list-left-join f results graph)))
-
-:cljs
-(extend-protocol Constraint
-  ;; EPVPatterns are implemented in vectors
-  PersistentVector
-  (get-vars [p] (set (st/vars p)))
-
-  (left-join [p results graph] (pattern-left-join graph results p))
-
-  ;; Filters are implemented in lists
-  List
-  (get-vars [f] (list-get-vars f))
-  (left-join [f results graph] (list-left-join f results graph))
-  
-  ;; Clojurescript needs to handle various lists separately
-  EmptyList
-  (get-vars [f] (list-get-vars f))
-  (left-join [f results graph] (list-left-join f results graph))
-  LazySeq
-  (get-vars [f] (list-get-vars f))
-  (left-join [f results graph] (list-left-join f results graph))))
+(defn left-join
+  "Joins a partial result (on the left) to a pattern (on the right).
+   The pattern type will determine dispatch."
+  [pattern results graph]
+  (cond
+    (epv-pattern? pattern) (pattern-left-join graph results pattern)
+    (filter-pattern? pattern) (filter-join graph results pattern)
+    (op-pattern? pattern) (if-let [{:keys [left-join]} (operators (first pattern))]
+                            (left-join graph results pattern)
+                            (op-error pattern))
+    :default (pattern-error pattern)))
 
 
 (s/defn plan-path :- [(s/one [Pattern] "Patterns in planned order")
@@ -305,6 +278,7 @@
    options]
   (let [epv-patterns (filter epv-pattern? patterns)
         filter-patterns (filter filter-pattern? patterns)
+        op-patterns (filter op-pattern? patterns)
 
         resolution-map (u/mapmap (partial mem/resolve-pattern graph)
                                  epv-patterns)
@@ -315,7 +289,8 @@
 
         ;; run the query planner
         planned (query-planner epv-patterns count-map)
-        plan (merge-filters planned filter-patterns)]
+        filtered-plan (merge-filters planned filter-patterns)
+        plan (merge-ops filtered-plan op-patterns)]
 
     ;; result
     [plan resolution-map]))
