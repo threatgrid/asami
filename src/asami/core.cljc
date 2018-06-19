@@ -86,6 +86,9 @@
   (assert-data [_ data]
     (->MemoryStore before-graph (query/add-to-graph graph data)))
 
+  (retract-data [_ data]
+    (->MemoryStore before-graph (query/delete-from-graph graph data)))
+
   (assert-schema-opts [this _ _] this)
 
   (query-insert [this assertion-patterns patterns]

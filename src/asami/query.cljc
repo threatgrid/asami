@@ -203,6 +203,18 @@
         filter-fn (c-eval (list 'fn [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
+(s/defn binding-join
+  "Binds a var and adds to results."
+  [graph
+   part :- Results
+   [expr bnd-var] :- FilterPattern]
+  (let [cols (vec (:cols (meta part)))
+        binding-fn (c-eval (list 'fn [cols] expr))
+        new-cols (conj cols bnd-var)]
+    (with-meta
+     (map (fn [row] (concat row [(c-eval row)])) part)
+     {:cols new-cols})))
+
 (def ^:dynamic *plan-options* [:min])
 (declare plan-path)
 
@@ -314,6 +326,11 @@
   [graph
    data :- Results]
   (reduce (fn [acc d] (apply mem/graph-add acc d)) graph data))
+
+(s/defn delete-from-graph
+  [graph
+   data :- Results]
+  (reduce (fn [acc d] (apply mem/graph-delete acc d)) graph data))
 
 (s/defn query-map
   [query]
