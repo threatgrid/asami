@@ -1,7 +1,8 @@
 (ns asami.test-query
   "Tests internals of the query portion of the memory storage"
   (:require [asami.query :refer [first-group min-join-path plan-path merge-filters add-to-graph pattern-left-join]]
-            [asami.index :refer [Graph empty-graph]]
+            [asami.graph :refer [Graph]]
+            [asami.index :refer [empty-graph]]
             [asami.util :as u]
             [naga.storage.store-util :refer [matching-vars]]
             #?(:clj  [clojure.test :refer [deftest is use-fixtures]]

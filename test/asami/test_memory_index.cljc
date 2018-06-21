@@ -1,12 +1,14 @@
 (ns asami.test-memory-index
   #?(:clj
-      (:require [asami.index :refer [graph-add empty-graph resolve-pattern count-pattern]]
-                [schema.test :as st :refer [deftest]]
-                [clojure.test :as t :refer [testing is run-tests]])
+     (:require [asami.graph :refer [graph-add resolve-pattern count-pattern]]
+               [asami.index :refer [empty-graph]]
+               [schema.test :as st :refer [deftest]]
+               [clojure.test :as t :refer [testing is run-tests]])
      :cljs
-      (:require [asami.index :refer [graph-add empty-graph resolve-pattern count-pattern]]
-                [schema.test :as st :refer-macros [deftest]]
-                [clojure.test :as t :refer-macros [testing is run-tests]])))
+     (:require [asami.graph :refer [graph-add resolve-pattern count-pattern]]
+               [asami.index :refer [empty-graph]]
+               [schema.test :as st :refer-macros [deftest]]
+               [clojure.test :as t :refer-macros [testing is run-tests]])))
 
 (t/use-fixtures :once st/validate-schemas)
 
@@ -35,6 +37,7 @@
         r4 (unordered-resolve g '[?a :p2 :z])
         r5 (unordered-resolve g '[:a ?a :x])
         r6 (unordered-resolve g '[:a :p4 ?a])
+        r6' (unordered-resolve g '[:a :p3 ?a])
         r7 (unordered-resolve g '[:a :p1 :x])
         r8 (unordered-resolve g '[:a :p1 :b])
         r9 (unordered-resolve g '[?a ?b ?c])]
@@ -50,6 +53,7 @@
     (is (= #{[:p1]
              [:p3]} r5))
     (is (empty? r6))
+    (is (= #{[:x]} r6'))
     (is (= #{[]} r7))
     (is (empty? r8))
     (is (= (into #{} data) r9))))

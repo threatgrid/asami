@@ -1,7 +1,8 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [naga.schema.store-structs :as st]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+            [naga.schema.store-structs :as st]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -29,7 +30,7 @@
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
             new-idx))))))
 
-(defn- simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
+(defn simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
 
 (defmulti get-from-index
   "Lookup an index in the graph for the requested data.
@@ -66,13 +67,6 @@
 (defmethod count-from-index [ ?  ? :v] [{idx :osp} s p o] (count-embedded-index (idx o)))
 (defmethod count-from-index [ ?  ?  ?] [{idx :spo} s p o] (apply + (map count-embedded-index (vals idx))))
 
-(defprotocol Graph
-  (graph-add [this subj pred obj] "Adds triples to the graph")
-  (graph-delete [this subj pred obj] "Removes triples from the graph")
-  (graph-diff [this other] "Returns all subjects that have changed in this graph, compared to other")
-  (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only")
-  (count-triple [this subj pred obj] "Resolves patterns from the graph, and returns the size of the resolution"))
-
 (defrecord GraphIndexed [spo pos osp]
   Graph
   (graph-add [this subj pred obj]
@@ -94,15 +88,5 @@
     (get-from-index this subj pred obj))
   (count-triple [this subj pred obj]
     (count-from-index this subj pred obj)))
-
-(defn resolve-pattern
-  "Convenience function to extract elements out of a pattern to query for it"
-  [graph [s p o :as pattern]]
-  (resolve-triple graph s p o))
-
-(defn count-pattern
-  "Convenience function to extract elements out of a pattern to count the resolution"
-  [graph [s p o :as pattern]]
-  (count-triple graph s p o))
 
 (def empty-graph (->GraphIndexed {} {} {}))

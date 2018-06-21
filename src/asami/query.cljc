@@ -11,7 +11,7 @@
               [naga.util :as u]
               [naga.store :refer [Storage]]
               [naga.storage.store-util :as store-util]
-              [asami.index :as mem]
+              [asami.graph :as gr]
               [asami.util :refer [c-eval]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -189,7 +189,7 @@
     (with-meta
       (for [lrow part
             :let [lookup (modify-pattern lrow pattern->left pattern)]
-            rrow (mem/resolve-pattern graph lookup)]
+            rrow (gr/resolve-pattern graph lookup)]
         (concat lrow rrow))
       {:cols total-cols})))
 
@@ -292,7 +292,7 @@
         filter-patterns (filter filter-pattern? patterns)
         op-patterns (filter op-pattern? patterns)
 
-        resolution-map (u/mapmap (partial mem/resolve-pattern graph)
+        resolution-map (u/mapmap (partial gr/resolve-pattern graph)
                                  epv-patterns)
 
         count-map (u/mapmap (comp count resolution-map) epv-patterns)
@@ -325,12 +325,12 @@
 (s/defn add-to-graph
   [graph
    data :- Results]
-  (reduce (fn [acc d] (apply mem/graph-add acc d)) graph data))
+  (reduce (fn [acc d] (apply gr/graph-add acc d)) graph data))
 
 (s/defn delete-from-graph
   [graph
    data :- Results]
-  (reduce (fn [acc d] (apply mem/graph-delete acc d)) graph data))
+  (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
 
 (s/defn query-map
   [query]
