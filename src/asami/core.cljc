@@ -2,7 +2,9 @@
       :author "Paula Gearon"}
     asami.core
     (:require [clojure.string :as str]
+              [asami.graph :as gr]
               [asami.index :as mem]
+              [asami.multi-graph :as multi]
               [asami.query :as query]
               [naga.storage.store-util :as store-util]
               [naga.store :as store :refer [Storage StorageType]]
@@ -23,7 +25,7 @@
         (do
           (swap! m c/hit graph)
           f)
-        (let [f (memoize #(count (mem/resolve-pattern graph %)))]
+        (let [f (memoize #(gr/count-pattern graph %))]
           (swap! m c/miss graph f)
           f))))
 
@@ -35,7 +37,7 @@
       [graph]
       (if-let [f (get @m graph)]
         f
-        (let [f (memoize #(count (mem/resolve-pattern graph %)))]
+        (let [f (memoize #(gr/count-pattern graph %))]
           (reset! m {graph f})
           f)))))
 
@@ -48,8 +50,8 @@
   (deltas [this]
     ;; sort responses by the number in the node ID, since these are known to be ordered
     (when-let [previous-graph (or (:data (meta this)) before-graph)]
-      (->> (mem/graph-diff graph previous-graph)
-           (filter (fn [s] (seq (mem/resolve-pattern graph [s :naga/entity '?]))))
+      (->> (gr/graph-diff graph previous-graph)
+           (filter (fn [s] (seq (gr/resolve-pattern graph [s :naga/entity '?]))))
            (sort-by #(subs (name %) 5)))))
 
   (new-node [this]
@@ -73,18 +75,21 @@
     :naga/contains)
 
   (resolve-pattern [_ pattern]
-    (mem/resolve-pattern graph pattern))
+    (gr/resolve-pattern graph pattern))
 
   (count-pattern [_ pattern]
     (if-let [count-fn (get-count-fn graph)]
       (count-fn pattern)
-      (mem/count-pattern graph pattern)))
+      (gr/count-pattern graph pattern)))
 
   (query [this output-pattern patterns]
     (store-util/project this output-pattern (query/join-patterns graph patterns)))
 
   (assert-data [_ data]
     (->MemoryStore before-graph (query/add-to-graph graph data)))
+
+  (retract-data [_ data]
+    (->MemoryStore before-graph (query/delete-from-graph graph data)))
 
   (assert-schema-opts [this _ _] this)
 
@@ -99,9 +104,25 @@
 
 (def empty-store (->MemoryStore nil mem/empty-graph))
 
+(def empty-multi-store (->MemoryStore nil multi/empty-multi-graph))
+
 (s/defn create-store :- StorageType
   "Factory function to create a store"
   [config]
   empty-store)
 
+(s/defn create-multi-store :- StorageType
+  "Factory function to create a multi-graph-store"
+  [config]
+  empty-multi-store)
+
 (registry/register-storage! :memory create-store)
+(registry/register-storage! :memory-multi create-multi-store)
+
+(s/defn q
+  [query & inputs]
+  (let [{:keys [find in with where]} (query/query-map query)
+        store (or (some (partial extends? Storage)) empty-store)
+        graph (or (:graph store) mem/empty-graph)]
+    ;; TODO: read :in for bindings as provide as a part-result to join-patterns
+    (store-util/project store find (query/join-patterns graph where))))

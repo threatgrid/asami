@@ -6,22 +6,24 @@
               [clojure.string :as str]
               [naga.schema.store-structs :as st
                                          :refer [EPVPattern FilterPattern Pattern
-                                                 Results Value Axiom]]
+                                                 Results Value Axiom
+                                                 epv-pattern? filter-pattern? op-pattern?]]
               [naga.util :as u]
+              [naga.store :refer [Storage]]
               [naga.storage.store-util :as store-util]
-              [asami.index :as mem]
+              [asami.graph :as gr]
               [asami.util :refer [c-eval]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
-              #?(:clj [clojure.core.cache :as c])
-              #?(:cljs [cljs.core :refer [Symbol PersistentVector List LazySeq]]))
+              #?(:clj  [clojure.core.cache :as c])
+              #?(:cljs [cljs.core :refer [Symbol PersistentVector List LazySeq]])
+              #?(:clj  [clojure.edn :as edn]
+                 :cljs [cljs.reader :as edn]))
     #?(:clj
         (:import [clojure.lang Symbol IPersistentVector IPersistentList])))
 
-(defprotocol Constraint
-  (get-vars [c] "Returns a seq of the vars in a constraint")
-  (left-join [c r g] "Left joins a constraint onto a result. Arguments in reverse order to dispatch on constraint type"))
-
+(declare get-vars)
+(declare left-join)
 
 (s/defn without :- [s/Any]
   "Returns a sequence minus a specific element"
@@ -73,10 +75,6 @@
                (str "No valid paths through: " (vec patterns)))
        all-paths))))
 
-
-(def epv-pattern? vector?)
-(def filter-pattern? list?)
-
 (s/defn merge-filters
   "Merges filters into the sequence of patterns, so that they appear
    as soon as all their variables are first bound"
@@ -96,6 +94,14 @@
           (if (seq nxt-filters)
             (recur (into plan nxt-filters) bound patterns remaining-filters)
             (recur (conj plan np) (into bound (get-vars np)) rp filters)))))))
+
+(s/defn merge-ops
+  "Merges operator patterns into the sequence of patterns, so that they appear
+   as soon as all their variables are first bound"
+  [patterns op-patterns]
+  ;; todo: similar to merge-filters above
+  ;; for now, operators are going to the back
+  (concat patterns op-patterns))
 
 (s/defn first-group* :- [(s/one [Pattern] "group") (s/one [Pattern] "remainder")]
   "Finds a group from a sequence of patterns. A group is defined by every pattern
@@ -183,7 +189,7 @@
     (with-meta
       (for [lrow part
             :let [lookup (modify-pattern lrow pattern->left pattern)]
-            rrow (mem/resolve-pattern graph lookup)]
+            rrow (gr/resolve-pattern graph lookup)]
         (concat lrow rrow))
       {:cols total-cols})))
 
@@ -191,50 +197,82 @@
   "Filters down results."
   [graph
    part :- Results
-   fltr :- FilterPattern]
+   [fltr] :- FilterPattern]
   (let [m (meta part)
         vars (vec (:cols m))
         filter-fn (c-eval (list 'fn [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
+(s/defn binding-join
+  "Binds a var and adds to results."
+  [graph
+   part :- Results
+   [expr bnd-var] :- FilterPattern]
+  (let [cols (vec (:cols (meta part)))
+        binding-fn (c-eval (list 'fn [cols] expr))
+        new-cols (conj cols bnd-var)]
+    (with-meta
+     (map (fn [row] (concat row [(c-eval row)])) part)
+     {:cols new-cols})))
+
+(def ^:dynamic *plan-options* [:min])
+(declare plan-path)
+
+(s/defn minus
+  "Removes matches."
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (let [[path _] (plan-path graph patterns *plan-options*)  ;; TODO: update optimizer to do this
+        ljoin #(left-join %2 %1 graph)]
+    (remove (fn [part-line] (seq (reduce ljoin part path))) part)))
+
+(s/defn disjunction
+  "NOTE: This is a placeholder implementation. There is no optimization."
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (apply concat (map #(left-join % part graph) patterns)))
+
 (s/defn find-vars [f] (set (filter st/vartest? f)))
 
-;; protocol dispatch for patterns and filters in queries
-#?(
-:clj
-(extend-protocol Constraint
-  ;; EPVPatterns are implemented in vectors
-  IPersistentVector
-  (get-vars [p] (set (st/vars p)))
+(def operators
+  {'not {:get-vars #(mapcat get-vars (rest %))
+         :left-join minus}
+   'or {:get-vars #(mapcat get-vars (rest %))
+        :left-join disjunction}})
 
-  (left-join [p results graph] (pattern-left-join graph results p))
+(defn op-error
+  [pattern]
+  (throw (ex-info "Unknown operator" {:op (first pattern)
+                                      :args (rest pattern)})))
 
-  ;; Filters are implemented in lists
-  IPersistentList
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
+(defn pattern-error
+  [pattern]
+  (throw (ex-info "Unknown pattern type in query" {:pattern pattern})))
 
-  (left-join [f results graph] (filter-join graph results f)))
+(defn get-vars
+  "Returns all vars used by a pattern"
+  [pattern]
+  (cond
+    (epv-pattern? pattern) (set (st/vars pattern))
+    (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
+    (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
+                            (get-vars pattern)
+                            (op-error pattern))
+    :default (pattern-error pattern)))
 
-:cljs
-(extend-protocol Constraint
-  ;; EPVPatterns are implemented in vectors
-  PersistentVector
-  (get-vars [p] (set (st/vars p)))
-
-  (left-join [p results graph] (pattern-left-join graph results p))
-
-  ;; Filters are implemented in lists
-  List
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))
-  
-  ;; Clojurescript needs to handle various lists separately
-  EmptyList
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))
-  LazySeq
-  (get-vars [f] (or (:vars (meta f)) (find-vars f)))
-  (left-join [f results graph] (filter-join graph results f))))
+(defn left-join
+  "Joins a partial result (on the left) to a pattern (on the right).
+   The pattern type will determine dispatch."
+  [pattern results graph]
+  (cond
+    (epv-pattern? pattern) (pattern-left-join graph results pattern)
+    (filter-pattern? pattern) (filter-join graph results pattern)
+    (op-pattern? pattern) (if-let [{:keys [left-join]} (operators (first pattern))]
+                            (left-join graph results pattern)
+                            (op-error pattern))
+    :default (pattern-error pattern)))
 
 
 (s/defn plan-path :- [(s/one [Pattern] "Patterns in planned order")
@@ -252,8 +290,9 @@
    options]
   (let [epv-patterns (filter epv-pattern? patterns)
         filter-patterns (filter filter-pattern? patterns)
+        op-patterns (filter op-pattern? patterns)
 
-        resolution-map (u/mapmap (partial mem/resolve-pattern graph)
+        resolution-map (u/mapmap (partial gr/resolve-pattern graph)
                                  epv-patterns)
 
         count-map (u/mapmap (comp count resolution-map) epv-patterns)
@@ -262,7 +301,8 @@
 
         ;; run the query planner
         planned (query-planner epv-patterns count-map)
-        plan (merge-filters planned filter-patterns)]
+        filtered-plan (merge-filters planned filter-patterns)
+        plan (merge-ops filtered-plan op-patterns)]
 
     ;; result
     [plan resolution-map]))
@@ -285,4 +325,20 @@
 (s/defn add-to-graph
   [graph
    data :- Results]
-  (reduce (fn [acc d] (apply mem/graph-add acc d)) graph data))
+  (reduce (fn [acc d] (apply gr/graph-add acc d)) graph data))
+
+(s/defn delete-from-graph
+  [graph
+   data :- Results]
+  (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
+
+(s/defn query-map
+  [query]
+  (cond
+    (map? query) query
+    (string? query) (query-map (edn/read-string query))
+    (sequential? query) (->> query
+                             (partition-by #{:find :in :with :where})
+                             (partition 2)
+                             (map (fn [[[k] v]] [k v]))
+                             (into {}))))
