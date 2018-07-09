@@ -8,7 +8,7 @@ allow rules to successfully use this graph type."
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
-(def ^:dynamic *insert-op* identity)
+(def ^:dynamic *insert-op* #(if (zero? %) 1 %))
 
 (s/defn multi-add :- {s/Any {s/Any {s/Any s/Num}}}
   "Add elements to a 4-level index"
