@@ -8,7 +8,7 @@ allow rules to successfully use this graph type."
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
-(def ^:dynamic *insert-op* identity)
+(def ^:dynamic *insert-op* #(if (zero? %) 1 %))
 
 (s/defn multi-add :- {s/Any {s/Any {s/Any s/Num}}}
   "Add elements to a 4-level index"
@@ -16,7 +16,7 @@ allow rules to successfully use this graph type."
    a :- s/Any
    b :- s/Any
    c :- s/Any]
-  (update-in idx [a b c] (fn [v] (if v (*insert-op* v) 1))))
+  (update-in idx [a b c] (fn [v] (*insert-op* (or v 0)))))
 
 (s/defn multi-delete :- {s/Any {s/Any {s/Any s/Num}}}
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -96,8 +96,11 @@ allow rules to successfully use this graph type."
     (count-from-index this subj pred obj)))
 
 (defn multi-graph-add
-  [graph subj pred obj]
-  (binding [*insert-op* inc]
-    (graph-add graph subj pred obj)))
+  ([graph subj pred obj n]
+   (binding [*insert-op* (partial + n)]
+     (graph-add graph subj pred obj)))
+  ([graph subj pred obj]
+   (binding [*insert-op* inc]
+     (graph-add graph subj pred obj))))
 
 (def empty-multi-graph (->MultiGraph {} {} {}))

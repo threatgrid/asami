@@ -106,6 +106,10 @@
 
 (def empty-multi-store (->MemoryStore nil multi/empty-multi-graph))
 
+(defn update-store
+  [{:keys [before-graph graph]} f & args]
+  (->MemoryStore before-graph (apply f graph args)))
+
 (s/defn create-store :- StorageType
   "Factory function to create a store"
   [config]
