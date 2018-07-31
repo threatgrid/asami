@@ -311,6 +311,7 @@
 
 (s/def InSpec (s/conditional #(= '$ %) s/Symbol
                              #(and (symbol? %) (= \? (first (name %)))) s/Symbol
+                             #(and sequential? (sequential? (first %))) [[s/Symbol]]
                              :else [s/Symbol]))
 
 (s/defn outer-product :- Bindings
@@ -326,28 +327,35 @@
         (concat row-l row-r))
       {:cols (concat namesl namesr)})))
 
+(s/defn symb?
+  "Similar to symbol? but excludes the special ... form"
+  [s]
+  (and (symbol? s) (not= s '...)))
+
 (s/defn create-binding :- Bindings
   "Creates a bindings between a name and a set of values.
    If the name is singular, then that name is bound to the values.
    If the name is a seq, then each name in the seq is bound to the corresponding offset in each value."
-  [nm values]
+  [nm :- InSpec values]
   (cond
     (symbol? nm) (with-meta [[values]] {:cols [nm]})
     (sequential? nm)
     (let [[a & r] nm]
       (cond
-        (and (sequential? a) (nil? r) (every? symbol? a)) ; relation
+        (and (sequential? a) (nil? r) (every? symb? a)) ; relation
         (if (every? #(= (count a) (count %)) values)
           (with-meta values {:cols a})
           (throw (ex-info "Data does not match relation binding form" {:form nm :data values})))
 
-        (and (symbol? a) (= '... (first r))) ; collection
-        (with-meta (map vector values) {:cols [a]})
+        (and (symb? a) (= '... (first r)) (= 2 (count nm))) ; collection
+        (if (sequential? values)
+          (with-meta (map vector values) {:cols [a]})
+          (throw (ex-info "Tuples data does not match collection binding form" {:form nm :data values})))
 
-        (every? symbol? nm) ; tuple
-        (if (= (count nm) (count values))
+        (and (every? symb? nm)) ; tuple
+        (if (and (sequential? values) (= (count nm) (count values)))
           (with-meta [values] {:cols nm})
-          (throw (ex-info "Tuples data does not match binding form" {:form nm :data values})))
+          (throw (ex-info "Tuples data does not match tuple binding form" {:form nm :data values})))
 
         :default (throw (ex-info "Unrecognized binding form" {:form nm}))))
 
@@ -356,13 +364,13 @@
 (s/defn create-bindings :- Bindings
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
-   values :- (s/cond-pre (s/protocol Storage) [[s/Any]])]
+   values :- (s/cond-pre (s/protocol Storage) s/Any)]
   (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
     (when (< 1 (count defaults))
      (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
     (->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
          (filter identity)
-         (map create-binding)
+         (map (partial apply create-binding))
          (reduce outer-product))))
 
 (s/defn join-patterns :- Results
