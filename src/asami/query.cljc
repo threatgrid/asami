@@ -9,7 +9,7 @@
                                                  Results Value Axiom
                                                  epv-pattern? filter-pattern? op-pattern?]]
               [naga.util :as u]
-              [naga.store :refer [Storage]]
+              [naga.store :refer [Storage StorageType]]
               [naga.storage.store-util :as store-util]
               [asami.graph :as gr]
               [asami.util :refer [c-eval]]
@@ -361,17 +361,19 @@
 
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
-(s/defn create-bindings :- Bindings
+(s/defn create-bindings :- [(s/one Bindings "The bindings for other params")
+                            (s/one (s/maybe StorageType) "The default storage")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
    values :- (s/cond-pre (s/protocol Storage) s/Any)]
   (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
     (when (< 1 (count defaults))
-     (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
-    (->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
-         (filter identity)
-         (map (partial apply create-binding))
-         (reduce outer-product))))
+      (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
+    [(->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
+          (filter identity)
+          (map (partial apply create-binding))
+          (reduce outer-product))
+     default]))
 
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
