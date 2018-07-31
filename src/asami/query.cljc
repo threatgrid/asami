@@ -307,20 +307,93 @@
     ;; result
     [plan resolution-map]))
 
+(s/def Bindings (s/constrained [[s/Any]] #(:cols (meta %))))
+
+(s/def InSpec (s/conditional #(= '$ %) s/Symbol
+                             #(and (symbol? %) (= \? (first (name %)))) s/Symbol
+                             #(and sequential? (sequential? (first %))) [[s/Symbol]]
+                             :else [s/Symbol]))
+
+(s/defn outer-product :- Bindings
+  "Creates an outer product between 2 sets of bindings"
+  [leftb :- Bindings
+   rightb :- Bindings]
+  (let [namesl (:cols (meta leftb))
+        namesr (:cols (meta rightb))]
+    (when-let [n (seq (filter (set namesl) namesr))]
+      (throw (ex-info "Outer product between bindings should have distinct names" {:duplicate-names n})))
+    (with-meta
+      (for [row-l leftb row-r rightb]
+        (concat row-l row-r))
+      {:cols (concat namesl namesr)})))
+
+(s/defn symb?
+  "Similar to symbol? but excludes the special ... form"
+  [s]
+  (and (symbol? s) (not= s '...)))
+
+(s/defn create-binding :- Bindings
+  "Creates a bindings between a name and a set of values.
+   If the name is singular, then that name is bound to the values.
+   If the name is a seq, then each name in the seq is bound to the corresponding offset in each value."
+  [nm :- InSpec values]
+  (cond
+    (symbol? nm) (with-meta [[values]] {:cols [nm]})
+    (sequential? nm)
+    (let [[a & r] nm]
+      (cond
+        (and (sequential? a) (nil? r) (every? symb? a)) ; relation
+        (if (every? #(= (count a) (count %)) values)
+          (with-meta values {:cols a})
+          (throw (ex-info "Data does not match relation binding form" {:form nm :data values})))
+
+        (and (symb? a) (= '... (first r)) (= 2 (count nm))) ; collection
+        (if (sequential? values)
+          (with-meta (map vector values) {:cols [a]})
+          (throw (ex-info "Tuples data does not match collection binding form" {:form nm :data values})))
+
+        (and (every? symb? nm)) ; tuple
+        (if (and (sequential? values) (= (count nm) (count values)))
+          (with-meta [values] {:cols nm})
+          (throw (ex-info "Tuples data does not match tuple binding form" {:form nm :data values})))
+
+        :default (throw (ex-info "Unrecognized binding form" {:form nm}))))
+
+    :default (ex-info "Illegal scalar binding form" {:form nm})))
+
+(s/defn create-bindings :- Bindings
+  "Converts user provided data for a query into bindings"
+  [in :- [InSpec]
+   values :- (s/cond-pre (s/protocol Storage) s/Any)]
+  (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
+    (when (< 1 (count defaults))
+     (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
+    (->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
+         (filter identity)
+         (map (partial apply create-binding))
+         (reduce outer-product))))
 
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
   [graph
    patterns :- [Pattern]
+   bindings :- [[s/Any]]
    & options]
-  (let [[[fpath & rpath] resolution-map] (plan-path graph patterns options)
+  (let [[[fpath & rpath :as full-path] resolution-map] (plan-path graph patterns options)
         ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
-        part-result (with-meta
-                      (resolution-map fpath)
-                      {:cols (st/vars fpath)})]
-    (reduce ljoin part-result rpath)))
+        ;; if provided with bindings, then join the entire path to them,
+        ;; otherwise, start with the first item in the path, and join the remainder
+        [part-result path] (if bindings
+                             (if (meta bindings)
+                               [bindings full-path]
+                               (throw (ex-info "Invalid bindings. No column names."
+                                               {:bindings bindings})))
+                             [(with-meta
+                                (resolution-map fpath)
+                                {:cols (st/vars fpath)}) rpath]) ]
+    (reduce ljoin part-result path)))
 
 (s/defn add-to-graph
   [graph

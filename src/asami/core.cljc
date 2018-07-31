@@ -83,7 +83,7 @@
       (gr/count-pattern graph pattern)))
 
   (query [this output-pattern patterns]
-    (store-util/project this output-pattern (query/join-patterns graph patterns)))
+    (store-util/project this output-pattern (query/join-patterns graph patterns nil)))
 
   (assert-data [_ data]
     (->MemoryStore before-graph (query/add-to-graph graph data)))
@@ -97,7 +97,7 @@
     (letfn [(ins-project [data]
               (let [cols (:cols (meta data))]
                 (store-util/insert-project this assertion-patterns cols data)))]
-      (->> (query/join-patterns graph patterns)
+      (->> (query/join-patterns graph patterns nil)
            ins-project
            (query/add-to-graph graph)
            (->MemoryStore before-graph)))))
@@ -126,7 +126,7 @@
 (s/defn q
   [query & inputs]
   (let [{:keys [find in with where]} (query/query-map query)
-        store (or (some (partial extends? Storage)) empty-store)
-        graph (or (:graph store) mem/empty-graph)]
-    ;; TODO: read :in for bindings as provide as a part-result to join-patterns
-    (store-util/project store find (query/join-patterns graph where))))
+        store (or (some (partial satisfies? Storage) inputs) empty-store)
+        graph (or (:graph store) mem/empty-graph)
+        bindings (query/create-bindings in inputs)]
+    (store-util/project store find (query/join-patterns graph where bindings))))
