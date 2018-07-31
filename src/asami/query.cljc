@@ -362,7 +362,7 @@
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
 (s/defn create-bindings :- [(s/one Bindings "The bindings for other params")
-                            (s/one StorageType "The default storage")]
+                            (s/one (s/maybe StorageType) "The default storage")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
    values :- (s/cond-pre (s/protocol Storage) s/Any)]
