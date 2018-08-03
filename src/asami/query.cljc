@@ -193,6 +193,43 @@
         (concat lrow rrow))
       {:cols total-cols})))
 
+(defn vconj [c v] (if c (conj c v) [v]))
+
+(s/defn prebound-left-join :- Results
+  "Takes a bindings (Results) and joins on the current results"
+  [part :- Results
+   bindings :- Results]
+  (let [lcols (:cols (meta part))
+        rcols (:cols (meta bindings))
+        total-cols (->> rcols
+                        (remove (set lcols))
+                        (concat lcols)
+                        (into []))
+        left->binding (store-util/matching-vars lcols rcols)]
+    (with-meta
+      (if (seq left->binding)
+        (let [key-indices (sort (keys left->binding))
+              select-key (fn [row] (map #(nth row %) key-indices))
+              val-set (set (vals left->binding))
+              width (count rcols)
+              split-row (fn [row] (reduce (fn [[k v] n]
+                                            (let [rowval (nth row n)]
+                                              (if (val-set n)
+                                                [(conj k (nth row n)) v]
+                                                [k (conj v (nth row n))])))
+                                          [[] []]
+                                          (range width)))
+              local-index (reduce (fn [idx row]
+                                    (let [[shared new] (split-row row)]
+                                      (update idx shared vconj new)))
+                                  {} bindings)]
+          (for [lrow part
+                rrow (local-index (select-key lrow))]
+            (concat lrow rrow)))
+        (for [row-l part row-r bindings]
+          (concat row-l row-r)))
+      {:cols total-cols})))
+
 (s/defn filter-join
   "Filters down results."
   [graph
@@ -251,10 +288,16 @@
   [pattern]
   (throw (ex-info "Unknown pattern type in query" {:pattern pattern})))
 
+(defn bindings?
+  [b]
+  (and (vector? (:cols (meta b))) (sequential? b)))
+
 (defn get-vars
   "Returns all vars used by a pattern"
   [pattern]
   (cond
+    ;; bindings will pass the epv-pattern? test, so must check for this first
+    (bindings? pattern) (:cols (meta pattern))
     (epv-pattern? pattern) (set (st/vars pattern))
     (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
     (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
@@ -267,6 +310,8 @@
    The pattern type will determine dispatch."
   [pattern results graph]
   (cond
+    ;; bindings will pass the epv-pattern? test, so must check for this first
+    (bindings? pattern) (prebound-left-join results pattern)
     (epv-pattern? pattern) (pattern-left-join graph results pattern)
     (filter-pattern? pattern) (filter-join graph results pattern)
     (op-pattern? pattern) (if-let [{:keys [left-join]} (operators (first pattern))]
@@ -288,19 +333,20 @@
   [graph
    patterns :- [Pattern]
    options]
-  (let [epv-patterns (filter epv-pattern? patterns)
+  (let [epv-patterns (filter #(and (epv-pattern? %) (not (bindings? %))) patterns)
+        prebounds (filter bindings? patterns)
         filter-patterns (filter filter-pattern? patterns)
         op-patterns (filter op-pattern? patterns)
 
         resolution-map (u/mapmap (partial gr/resolve-pattern graph)
                                  epv-patterns)
 
-        count-map (u/mapmap (comp count resolution-map) epv-patterns)
+        count-map (u/mapmap (partial gr/count-pattern graph) epv-patterns)
 
         query-planner (select-planner options)
 
         ;; run the query planner
-        planned (query-planner epv-patterns count-map)
+        planned (query-planner (concat prebounds epv-patterns) count-map)
         filtered-plan (merge-filters planned filter-patterns)
         plan (merge-ops filtered-plan op-patterns)]
 
