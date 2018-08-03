@@ -2,7 +2,7 @@
   "Tests internals of the query portion of the memory storage"
   (:require [asami.query :refer [first-group min-join-path plan-path merge-filters add-to-graph
                                  pattern-left-join outer-product create-binding create-bindings Bindings]]
-            [asami.graph :refer [Graph]]
+            [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [asami.util :as u]
             [asami.core :refer [empty-store]]
@@ -123,7 +123,8 @@
   (graph-add [this _ _ _] this)
   (graph-delete [this _ _ _] this)
   (resolve-triple [store s p o] (repeat (get counts [s p o])
-                                        [:s :p :o])))
+                                        [:s :p :o]))
+  (count-triple [store s p o] (count (resolve-triple store s p o))))
 
 (defn resolver-for [patterns counts]
   (let [m (mapto patterns counts)]
