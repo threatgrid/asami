@@ -41,6 +41,8 @@
           (reset! m {graph f})
           f)))))
 
+(declare ->MemoryStore)
+
 (defrecord MemoryStore [before-graph graph]
   Storage
   (start-tx [this] (->MemoryStore graph graph))
