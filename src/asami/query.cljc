@@ -427,21 +427,18 @@
    patterns :- [Pattern]
    bindings :- [[s/Any]]
    & options]
-  (let [[[fpath & rpath :as full-path] resolution-map] (plan-path graph patterns options)
+  (let [[[fpath & rpath] resolution-map] (plan-path graph patterns options)
         ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
         ;; if provided with bindings, then join the entire path to them,
         ;; otherwise, start with the first item in the path, and join the remainder
-        [part-result path] (if bindings
-                             (if (meta bindings)
-                               [bindings full-path]
-                               (throw (ex-info "Invalid bindings. No column names."
-                                               {:bindings bindings})))
-                             [(with-meta
-                                (resolution-map fpath)
-                                {:cols (st/vars fpath)}) rpath]) ]
-    (reduce ljoin part-result path)))
+        part-result (if (bindings? fpath)
+                      fpath
+                      (with-meta
+                        (resolution-map fpath)
+                        {:cols (st/vars fpath)}))]
+    (reduce ljoin part-result rpath)))
 
 (s/defn add-to-graph
   [graph
