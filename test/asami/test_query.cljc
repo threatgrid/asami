@@ -136,14 +136,14 @@
                         '[?d :e :f]
                         (with-meta '[(not= ?e ?a)] {:vars '#{?e ?a}})
                         '[?c ?d ?e]]
-        [path1] (plan-path (resolver-for short-patterns [nil 1 2 nil 3])
-                           short-patterns [])
-        [path2] (plan-path (resolver-for short-patterns [nil 2 1 nil 3])
-                             short-patterns [])
-        [path3] (plan-path (resolver-for short-patterns [nil 2 3 nil 1])
-                           short-patterns [])
-        [path4] (plan-path (resolver-for short-patterns [nil 3 2 nil 1])
-                           short-patterns [])]
+        path1 (plan-path (resolver-for short-patterns [nil 1 2 nil 3])
+                          short-patterns [])
+        path2 (plan-path (resolver-for short-patterns [nil 2 1 nil 3])
+                            short-patterns [])
+        path3 (plan-path (resolver-for short-patterns [nil 2 3 nil 1])
+                          short-patterns [])
+        path4 (plan-path (resolver-for short-patterns [nil 3 2 nil 1])
+                          short-patterns [])]
     (is (= '[[?a :b ?c]
              [?c ?d ?e]
              [(= ?d 5)]

@@ -32,7 +32,28 @@
 (def store (-> empty-store
                (assert-data data)))
 
-(deftest test-query
+(deftest test-simple-query
+  (let [results (q '[:find ?e ?a ?v
+                     :where [?e ?a ?v]] store)]
+    (is (= (set data) (set results)))))
+
+(deftest test-join-query
+  (let [results (q '[:find ?name
+                     :where [?r :release/name "My Sweet Lord"]
+                            [?r :release/artists ?a]
+                            [?a :artist/name ?name]] store)]
+    (is (= [["Paul McCartney"]] results))))
+
+(deftest test-join-multi-query
+  (let [results (q '[:find ?rname
+                     :where [?a :artist/name "George Harrison"]
+                            [?r :release/artists ?a]
+                            [?r :release/name ?rname]] store)]
+    (is (= #{["Electronic Sound"]
+             ["Give Me Love (Give Me Peace on Earth)"]
+             ["All Things Must Pass"]} (set results)))))
+
+(deftest test-bindings-query
   (let [results (q '[:find ?release-name
                      :in $ [?artist-name ...]
                      :where [?artist :artist/name ?artist-name]
