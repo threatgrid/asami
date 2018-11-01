@@ -31,10 +31,25 @@
    s :- [s/Any]]
   (remove (partial = e) s))
 
-(s/defn find-start :- EPVPattern
+(s/def Bindings (s/constrained [[s/Any]] #(:cols (meta %))))
+
+(defn bindings?
+  [b]
+  (and (vector? (:cols (meta b))) (sequential? b)))
+
+(defn nested-seq?
+  "Test for Bindings, which can be [] or [[value] [value]...]"
+  [s]
+  (and (sequential? s) (or (empty? s) (vector? (first s)))))
+
+(def PatternOrBindings (s/conditional nested-seq? Bindings :else Pattern))
+
+(def CountablePattern (s/conditional nested-seq? Bindings :else EPVPattern))
+
+(s/defn find-start :- CountablePattern
   "Returns the first pattern with the smallest count"
-  [pattern-counts :- {EPVPattern s/Num}
-   patterns :- [EPVPattern]]
+  [pattern-counts :- {CountablePattern s/Num}
+   patterns :- [CountablePattern]]
   (let [local-counts (select-keys pattern-counts patterns)
         low-count (reduce min (map second local-counts))
         pattern (ffirst (filter #(= low-count (second %)) local-counts))]
@@ -42,15 +57,15 @@
     ;; patterns contains metadata and pattern does not
     (first (filter (partial = pattern) patterns))))
 
-(s/defn paths :- [[EPVPattern]]
+(s/defn paths :- [[CountablePattern]]
   "Returns a seq of all paths through the constraints. A path is defined
    by new patterns containing at least one variable common to the patterns
    that appeared before it. Patterns must form a group."
-  ([patterns :- [EPVPattern]
-    pattern-counts :- {EPVPattern s/Num}]
-   (s/letfn [(remaining-paths :- [[EPVPattern]]
+  ([patterns :- [CountablePattern]
+    pattern-counts :- {CountablePattern s/Num}]
+   (s/letfn [(remaining-paths :- [[CountablePattern]]
                [bound :- #{Symbol}
-                rpatterns :- [EPVPattern]]
+                rpatterns :- [CountablePattern]]
                (if (seq rpatterns)
                  (apply concat
                         (keep ;; discard paths that can't proceed (they return nil)
@@ -103,11 +118,11 @@
   ;; for now, operators are going to the back
   (concat patterns op-patterns))
 
-(s/defn first-group* :- [(s/one [Pattern] "group") (s/one [Pattern] "remainder")]
+(s/defn first-group* :- [(s/one [CountablePattern] "group") (s/one [CountablePattern] "remainder")]
   "Finds a group from a sequence of patterns. A group is defined by every pattern
    sharing at least one var with at least one other pattern. Returns a pair.
    The first returned element is the Patterns in the group, the second is what was left over."
-  [[fp & rp] :- [Pattern]]
+  [[fp & rp] :- [CountablePattern]]
   (letfn [;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
           ;; patterns that are not in the group. Each step looks at a pattern for
@@ -128,13 +143,13 @@
 
 (def first-group (memoize first-group*))
 
-(s/defn min-join-path :- [EPVPattern]
+(s/defn min-join-path :- [CountablePattern]
   "Calculates a plan based on no outer joins (a cross product), and minimized joins.
    A plan is the order in which to evaluate constraints and join them to the accumulated
    evaluated data. If it is not possible to create a path without a cross product,
    then return a plan of the patterns in the provided order."
-  [patterns :- [Pattern]
-   count-map :- {EPVPattern s/Num}]
+  [patterns :- [CountablePattern]
+   count-map :- {CountablePattern s/Num}]
   (loop [[grp rmdr] (first-group patterns) ordered []]
     (let [all-ordered (->> (paths grp count-map)
                            (sort-by (partial mapv count-map))
@@ -144,10 +159,10 @@
         all-ordered
         (recur (first-group rmdr) all-ordered)))))
 
-(s/defn user-plan :- [EPVPattern]
+(s/defn user-plan :- [CountablePattern]
   "Returns the original path specified by the user"
-  [patterns :- [EPVPattern]
-   _ :- {EPVPattern s/Num}]
+  [patterns :- [CountablePattern]
+   _ :- {CountablePattern s/Num}]
   patterns)
 
 (s/defn select-planner
@@ -260,7 +275,7 @@
   [graph
    part :- Results
    [_ & patterns]]
-  (let [[path _] (plan-path graph patterns *plan-options*)  ;; TODO: update optimizer to do this
+  (let [path (plan-path graph patterns *plan-options*) ;; TODO: update optimizer to do this
         ljoin #(left-join %2 %1 graph)]
     (remove (fn [part-line] (seq (reduce ljoin part path))) part)))
 
@@ -288,16 +303,12 @@
   [pattern]
   (throw (ex-info "Unknown pattern type in query" {:pattern pattern})))
 
-(defn bindings?
-  [b]
-  (and (vector? (:cols (meta b))) (sequential? b)))
-
 (defn get-vars
   "Returns all vars used by a pattern"
   [pattern]
   (cond
     ;; bindings will pass the epv-pattern? test, so must check for this first
-    (bindings? pattern) (:cols (meta pattern))
+    (bindings? pattern) (set (:cols (meta pattern)))
     (epv-pattern? pattern) (set (st/vars pattern))
     (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
     (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
@@ -319,9 +330,7 @@
                             (op-error pattern))
     :default (pattern-error pattern)))
 
-
-(s/defn plan-path :- [(s/one [Pattern] "Patterns in planned order")
-                      (s/one {EPVPattern Results} "Single patterns mapped to their resolutions")]
+(s/defn plan-path :- [PatternOrBindings] ; "Patterns in planned order"
   "Determines the order in which to perform the elements that go into a query.
    Tries to optimize, so it uses the graph to determine some of the
    properties of the query elements. Options can describe which planner to use.
@@ -331,29 +340,25 @@
    The plan can be one of :user, :min.
    :min is the default. :user means to execute in provided order."
   [graph
-   patterns :- [Pattern]
+   patterns :- [PatternOrBindings]
    options]
   (let [epv-patterns (filter #(and (epv-pattern? %) (not (bindings? %))) patterns)
         prebounds (filter bindings? patterns)
         filter-patterns (filter filter-pattern? patterns)
         op-patterns (filter op-pattern? patterns)
 
-        resolution-map (u/mapmap (partial gr/resolve-pattern graph)
-                                 epv-patterns)
-
-        count-map (u/mapmap (partial gr/count-pattern graph) epv-patterns)
+        count-map (merge
+                   (u/mapmap (partial gr/count-pattern graph) epv-patterns)
+                   (u/mapmap count prebounds))
 
         query-planner (select-planner options)
 
         ;; run the query planner
         planned (query-planner (concat prebounds epv-patterns) count-map)
-        filtered-plan (merge-filters planned filter-patterns)
-        plan (merge-ops filtered-plan op-patterns)]
+        filtered-plan (merge-filters planned filter-patterns)]
 
     ;; result
-    [plan resolution-map]))
-
-(s/def Bindings (s/constrained [[s/Any]] #(:cols (meta %))))
+    (merge-ops filtered-plan op-patterns)))
 
 (s/def InSpec (s/conditional #(= '$ %) s/Symbol
                              #(and (symbol? %) (= \? (first (name %)))) s/Symbol
@@ -377,6 +382,8 @@
   "Similar to symbol? but excludes the special ... form"
   [s]
   (and (symbol? s) (not= s '...)))
+
+(def empty-bindings (with-meta [] {:cols []}))
 
 (s/defn create-binding :- Bindings
   "Creates a bindings between a name and a set of values.
@@ -407,27 +414,35 @@
 
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
-(s/defn create-bindings :- [(s/one Bindings "The bindings for other params")
+(s/defn create-bindings :- [(s/one (s/maybe Bindings) "The bindings for other params")
                             (s/one (s/maybe StorageType) "The default storage")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
    values :- (s/cond-pre (s/protocol Storage) s/Any)]
-  (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
-    (when (< 1 (count defaults))
-      (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
-    [(->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
-          (filter identity)
-          (map (partial apply create-binding))
-          (reduce outer-product))
-     default]))
+  (if-not (seq in)
+    [empty-bindings (first values)]
+    (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
+      (when (< 1 (count defaults))
+        (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
+      [(->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
+            (filter identity)
+            (map (partial apply create-binding))
+            (reduce outer-product))
+       default])))
+
+(defn conforms? [t d]
+  (try
+    (s/validate t d)
+    (catch Exception e (str ">>>" (.getMessage e) "<<<"))))
 
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
   [graph
    patterns :- [Pattern]
-   bindings :- [[s/Any]]
+   bindings :- (s/maybe Bindings)
    & options]
-  (let [[[fpath & rpath] resolution-map] (plan-path graph patterns options)
+  (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
+        [fpath & rpath :as path] (plan-path graph all-patterns options)
         ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
@@ -436,7 +451,7 @@
         part-result (if (bindings? fpath)
                       fpath
                       (with-meta
-                        (resolution-map fpath)
+                        (gr/resolve-pattern graph fpath)
                         {:cols (st/vars fpath)}))]
     (reduce ljoin part-result rpath)))
 
