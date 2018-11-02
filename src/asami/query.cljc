@@ -122,7 +122,7 @@
   "Finds a group from a sequence of patterns. A group is defined by every pattern
    sharing at least one var with at least one other pattern. Returns a pair.
    The first returned element is the Patterns in the group, the second is what was left over."
-  [[fp & rp] :- [CountablePattern]]
+  [[fp & rp :as all] :- [CountablePattern]]
   (letfn [;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
           ;; patterns that are not in the group. Each step looks at a pattern for
@@ -301,7 +301,7 @@
 
 (defn pattern-error
   [pattern]
-  (throw (ex-info "Unknown pattern type in query" {:pattern pattern})))
+  (throw (ex-info (str "Unknown pattern type in query: " pattern) {:pattern pattern})))
 
 (defn get-vars
   "Returns all vars used by a pattern"
@@ -465,13 +465,33 @@
    data :- Results]
   (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
 
+(def query-keys #{:find :in :with :where})
+
 (s/defn query-map
   [query]
   (cond
     (map? query) query
     (string? query) (query-map (edn/read-string query))
     (sequential? query) (->> query
-                             (partition-by #{:find :in :with :where})
+                             (partition-by query-keys)
                              (partition 2)
                              (map (fn [[[k] v]] [k v]))
                              (into {}))))
+
+(s/defn newl :- s/Str
+  [s :- (s/maybe s/Str)
+   & remaining]
+  (if s (apply str s "\n" remaining) (apply str remaining)))
+
+(s/defn query-validator
+  [{:keys [find in with where] :as query} :- {s/Keyword [s/Any]}]
+  (let [unknown-keys (->> (keys query) (remove query-keys) seq) 
+        non-seq-wheres (seq (remove sequential? where))
+        err-text (cond-> nil
+                   unknown-keys (newl "Unknown clauses: " unknown-keys)
+                   (empty? find) (newl "Missing ':find' clause")
+                   (empty? where) (newl "Missing ':where' clause")
+                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres))]
+    (if err-text
+      (throw (ex-info err-text {:query query}))
+      query)))

@@ -65,3 +65,15 @@
              ["Give Me Love (Give Me Peace on Earth)"] 
              ["All Things Must Pass"]}
            (set results)))))
+
+(deftest test-query-error
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                        (q '[:select ?e ?a ?v
+                             :where [?e ?a ?v]] store)))
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                        (q '[:find ?e ?a ?v
+                             :given [?e ?a ?v]] store)))
+  (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: "
+                        (q '[:select ?e ?a ?v
+                             :having [(?v > 5)]
+                             :where [?e ?a ?v]] store))))
