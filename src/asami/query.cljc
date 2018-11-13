@@ -433,7 +433,7 @@
 (defn conforms? [t d]
   (try
     (s/validate t d)
-    (catch Exception e (str ">>>" (.getMessage e) "<<<"))))
+    (catch #?(:clj Exception :cljs :default) e (str ">>>" (.getMessage e) "<<<"))))
 
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
