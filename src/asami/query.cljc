@@ -252,7 +252,7 @@
    [fltr] :- FilterPattern]
   (let [m (meta part)
         vars (vec (:cols m))
-        filter-fn (c-eval (list 'fn [vars] fltr))]
+        filter-fn (c-eval (list #?(:clj 'fn :cljs 'cljs.core/fn) [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
 (s/defn binding-join
