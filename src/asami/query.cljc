@@ -252,7 +252,7 @@
    [fltr] :- FilterPattern]
   (let [m (meta part)
         vars (vec (:cols m))
-        filter-fn (c-eval (list 'fn [vars] fltr))]
+        filter-fn (c-eval (list #?(:clj 'fn :cljs 'cljs.core/fn) [vars] fltr))]
     (with-meta (filter filter-fn part) m)))
 
 (s/defn binding-join
@@ -433,7 +433,7 @@
 (defn conforms? [t d]
   (try
     (s/validate t d)
-    (catch Exception e (str ">>>" (.getMessage e) "<<<"))))
+    (catch #?(:clj Exception :cljs :default) e (str ">>>" (.getMessage e) "<<<"))))
 
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
