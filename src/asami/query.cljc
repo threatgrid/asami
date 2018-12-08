@@ -245,14 +245,31 @@
           (concat row-l row-r)))
       {:cols total-cols})))
 
+(def core-namespace #?(:clj 'clojure.core :cljs 'cljs.core))
+
+(defn fn-for
+  "Converts a symbol or string representing an operation into a callable function"
+  [op]
+  (or (ns-resolve (the-ns core-namespace) op)
+      (throw (ex-info (str "Unable to resolve symbol '" symbol " in " (or (namespace op) core-namespace))
+                      {:op op :namespace (or (namespace op) (str core-namespace))}))))
+
 (s/defn filter-join
   "Filters down results."
   [graph
    part :- Results
-   [fltr] :- FilterPattern]
+   [[op & args :as fltr]] :- FilterPattern]
   (let [m (meta part)
-        vars (vec (:cols m))
-        filter-fn (c-eval (list #?(:clj 'fn :cljs 'cljs.core/fn) [vars] fltr))]
+        var-map (->> (:cols m)
+                     (map-indexed (fn [a b] [b a]))
+                     (into {}))
+        arg-indexes (map-indexed #(var-map %2 (- %1)) args)
+        callable-op (cond (fn? op) op
+                          (symbol? op) (fn-for op)
+                          (string? op) (fn-for (symbol op))
+                          :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
+        filter-fn (fn [& [a]]
+                    (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
     (with-meta (filter filter-fn part) m)))
 
 (s/defn binding-join
