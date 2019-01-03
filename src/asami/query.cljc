@@ -12,7 +12,7 @@
               [naga.store :refer [Storage StorageType]]
               [naga.storage.store-util :as store-util]
               [asami.graph :as gr]
-              [asami.util :refer [c-eval]]
+              [asami.util :refer [c-eval fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj  [clojure.core.cache :as c])
@@ -244,15 +244,6 @@
         (for [row-l part row-r bindings]
           (concat row-l row-r)))
       {:cols total-cols})))
-
-(def core-namespace #?(:clj 'clojure.core :cljs 'cljs.core))
-
-(defn fn-for
-  "Converts a symbol or string representing an operation into a callable function"
-  [op]
-  (or (ns-resolve (the-ns core-namespace) op)
-      (throw (ex-info (str "Unable to resolve symbol '" symbol " in " (or (namespace op) core-namespace))
-                      {:op op :namespace (or (namespace op) (str core-namespace))}))))
 
 (s/defn filter-join
   "Filters down results."
