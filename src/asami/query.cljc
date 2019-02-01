@@ -150,14 +150,16 @@
    then return a plan of the patterns in the provided order."
   [patterns :- [CountablePattern]
    count-map :- {CountablePattern s/Num}]
-  (loop [[grp rmdr] (first-group patterns) ordered []]
-    (let [all-ordered (->> (paths grp count-map)
-                           (sort-by (partial mapv count-map))
-                           first
-                           (concat ordered))] ;; TODO: order groups, rather than concat as found
-      (if (empty? rmdr)
-        all-ordered
-        (recur (first-group rmdr) all-ordered)))))
+  (if (<= (count patterns) 1)
+    patterns
+    (loop [[grp rmdr] (first-group patterns) ordered []]
+      (let [all-ordered (->> (paths grp count-map)
+                             (sort-by (partial mapv count-map))
+                             first
+                             (concat ordered))] ;; TODO: order groups, rather than concat as found
+        (if (empty? rmdr)
+          all-ordered
+          (recur (first-group rmdr) all-ordered))))))
 
 (s/defn user-plan :- [CountablePattern]
   "Returns the original path specified by the user"
