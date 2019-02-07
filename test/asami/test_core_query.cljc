@@ -13,13 +13,16 @@
 
 (def pmc (nn))
 (def gh (nn))
+(def jl (nn))
 (def r1 (nn))
 (def r2 (nn))
 (def r3 (nn))
 (def r4 (nn))
+(def r5 (nn))
 
 (def data [[pmc :artist/name "Paul McCartney"]
            [gh :artist/name "George Harrison"]
+           [jl :artist/name "John Lennon"]
            [r1 :release/artists pmc]
            [r1 :release/name "My Sweet Lord"]
            [r2 :release/artists gh]
@@ -27,15 +30,20 @@
            [r3 :release/artists gh]
            [r3 :release/name "Give Me Love (Give Me Peace on Earth)"]
            [r4 :release/artists gh]
-           [r4 :release/name "All Things Must Pass"]])
+           [r4 :release/name "All Things Must Pass"]
+           [r5 :release/artists jl]
+           [r5 :release/name "Imagine"]])
 
 (def store (-> empty-store
                (assert-data data)))
 
 (deftest test-simple-query
   (let [results (q '[:find ?e ?a ?v
-                     :where [?e ?a ?v]] store)]
-    (is (= (set data) (set results)))))
+                     :where [?e ?a ?v]] store)
+        artists (q '[:find ?artist
+                     :where [?e :artist/name ?artist]] store)]
+    (is (= (set data) (set results)))
+    (is (= #{["Paul McCartney"] ["George Harrison"] ["John Lennon"]} (set artists)))))
 
 (deftest test-join-query
   (let [results (q '[:find ?name
@@ -54,12 +62,23 @@
              ["All Things Must Pass"]} (set results)))))
 
 (deftest test-bindings-query
-  (let [results (q '[:find ?release-name
+  (let [all-results (q '[:find ?release-name
+                         :where [?artist :artist/name ?artist-name]
+                         [?release :release/artists ?artist]
+                         [?release :release/name ?release-name]]
+                       store)
+        results (q '[:find ?release-name
                      :in $ [?artist-name ...]
                      :where [?artist :artist/name ?artist-name]
                      [?release :release/artists ?artist]
                      [?release :release/name ?release-name]]
                    store ["Paul McCartney" "George Harrison"])]
+    (is (= #{["My Sweet Lord"] 
+             ["Electronic Sound"]
+             ["Give Me Love (Give Me Peace on Earth)"] 
+             ["All Things Must Pass"]
+             ["Imagine"]}
+           (set all-results)))
     (is (= #{["My Sweet Lord"] 
              ["Electronic Sound"]
              ["Give Me Love (Give Me Peace on Earth)"] 

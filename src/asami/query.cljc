@@ -452,18 +452,25 @@
    bindings :- (s/maybe Bindings)
    & options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
-        [fpath & rpath :as path] (plan-path graph all-patterns options)
-        ;; execute the plan by joining left-to-right
-        ;; left-join has back-to-front params for dispatch reasons
-        ljoin #(left-join %2 %1 graph)
-        ;; if provided with bindings, then join the entire path to them,
-        ;; otherwise, start with the first item in the path, and join the remainder
-        part-result (if (bindings? fpath)
-                      fpath
-                      (with-meta
-                        (gr/resolve-pattern graph fpath)
-                        {:cols (st/vars fpath)}))]
-    (reduce ljoin part-result rpath)))
+        [fpath & rpath :as path] (plan-path graph all-patterns options)]
+    (if-not rpath
+      ;; single path element - executed separately as an optimization
+      (if (bindings? fpath)
+        fpath
+        (with-meta
+          (gr/resolve-pattern graph fpath)
+          {:cols (st/vars fpath)}))
+      (let [;; execute the plan by joining left-to-right
+            ;; left-join has back-to-front params for dispatch reasons
+            ljoin #(left-join %2 %1 graph)
+            ;; if provided with bindings, then join the entire path to them,
+            ;; otherwise, start with the first item in the path, and join the remainder
+            part-result (if (bindings? fpath)
+                          fpath
+                          (with-meta
+                            (gr/resolve-pattern graph fpath)
+                            {:cols (st/vars fpath)}))]
+        (reduce ljoin part-result rpath)))))
 
 (s/defn add-to-graph
   [graph
