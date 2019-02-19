@@ -60,7 +60,8 @@
 (s/defn paths :- [[CountablePattern]]
   "Returns a seq of all paths through the constraints. A path is defined
    by new patterns containing at least one variable common to the patterns
-   that appeared before it. Patterns must form a group."
+   that appeared before it. Patterns must form a group.
+   This provides all the options for the optimizer to choose from."
   ([patterns :- [CountablePattern]
     pattern-counts :- {CountablePattern s/Num}]
    (s/letfn [(remaining-paths :- [[CountablePattern]]
@@ -92,7 +93,8 @@
 
 (s/defn merge-filters
   "Merges filters into the sequence of patterns, so that they appear
-   as soon as all their variables are first bound"
+   as soon as all their variables are first bound. By pushing filters as far to the front
+   as possible, it minimizes the work of subsequent joins."
   [epv-patterns filter-patterns]
   (let [filter-vars (u/mapmap get-vars filter-patterns)
         all-bound-for? (fn [bound fltr] (every? bound (filter-vars fltr)))]
@@ -111,8 +113,9 @@
             (recur (conj plan np) (into bound (get-vars np)) rp filters)))))))
 
 (s/defn merge-ops
-  "Merges operator patterns into the sequence of patterns, so that they appear
-   as soon as all their variables are first bound"
+  "Merges operator patterns into the sequence of patterns, so that they appear as soon as all
+   their variables are first bound. By pushing operator patterns as close to the front as
+   possible, all subsequent uses of the binding have access to them."
   [patterns op-patterns]
   ;; todo: similar to merge-filters above
   ;; for now, operators are going to the back
@@ -120,8 +123,14 @@
 
 (s/defn first-group* :- [(s/one [CountablePattern] "group") (s/one [CountablePattern] "remainder")]
   "Finds a group from a sequence of patterns. A group is defined by every pattern
-   sharing at least one var with at least one other pattern. Returns a pair.
-   The first returned element is the Patterns in the group, the second is what was left over."
+   sharing at least one var with at least one other pattern. This is done to group patterns
+   by those which can be joined with inner joins. Groups do not share variables, so a join
+   from a group to any pattern in a different group will be an outer join. The optimizer
+   has to work on one group at a time.
+   Returns a pair.
+   The first returned element is the Patterns in the group, the second is what was left over.
+   This remainder contains all the patterns that appear in other groups. The function can
+   be called again on the remainder."
   [[fp & rp :as all] :- [CountablePattern]]
   (letfn [;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
@@ -141,13 +150,17 @@
     ;; Drop the set of vars before returning.
     (rest (u/fixpoint groups [(get-vars fp) [fp] rp]))))
 
-(def first-group (memoize first-group*))
+(def first-group
+  "Queries are often executed multiple times. Memoizing first-group* allows the optimizer
+   to avoid redundant work."
+  (memoize first-group*))
 
 (s/defn min-join-path :- [CountablePattern]
   "Calculates a plan based on no outer joins (a cross product), and minimized joins.
    A plan is the order in which to evaluate constraints and join them to the accumulated
    evaluated data. If it is not possible to create a path without a cross product,
-   then return a plan of the patterns in the provided order."
+   then return a plan which is a concatenation of all inner-product groups, where the
+   groups are all ordered by minimized joins."
   [patterns :- [CountablePattern]
    count-map :- {CountablePattern s/Num}]
   (if (<= (count patterns) 1)
@@ -156,19 +169,21 @@
       (let [all-ordered (->> (paths grp count-map)
                              (sort-by (partial mapv count-map))
                              first
-                             (concat ordered))] ;; TODO: order groups, rather than concat as found
+                             (concat ordered))]
+          ;; TODO: consider ordering groups, rather than concat as found
+          ;; since some outer joins may be cheaper than others
         (if (empty? rmdr)
           all-ordered
           (recur (first-group rmdr) all-ordered))))))
 
 (s/defn user-plan :- [CountablePattern]
-  "Returns the original path specified by the user"
+  "Returns the original order of patterns specified by the user. No optimization is attempted."
   [patterns :- [CountablePattern]
    _ :- {CountablePattern s/Num}]
   patterns)
 
 (s/defn select-planner
-  "Selects a query planner function"
+  "Selects a query planner function, based on user-selected options"
   [options]
   (let [opt (set options)]
     (case (get opt :planner)
@@ -192,7 +207,13 @@
                pattern))
 
 (s/defn pattern-left-join :- Results
-  "Takes a partial result, and joins on the resolution of a pattern"
+  "Takes a partial result, and does an inner join against the resolution of a pattern.
+   Iterates over the partial result, using the bindings to update the pattern to search the index.
+   Each row in the partial result is then repeated to match the rows returned from the index lookup.
+   If no variables match, then the result will be an outer product of the partial result, and
+   the rows returned from an index lookup of the unmodified pattern.
+   The final result has metadata with the columns from the partial result,
+   and all new vars from the pattern."
   [graph
    part :- Results
    pattern :- EPVPattern]
@@ -210,10 +231,17 @@
         (concat lrow rrow))
       {:cols total-cols})))
 
-(defn vconj [c v] (if c (conj c v) [v]))
+(defn vconj
+  "Used to update a value to be a vector with the new element conj'ed.
+   If the value starts as nil, then create a new vector to hold the element."
+  [c v]
+  (if c (conj c v) [v]))
 
 (s/defn prebound-left-join :- Results
-  "Takes a bindings (Results) and joins on the current results"
+  "Takes a bindings (Results) and joins on the current results. This is similar to the
+   pattern-left-join but instead of taking a pattern to be applied to an indexed graph,
+   it takes unindexed data that is already bound. The join is done by indexing the bindings
+   and using the same algorithm that joins rows in pattern-left-join"
   [part :- Results
    bindings :- Results]
   (let [lcols (:cols (meta part))
@@ -248,7 +276,8 @@
       {:cols total-cols})))
 
 (s/defn filter-join
-  "Filters down results."
+  "Uses row bindings in a partial result as arguments to a function whose parameters are defined by those names.
+   Those rows whose bindings return true/truthy are kept and the remainder are removed."
   [graph
    part :- Results
    [[op & args :as fltr]] :- FilterPattern]
@@ -266,7 +295,8 @@
     (with-meta (filter filter-fn part) m)))
 
 (s/defn binding-join
-  "Binds a var and adds to results."
+  "Uses row bindings as arguments for an expression that uses the names in that binding.
+   Binds a new var to the result of the expression and adds it to the complete results."
   [graph
    part :- Results
    [expr bnd-var] :- FilterPattern]
