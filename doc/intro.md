@@ -7,5 +7,5 @@ Asami does not (yet) have a rich set of features, but attempts to keep the major
 
 ## Talks
 
-* Presentation at ClojureD, February 23, 2019. [Animated slides](https://github.com/threatgrid/asami/docs/talks/Graphs/index.html)). [PDF](https://github.com/threatgrid/asami/docs/talks/Graphs.pdf) (includes speaker notes).
+* Presentation at ClojureD, February 23, 2019. [Animated slides](https://threatgrid.github.io/asami/talks/Graphs/index.html). [PDF](https://threatgrid.github.io/asami/talks/Graphs.pdf) (includes speaker notes).
 
