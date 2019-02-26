@@ -16,8 +16,6 @@
 
 (use-fixtures :once st/validate-schemas)
 
-#?(:clj (defn ex-message [e] (.getMessage e)))
-
 (deftest test-query-path
   (let [simple-p '[[?a :a :b] [?b :c :d]]
         simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
