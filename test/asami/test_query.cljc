@@ -1,7 +1,8 @@
 (ns asami.test-query
   "Tests internals of the query portion of the memory storage"
-  (:require [asami.query :refer [first-group min-join-path plan-path merge-filters add-to-graph
-                                 pattern-left-join outer-product create-binding create-bindings Bindings]]
+  (:require [asami.planner :refer [first-group min-join-path plan-path merge-filters Bindings]]
+            [asami.query :refer [add-to-graph
+                                 pattern-left-join outer-product create-binding create-bindings]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [asami.util :as u]
