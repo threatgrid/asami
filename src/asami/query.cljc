@@ -30,8 +30,8 @@
 
 (declare operators)
 
-(extend-protocol HasVars
-  Object
+(extend-type #?(:clj Object :cljs object)
+  HasVars
   (get-vars
     [pattern]
     (cond
