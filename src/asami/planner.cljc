@@ -105,6 +105,28 @@
             (recur (into plan nxt-filters) bound patterns remaining-filters)
             (recur (conj plan np) (into bound (get-vars np)) rp filters)))))))
 
+;; TODO: remove merge-filters!!! This replaces it.
+(s/defn merge-negations
+  "Merges filters and NOT operations into the sequence of patterns, so that they appear
+   as soon as all their variables are first bound. By pushing filters as far to the front
+   as possible, it minimizes the work of subsequent joins."
+  [epv-patterns filter-patterns]
+  (let [filter-vars (u/mapmap get-vars filter-patterns)
+        all-bound-for? (fn [bound fltr] (every? bound (filter-vars fltr)))]
+    (loop [plan [] bound #{} [np & rp :as patterns] epv-patterns filters filter-patterns]
+      (if-not (seq patterns)
+        ;; no patterns left, so apply remaining filters
+        (concat plan filters)
+
+        ;; divide the filters into those which are fully bound, and the rest
+        (let [all-bound? (partial all-bound-for? bound)
+              nxt-filters (filter all-bound? filters)
+              remaining-filters (remove all-bound? filters)]
+          ;; if filters were bound, append them, else get the next EPV pattern
+          (if (seq nxt-filters)
+            (recur (into plan nxt-filters) bound patterns remaining-filters)
+            (recur (conj plan np) (into bound (get-vars np)) rp filters)))))))
+
 (s/defn merge-ops
   "Merges operator patterns into the sequence of patterns, so that they appear as soon as all
    their variables are first bound. By pushing operator patterns as close to the front as
@@ -169,21 +191,6 @@
           all-ordered
           (recur (first-group rmdr) all-ordered))))))
 
-(s/defn user-plan :- [CountablePattern]
-  "Returns the original order of patterns specified by the user. No optimization is attempted."
-  [patterns :- [CountablePattern]
-   _ :- {CountablePattern s/Num}]
-  patterns)
-
-(s/defn select-planner
-  "Selects a query planner function, based on user-selected options"
-  [options]
-  (let [opt (set options)]
-    (case (get opt :planner)
-      :user user-plan
-      :min min-join-path
-      min-join-path)))
-
 (s/defn plan-path :- [PatternOrBindings] ; "Patterns in planned order"
   "Determines the order in which to perform the elements that go into a query.
    Tries to optimize, so it uses the graph to determine some of the
@@ -205,11 +212,35 @@
                    (u/mapmap (partial gr/count-pattern graph) epv-patterns)
                    (u/mapmap count prebounds))
 
-        query-planner (select-planner options)
-
         ;; run the query planner
-        planned (query-planner (concat prebounds epv-patterns) count-map)
+        planned (min-join-path (concat prebounds epv-patterns) count-map)
         filtered-plan (merge-filters planned filter-patterns)]
 
     ;; result
     (merge-ops filtered-plan op-patterns)))
+
+(s/defn simplify-algebra :- [PatternsOrBindings]
+  "This operation simplifies the algebra into a sum-of-products form.
+   Currently a placeholder that does nothing."
+  [patterns :- [PatternsOrBindings]
+   options]
+  patterns)
+
+(s/defn minimal-first-planner :- [PatternsOrBindings]
+  "Attempts to optimize a query, based on the principle that if smaller resolutions appear
+   first in a product term, then lazy evaluation will lead to less iteration on the later terms.
+   This is not always true, but is in the general case."
+  [graph
+   patterns :- [PatternOrBindings]
+   options]
+  (let [simplified-patterns (simplify-algebra patterns options)]
+    (plan-path graph patterns options)))
+
+(s/defn user-plan :- [CountablePattern]
+  "Returns the original order of patterns specified by the user. No optimization is attempted."
+  [graph
+   patterns :- [CountablePattern]
+   {:keys [simplify] :as options}]
+  (if simplify
+    (simplify-algebra patterns options)
+    patterns))

@@ -284,6 +284,15 @@
     (s/validate t d)
     (catch #?(:clj Exception :cljs :default) e (str ">>>" (.getMessage e) "<<<"))))
 
+(s/defn select-planner
+  "Selects a query planner function, based on user-selected options"
+  [options]
+  (let [opt (set options)]
+    (case (get opt :planner)
+      :user planner/user-plan
+      :min planner/plan-path
+      planner/plan-path)))
+
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
   [graph
@@ -291,7 +300,8 @@
    bindings :- (s/maybe Bindings)
    & options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
-        [fpath & rpath :as path] (planner/plan-path graph all-patterns options)]
+        path-planner (select-planner options)
+        [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
       ;; single path element - executed separately as an optimization
       (if (planner/bindings? fpath)
