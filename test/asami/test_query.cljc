@@ -5,7 +5,7 @@
                                  create-binding create-bindings]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
-            [asami.util :as u]
+            [naga.util :as u]
             [asami.core :refer [empty-store]]
             [naga.storage.store-util :refer [matching-vars]]
             [schema.core :as s]

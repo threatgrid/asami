@@ -5,12 +5,14 @@
     (:require [naga.schema.store-structs :as st
                                          :refer [EPVPattern FilterPattern Pattern
                                                  Results Value
-                                                 epv-pattern? filter-pattern? op-pattern?]]
+                                                 EvalPattern eval-pattern?
+                                                 epv-pattern? filter-pattern?
+                                                 op-pattern? vartest?]]
               [naga.store :refer [Storage StorageType]]
               [naga.storage.store-util :as store-util]
               [asami.planner :as planner :refer [Bindings HasVars get-vars]]
               [asami.graph :as gr]
-              [asami.util :refer [c-eval fn-for]]
+              [naga.util :refer [c-eval fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj  [clojure.edn :as edn]
@@ -42,6 +44,8 @@
       (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
                               (get-vars pattern)
                               (op-error pattern))
+      (eval-pattern? pattern) (let [[expr _] pattern]
+                                (filter vartest? expr))
       :default (pattern-error pattern))))
 
 (s/defn without :- [s/Any]
@@ -159,7 +163,7 @@
    Binds a new var to the result of the expression and adds it to the complete results."
   [graph
    part :- Results
-   [expr bnd-var] :- FilterPattern]
+   [expr bnd-var] :- EvalPattern]
   (let [cols (vec (:cols (meta part)))
         binding-fn (c-eval (list 'fn [cols] expr))
         new-cols (conj cols bnd-var)]

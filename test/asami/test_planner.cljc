@@ -1,6 +1,6 @@
 (ns asami.test-planner
   "Tests internals of the query portion of the memory storage"
-  (:require [asami.planner :refer [first-group min-join-path plan-path merge-filters Bindings]]
+  (:require [asami.planner :refer [first-group min-join-path plan-path merge-operations Bindings]]
             [asami.graph :refer [Graph resolve-triple]]
             [naga.storage.store-util :refer [matching-vars]]
             [schema.core :as s]
@@ -174,8 +174,10 @@
     (is (= m4 {2 5, 5 4}))))
 
 (deftest test-merge-filters
-  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-filters '[[:a ?a ?b]] '[[(= ?b :z)]])))
-  (is (= '[[:x ?c ?a] [:a ?a ?b] [(= ?b :z)]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[[(= ?b :z)]])))
-  (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]] (merge-filters '[[:x ?c ?a] [:a ?a ?b]] '[[(= ?a :z)]]))))
+  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-operations '[[:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+  (is (= '[[:x ?c ?a] [:a ?a ?b] [(= ?b :z)]]
+         (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+  (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]]
+         (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] []))))
 
 #?(:cljs (run-tests))
