@@ -43,7 +43,7 @@
 (def PatternOrBindings (s/conditional nested-seq? Bindings :else Pattern))
 
 (def CountablePattern  ;; fixed bindings, or a mathing pattern for an index, or a binding expression
-  (s/if nested-seq? Bindings (s/if (comp list-like? ffirst) EvalPattern EPVPattern)))
+  (s/if nested-seq? Bindings (s/if (comp list-like? first) EvalPattern EPVPattern)))
 
 (def addset (fnil conj #{}))
 
@@ -89,7 +89,7 @@
    These paths provide all the options for the optimizer to choose from."
   [patterns :- [CountablePattern]
    pattern-counts :- {CountablePattern s/Num}
-   eval-patterns :- EvalPattern]
+   eval-patterns :- [EvalPattern]]
   (s/letfn [(remaining-paths :- [[CountablePattern]]
               [bound :- #{Symbol}
                rpatterns :- [CountablePattern]
@@ -109,7 +109,7 @@
                                 (if (seq remaining)
                                   (map (partial cons p)
                                        (seq
-                                        (remaining-paths (into bound b) remaining)))
+                                        (remaining-paths (into bound b) remaining binding-outs)))
                                   [[p]]))
                               ;; can this pattern be added if bindings are brought in?
                               (let [pre-reqs (keep binding-outs b)]
@@ -170,8 +170,9 @@
             (recur (into plan all-nexts) bound patterns remaining-filters remaining-negations)
             (recur (conj plan np) (into bound (get-vars np)) rp filters negations)))))))
 
-(s/defn bindings-chain :- [(s/one [EvalPattern] "eval-patterns that can be used to bind a pattern")
-                           (s/one [EvalPattern] "eval-patterns that cannot be used to bind a pattern")]
+(s/defn bindings-chain :- (s/maybe
+                           [(s/one [EvalPattern] "eval-patterns that can be used to bind a pattern")
+                            (s/one [EvalPattern] "eval-patterns that cannot be used to bind a pattern")])
   "This is a helper function for first-group.
    When first-group has found a set of patterns that share vars with each other, this will look for
    any eval-patterns (binding through evaluation) which, if added, would allow even more patterns
@@ -199,8 +200,8 @@
   (let [out->evals (u/mapmap second identity evs)
         find-incoming (fn [evals acc]
                         (let [incoming (remove bound-vars (mapcat get-vars evals))]
-                          (if-not (seq incoming)  ;; check if all incoming vars are bound
-                            (into acc evals)      ;; all bound, so can use these eval-patterns
+                          (if-not (seq incoming) ;; check if all incoming vars are bound
+                            (into acc evals) ;; all bound, so can use these eval-patterns
                             ;; Get all eval-patterns that bind what we need
                             (let [next-evals (map out->evals incoming)]
                               ;; if any eval-patterns need vars that can't be bound then return nil
@@ -210,7 +211,7 @@
     (loop [[p & rp] patterns]
       (when p
         ;; for each pattern, find incoming eval-bindings
-        (let [evals (map out->evals (get-vars p))]
+        (let [evals (keep out->evals (get-vars p))]
           (if-not (seq evals)
             ;; nothing incoming, so go to the next pattern
             (recur rp)
@@ -220,7 +221,9 @@
                 [chain-data (remove chain-data evs)]
                 (recur rp)))))))))
 
-(s/defn first-group* :- [(s/one [CountablePattern] "group") (s/one [CountablePattern] "remainder")]
+(s/defn first-group* :- [(s/one [CountablePattern] "group")
+                         (s/one [CountablePattern] "remainder")
+                         (s/one [EvalPattern] "unused eval bindings")]
   "Finds a group from a sequence of patterns. A group is defined by every pattern
    sharing at least one var with at least one other pattern. This is done to group patterns
    by those which can be joined with inner joins. Groups do not share variables, so a join
@@ -289,7 +292,9 @@
   (if (<= (count patterns) 1)
     patterns
     (loop [[grp rmdr evalps] (first-group patterns eval-patterns) ordered []]
-      (let [all-ordered (->> (paths grp count-map)
+      (let [group-evals (filter eval-pattern? grp)
+            group-countables (remove eval-pattern? grp)
+            all-ordered (->> (paths group-countables count-map group-evals)
                              (sort-by (partial estimated-counts count-map))
                              first
                              (concat ordered))]
@@ -307,16 +312,16 @@
   "Categorizes elements of a WHERE clause, returning a keyword map"
   [patterns :- [PatternOrBindings]]
   (reduce (fn [acc p]
-            (assoc acc
-                   (cond
-                     (bindings? p) :prebounds    ;; [[data] [data] [data]...]
-                     (epv-pattern? p) :epv-patterns  ;; [?entity ?attribute ?value]
-                     (filter-pattern? p) :filter-patterns  ;; [(test ?x)]
-                     (eval-pattern? p) :eval-patterns  ;; [(operation ?x) ?y]
-                     (not-operation? p) :not-patterns  ;; (not [?entity :attr "value"])
-                     (op-pattern? p) :op-patterns  ;; (or [?e :a "v"] [?e :a "w"])
-                     :default :unknown)  ;; error
-                   p))
+            (update acc
+                    (cond
+                      (bindings? p) :prebounds    ;; [[data] [data] [data]...]
+                      (epv-pattern? p) :epv-patterns  ;; [?entity ?attribute ?value]
+                      (filter-pattern? p) :filter-patterns  ;; [(test ?x)]
+                      (eval-pattern? p) :eval-patterns  ;; [(operation ?x) ?y]
+                      (not-operation? p) :not-patterns  ;; (not [?entity :attr "value"])
+                      (op-pattern? p) :op-patterns  ;; (or [?e :a "v"] [?e :a "w"])
+                      :default :unknown)  ;; error
+                    (fnil conj []) p))
           {}
           patterns))
 

@@ -1,6 +1,7 @@
 (ns asami.test-planner
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [first-group min-join-path plan-path merge-operations Bindings]]
+            [asami.query]  ;; required, as this defines the HasVars protocol for objects
             [asami.graph :refer [Graph resolve-triple]]
             [naga.storage.store-util :refer [matching-vars]]
             [schema.core :as s]
@@ -15,12 +16,12 @@
 (deftest test-query-path
   (let [simple-p '[[?a :a :b] [?b :c :d]]
         simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
-        [g] (first-group simple-p)
-        p (min-join-path simple-p simple-cm)
+        [g] (first-group simple-p [])
+        p (min-join-path simple-cm simple-p [])
         simple-p2 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm2 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
-        [g2] (first-group simple-p2)
-        p2 (min-join-path simple-p2 simple-cm2)
+        [g2] (first-group simple-p2 [])
+        p2 (min-join-path simple-cm2 simple-p2 [])
         patterns '[[?a :a :b]
                    [?b :c ?d]
                    [?d :d ?e]
@@ -45,8 +46,8 @@
                     [?h :v2 ?v2] 6
                     [?i :i ?h] 7
                     [?other :id "id"] 1}
-        [group] (first-group patterns)
-        path (min-join-path patterns count-map)]
+        [group] (first-group patterns [])
+        path (min-join-path count-map patterns [])]
 
     (is (= '[[?a :a :b]] g))
     (is (= '[[?a :a :b] [?b :c :d]] p))
@@ -86,14 +87,14 @@
   (let [short-patterns '[[?a :b ?c]
                          [?d :e :f]
                          [?c ?d ?e]]
-        path1 (min-join-path short-patterns
-                             (mapto short-patterns [1 2 3]))
-        path2 (min-join-path short-patterns
-                             (mapto short-patterns [2 1 3]))
-        path3 (min-join-path short-patterns
-                             (mapto short-patterns [2 3 1]))
-        path4 (min-join-path short-patterns
-                             (mapto short-patterns [3 2 1]))]
+        path1 (min-join-path (mapto short-patterns [1 2 3])
+                             short-patterns [])
+        path2 (min-join-path (mapto short-patterns [2 1 3])
+                             short-patterns [])
+        path3 (min-join-path (mapto short-patterns [2 3 1])
+                             short-patterns [])
+        path4 (min-join-path (mapto short-patterns [3 2 1])
+                             short-patterns [])]
     (is (= '[[?a :b ?c]
              [?c ?d ?e]
              [?d :e :f]]
