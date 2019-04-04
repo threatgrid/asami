@@ -180,7 +180,7 @@
    [?a :prop ?b] [?a :attr ?c] [(inc ?c) ?d] [(str ?b \"-\" ?d) ?e] [(dec ?c) ?f] [?x :label ?e] [?y :included true]
    Then first-group would find the first 2 patterns, which would bind: #{?a ?b ?c}
    This function is then called, with:
-     evs = [[(inc ?c) ?d] [(str ?b \"-\" ?d) ?e]]
+     evs = [[(inc ?c) ?d] [(str ?b \"-\" ?d) ?e] [(dec ?c) ?f]]
      bound-vars = #{?a ?b ?c}
      patterns = [[?x :label ?e] [?y :included true]]
    It will identify that [?x :label ?e] can be included if the first 2 evaluations are used,
@@ -201,25 +201,27 @@
         find-incoming (fn [evals acc]
                         (let [incoming (remove bound-vars (mapcat get-vars evals))]
                           (if-not (seq incoming) ;; check if all incoming vars are bound
-                            (into acc evals) ;; all bound, so can use these eval-patterns
+                            (concat evals acc) ;; all bound, so can use all the eval-patterns that have been found
                             ;; Get all eval-patterns that bind what we need
                             (let [next-evals (map out->evals incoming)]
                               ;; if any eval-patterns need vars that can't be bound then return nil
                               (if (every? identity next-evals)
                                 ;; check the next eval-patterns, and add them to our collection
-                                (recur next-evals (into acc next-evals)))))))]
+                                (recur next-evals (concat evals acc)))))))]
     (loop [[p & rp] patterns]
-      (when p
+      (if p
         ;; for each pattern, find incoming eval-bindings
         (let [evals (keep out->evals (get-vars p))]
           (if-not (seq evals)
             ;; nothing incoming, so go to the next pattern
             (recur rp)
             ;; check if the incoming eval-bindings can be satisfied
-            (let [chain-data (find-incoming evals #{})]
+            (let [chain-data (find-incoming evals [])]
               (if (seq chain-data)
-                [chain-data (remove chain-data evs)]
-                (recur rp)))))))))
+                (do
+                  [chain-data (remove (set chain-data) evs)])
+                (recur rp)))))
+        [nil evs]))))
 
 (s/defn first-group* :- [(s/one [CountablePattern] "group")
                          (s/one [CountablePattern] "remainder")

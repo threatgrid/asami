@@ -1,6 +1,7 @@
 (ns asami.test-planner
   "Tests internals of the query portion of the memory storage"
-  (:require [asami.planner :refer [first-group min-join-path plan-path merge-operations Bindings]]
+  (:require [asami.planner :refer [bindings-chain first-group min-join-path
+                                   plan-path merge-operations Bindings]]
             [asami.query]  ;; required, as this defines the HasVars protocol for objects
             [asami.graph :refer [Graph resolve-triple]]
             [naga.storage.store-util :refer [matching-vars]]
@@ -180,5 +181,18 @@
          (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [])))
   (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]]
          (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] []))))
+
+(deftest test-bindings-chain
+  (let [[ins1 outs1] (bindings-chain '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]
+                                     '#{?a ?b ?c}
+                                     '[[?x :label ?e] [?y :included true]])
+        [ins2 outs2] (bindings-chain '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]
+                                     '#{?a ?b}
+                                     '[[?x :label ?e] [?y :included true]])
+        ]
+    (is (= ins1 '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e]]))
+    (is (= outs1 '[[(dec ?c) ?f]]))
+    (is (empty? ins2))
+    (is (= outs2 '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]))))
 
 #?(:cljs (run-tests))
