@@ -240,6 +240,8 @@
    be called again on the remainder."
   [[fp & rp] :- [CountablePattern]
    eval-patterns :- [EvalPattern]]
+  (println "Grouping: " fp " :: " rp)
+  (println "  evals: " eval-patterns)
   (letfn [ ;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
           ;; patterns that are not in the group. Each step looks at a pattern for
@@ -257,18 +259,27 @@
            included [fp]
            excluded rp
            excl-evals eval-patterns]
+      (println "included-vars: " included-vars)
+      (println "     included: " included)
+      (println "     excluded: " excluded)
       ;; scan for everything that matches the first pattern, and then iterate until
       ;; everything that matches the resulting patterns has also been found.
       (let [[in-vars in-group ex-group] (u/fixpoint groups [included-vars included excluded])
+            _ (println ">> included-vars: " in-vars)
+            _ (println ">>      included: " in-group)
+            _ (println ">>      excluded: " ex-group)
             ;; check if the bindings could add more patterns
-            [in-evals ex-evals] (bindings-chain excl-evals included-vars excluded)]
+            _ (println "--    excl-evals: " excl-evals)
+            [in-evals ex-evals] (bindings-chain excl-evals in-vars ex-group)]
+        (println "..  in-evals: " in-evals)
+        (println "..  ex-evals: " ex-evals)
         (if-not (seq in-evals)
           ;; extra eval bindings won't help, so return
           [in-group ex-group excl-evals]
           ;; add the eval bindings that will help, and run again
           (recur (into in-vars (map second in-evals))
-                 (concat included in-evals)
-                 excluded
+                 (vec (concat in-group in-evals))
+                 ex-group
                  ex-evals))))))
 
 (def first-group

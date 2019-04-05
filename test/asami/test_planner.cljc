@@ -189,10 +189,69 @@
         [ins2 outs2] (bindings-chain '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]
                                      '#{?a ?b}
                                      '[[?x :label ?e] [?y :included true]])
-        ]
+        [ins3 outs3] (bindings-chain '[ [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ]
+                                     '#{?a ?b ?c}
+                                     '[ [?a :attr ?c] [?x :label ?e] [?y :included true] ])]
     (is (= ins1 '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e]]))
     (is (= outs1 '[[(dec ?c) ?f]]))
     (is (empty? ins2))
-    (is (= outs2 '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]))))
+    (is (= outs2 '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]))
+    (is (= ins3 '[ [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ]))
+    (is (= outs3 '[]))))
+
+(deftest test-first-group-evals
+  (let [
+        [in1 out1 ev1] (first-group '[ [?a :prop ?b] [?a :attr ?c]
+                                       [?x :label ?e] [?y :included true] ]
+                                    '[ [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        [in2 out2 ev2] (first-group '[ [?a :prop ?b] [?a :attr ?c]
+                                       [?x :label ?e] [?y :included true] ]
+                                    '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        [in3 out3 ev3] (first-group '[ [?a :prop ?b] [?a :attr ?c]
+                                       [?x :label ?e] [?y :included true] [?y :has ?f] ]
+                                    '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        ]
+    (is (= in1 '[ [?a :prop ?b] [?a :attr ?c]
+                  [(inc ?c) ?d] [(str ?b "-" ?d) ?e]
+                  [?x :label ?e] ]))
+    (is (= out1 '[ [?y :included true] ]))
+    (is (= ev1 '[]))
+    (is (= in2 '[ [?a :prop ?b] [?a :attr ?c]
+                  [(inc ?c) ?d] [(str ?b "-" ?d) ?e]
+                  [?x :label ?e] ]))
+    (is (= out2 '[ [?y :included true] ]))
+    (is (= ev2 '[ [(dec ?c) ?f] ]))
+    (is (= in3 '[ [?a :prop ?b] [?a :attr ?c]
+                  [(inc ?c) ?d] [(str ?b "-" ?d) ?e]
+                  [?x :label ?e] [(dec ?c) ?f] [?y :has ?f] [?y :included true] ]))
+    (is (= out3 '[]))
+    (is (= ev3 '[]))))
+
+(deftest test-query-path-evals
+  (let [
+        ;;simple-p '[[?a :a :b] [?b :c :d] [(identity ?a) ?c]]
+        ;;simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
+        ;;[g] (first-group simple-p [])
+        ;;p (min-join-path simple-cm simple-p [])
+
+        simple-p2 '[[?a :a :b] [?b :c :d] [(identity ?a) ?b]]
+        simple-cm2 '{[?a :a :b] 1, [?b :c :d] 1}
+        [g2] (first-group simple-p2 [])
+        p2 (min-join-path simple-cm2 simple-p2 [])
+
+        simple-p3 '[[(inc ?b) ?z] [?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm3 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
+        [g3] (first-group simple-p3 [])
+        p3 (min-join-path simple-cm3 simple-p3 [])]
+
+    #_(is (= '[[?a :a :b] [(identity ?a) ?c]] g))
+    #_(is (= '[[?a :a :b] [(identity ?a) ?c] [?b :c :d]] p))
+
+    (println "Checking g2: " g2)
+    (is (= '[[?a :a :b] [(identity ?a) ?c]] g2))
+    (is (= '[[?a :a :b] [(identity ?a) ?c] [?c :c :d]] p2))
+
+    (is (= '[[?a :a :b] [?a :c :d]] g3))
+    (is (= '[[?a :a :b] [?a :c :d] [?c :e ?b] [(inc ?b) ?z] [?b :c :d]] p3))))
 
 #?(:cljs (run-tests))
