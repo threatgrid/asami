@@ -131,7 +131,7 @@
                         rpatterns))
                 [[]]))]
     (let [binding-outs (u/mapmap second identity eval-patterns)
-          start (find-start pattern-counts (remove (comp binding-outs get-vars) patterns))
+          start (find-start pattern-counts (remove (comp (partial some binding-outs) get-vars) patterns))
           all-paths (map (partial cons start)
                          (remaining-paths (get-vars start) (without start patterns) binding-outs))]
       (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
@@ -295,12 +295,8 @@
   (if (<= (count patterns) 1)
     patterns
     (loop [[grp rmdr evalps] (first-group patterns eval-patterns) ordered []]
-      (println "first-groups: " [grp rmdr evalps])
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
-            _ (println "group-evals: " group-evals)
-            _ (println "group-countables: " group-countables)
-            _ (println "paths: " (paths group-countables count-map group-evals))
             all-ordered (->> (paths group-countables count-map group-evals)
                              (sort-by (partial estimated-counts count-map))
                              first

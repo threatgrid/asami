@@ -267,7 +267,11 @@
         simple-cm8 '{[?a :a :b] 4, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 3}
         [g8] (first-group simple-p8 '[[(inc ?b) ?a]])
         p8 (min-join-path simple-cm8 simple-p8 '[[(inc ?b) ?a]])
-        ]
+
+        simple-p9 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm9 '{[?a :a :b] 3, [?b :c :d] 5, [?c :e ?b] 4, [?a :c :d] 2}
+        [g9] (first-group simple-p9 '[[(inc ?a) ?b]])
+        p9 (min-join-path simple-cm9 simple-p9 '[[(inc ?a) ?b]])]
 
     (is (= '[[?a :a :b]] g))
     (is (= '[[?a :a :b] [?b :c :d] [(identity ?a) ?c]] p))
@@ -285,22 +289,15 @@
     (is (= '[[?a :c :d] [?a :a :b] [?c :e ?b] [?b :c :d] [(inc ?b) ?z]] p5))
 
     (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] g6))
-    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p6))
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?a :a :b] [?b :c :d]] p6))
 
     (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g7))
     (is (= '[[?c :e ?b] [(inc ?b) ?a] [?a :c :d] [?a :a :b] [?b :c :d]] p7))
 
     (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g8))
     (is (= '[[?c :e ?b] [?b :c :d] [(inc ?b) ?a] [?a :c :d] [?a :a :b]] p8))
-    ))
 
-(deftest test-qp
-  (let [
-        simple-p6 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
-        simple-cm6 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
-        p6 (min-join-path simple-cm6 simple-p6 '[[(inc ?a) ?b]])
-        ]
-    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p6))
-    ))
+    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] g9))
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p9))))
 
 #?(:cljs (run-tests))
