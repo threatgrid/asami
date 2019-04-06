@@ -228,30 +228,79 @@
     (is (= ev3 '[]))))
 
 (deftest test-query-path-evals
-  (let [
-        ;;simple-p '[[?a :a :b] [?b :c :d] [(identity ?a) ?c]]
-        ;;simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
-        ;;[g] (first-group simple-p [])
-        ;;p (min-join-path simple-cm simple-p [])
+  (let [simple-p '[[?a :a :b] [?b :c :d]]
+        simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
+        [g] (first-group simple-p '[[(identity ?a) ?c]])
+        p (min-join-path simple-cm simple-p '[[(identity ?a) ?c]])
 
-        simple-p2 '[[?a :a :b] [?b :c :d] [(identity ?a) ?b]]
+        simple-p2 '[[?a :a :b] [?b :c :d]]
         simple-cm2 '{[?a :a :b] 1, [?b :c :d] 1}
-        [g2] (first-group simple-p2 [])
-        p2 (min-join-path simple-cm2 simple-p2 [])
+        [g2] (first-group simple-p2 '[[(identity ?a) ?b]])
+        p2 (min-join-path simple-cm2 simple-p2 '[[(identity ?a) ?b]])
 
-        simple-p3 '[[(inc ?b) ?z] [?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
-        simple-cm3 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
-        [g3] (first-group simple-p3 [])
-        p3 (min-join-path simple-cm3 simple-p3 [])]
+        simple-p3 '[[?a :a :b] [?b :c :d]]
+        simple-cm3 '{[?a :a :b] 1, [?b :c :d] 1}
+        [g3] (first-group simple-p3 '[[(identity ?b) ?a]])
+        p3 (min-join-path simple-cm3 simple-p3 '[[(identity ?b) ?a]])
 
-    #_(is (= '[[?a :a :b] [(identity ?a) ?c]] g))
-    #_(is (= '[[?a :a :b] [(identity ?a) ?c] [?b :c :d]] p))
+        simple-p4 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm4 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
+        [g4] (first-group simple-p4 '[[(inc ?b) ?z]])
+        p4 (min-join-path simple-cm4 simple-p4 '[[(inc ?b) ?z]])
 
-    (println "Checking g2: " g2)
-    (is (= '[[?a :a :b] [(identity ?a) ?c]] g2))
-    (is (= '[[?a :a :b] [(identity ?a) ?c] [?c :c :d]] p2))
+        simple-p5 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm5 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
+        [g5] (first-group simple-p5 '[[(inc ?b) ?z]])
+        p5 (min-join-path simple-cm5 simple-p5 '[[(inc ?b) ?z]])
 
-    (is (= '[[?a :a :b] [?a :c :d]] g3))
-    (is (= '[[?a :a :b] [?a :c :d] [?c :e ?b] [(inc ?b) ?z] [?b :c :d]] p3))))
+        simple-p6 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm6 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
+        [g6] (first-group simple-p6 '[[(inc ?a) ?b]])
+        p6 (min-join-path simple-cm6 simple-p6 '[[(inc ?a) ?b]])
+
+        simple-p7 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm7 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
+        [g7] (first-group simple-p7 '[[(inc ?b) ?a]])
+        p7 (min-join-path simple-cm7 simple-p7 '[[(inc ?b) ?a]])
+
+        simple-p8 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm8 '{[?a :a :b] 4, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 3}
+        [g8] (first-group simple-p8 '[[(inc ?b) ?a]])
+        p8 (min-join-path simple-cm8 simple-p8 '[[(inc ?b) ?a]])
+        ]
+
+    (is (= '[[?a :a :b]] g))
+    (is (= '[[?a :a :b] [?b :c :d] [(identity ?a) ?c]] p))
+
+    (is (= '[[?a :a :b] [(identity ?a) ?b] [?b :c :d]] g2))
+    (is (= '[[?a :a :b] [(identity ?a) ?b] [?b :c :d]] p2))
+
+    (is (= '[[?b :c :d] [(identity ?b) ?a] [?a :a :b]] g3))
+    (is (= '[[?b :c :d] [(identity ?b) ?a] [?a :a :b]] p3))
+
+    (is (= '[[?a :a :b] [?a :c :d]] g4))
+    (is (= '[[?a :a :b] [?a :c :d] [?c :e ?b] [?b :c :d] [(inc ?b) ?z]] p4))
+
+    (is (= '[[?a :a :b] [?a :c :d]] g5))
+    (is (= '[[?a :c :d] [?a :a :b] [?c :e ?b] [?b :c :d] [(inc ?b) ?z]] p5))
+
+    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] g6))
+    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p6))
+
+    (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g7))
+    (is (= '[[?c :e ?b] [(inc ?b) ?a] [?a :c :d] [?a :a :b] [?b :c :d]] p7))
+
+    (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g8))
+    (is (= '[[?c :e ?b] [?b :c :d] [(inc ?b) ?a] [?a :c :d] [?a :a :b]] p8))
+    ))
+
+(deftest test-qp
+  (let [
+        simple-p6 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
+        simple-cm6 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
+        p6 (min-join-path simple-cm6 simple-p6 '[[(inc ?a) ?b]])
+        ]
+    (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p6))
+    ))
 
 #?(:cljs (run-tests))

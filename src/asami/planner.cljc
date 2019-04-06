@@ -115,7 +115,7 @@
                               (let [pre-reqs (keep binding-outs b)]
                                 (if (seq pre-reqs)
                                   ;; are all variables for these bindings already available?
-                                  (if (every? bound (mapcat (comp get-vars first) pre-reqs))
+                                  (if (every? bound (mapcat get-vars pre-reqs))
                                     ;; sort the bindings that are about to be used
                                     (let [ordered-pre-reqs (order pre-reqs)
                                           ;; all the variables that became bound no longer need to be looked for
@@ -130,12 +130,11 @@
                                         [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))))))))
                         rpatterns))
                 [[]]))]
-    (let [binding-reqs (reduce (fn [a op] (reduce (fn [aa v] (update aa v addset op)) a (get-vars (first op)))) {} eval-patterns)
-          binding-outs (u/mapmap second identity eval-patterns)
-          start (find-start pattern-counts patterns)
+    (let [binding-outs (u/mapmap second identity eval-patterns)
+          start (find-start pattern-counts (remove (comp binding-outs get-vars) patterns))
           all-paths (map (partial cons start)
                          (remaining-paths (get-vars start) (without start patterns) binding-outs))]
-      (assert (every? (partial = (count patterns)) (map count all-paths))
+      (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
               (str "No valid paths through: " (vec patterns)))
       all-paths)))
 
@@ -238,16 +237,14 @@
    The first returned element is the Patterns in the group, the second is what was left over.
    This remainder contains all the patterns that appear in other groups. The function can
    be called again on the remainder."
-  [[fp & rp] :- [CountablePattern]
+  [patterns :- [CountablePattern]
    eval-patterns :- [EvalPattern]]
-  (println "Grouping: " fp " :: " rp)
-  (println "  evals: " eval-patterns)
   (letfn [ ;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
           ;; patterns that are not in the group. Each step looks at a pattern for
           ;; inclusion or exclusion
           (step [[vs included excluded] next-pattern]
-            (let [new-vars (get-vars next-pattern)]
+            (let [new-vars (set (get-vars next-pattern))]
               (if (seq (set/intersection vs new-vars))
                 [(into vs new-vars) (conj included next-pattern) excluded]
                 [vs included (conj excluded next-pattern)])))
@@ -255,32 +252,25 @@
           ;; included patterns. Previously excluded patterns are being scanned
           ;; again using the new known vars.
           (groups [[v i e]] (reduce step [v i []] e))]
-    (loop [included-vars (set (get-vars fp))
-           included [fp]
-           excluded rp
-           excl-evals eval-patterns]
-      (println "included-vars: " included-vars)
-      (println "     included: " included)
-      (println "     excluded: " excluded)
-      ;; scan for everything that matches the first pattern, and then iterate until
-      ;; everything that matches the resulting patterns has also been found.
-      (let [[in-vars in-group ex-group] (u/fixpoint groups [included-vars included excluded])
-            _ (println ">> included-vars: " in-vars)
-            _ (println ">>      included: " in-group)
-            _ (println ">>      excluded: " ex-group)
-            ;; check if the bindings could add more patterns
-            _ (println "--    excl-evals: " excl-evals)
-            [in-evals ex-evals] (bindings-chain excl-evals in-vars ex-group)]
-        (println "..  in-evals: " in-evals)
-        (println "..  ex-evals: " ex-evals)
-        (if-not (seq in-evals)
-          ;; extra eval bindings won't help, so return
-          [in-group ex-group excl-evals]
-          ;; add the eval bindings that will help, and run again
-          (recur (into in-vars (map second in-evals))
-                 (vec (concat in-group in-evals))
-                 ex-group
-                 ex-evals))))))
+    (let [eval-outs (set (map second eval-patterns))
+          [first-pattern] (remove #(some eval-outs (get-vars %)) patterns)]
+      (loop [included-vars (set (get-vars first-pattern))
+             included [first-pattern]
+             excluded (without first-pattern patterns)
+             excl-evals eval-patterns]
+        ;; scan for everything that matches the first pattern, and then iterate until
+        ;; everything that matches the resulting patterns has also been found.
+        (let [[in-vars in-group ex-group] (u/fixpoint groups [included-vars included excluded])
+              ;; check if the bindings could add more patterns
+              [in-evals ex-evals] (bindings-chain excl-evals in-vars ex-group)]
+          (if-not (seq in-evals)
+            ;; extra eval bindings won't help, so return
+            [in-group ex-group excl-evals]
+            ;; add the eval bindings that will help, and run again
+            (recur (into in-vars (map second in-evals))
+                   (vec (concat in-group in-evals))
+                   ex-group
+                   ex-evals)))))))
 
 (def first-group
   "Queries are often executed multiple times. Memoizing first-group* allows the optimizer
@@ -305,8 +295,12 @@
   (if (<= (count patterns) 1)
     patterns
     (loop [[grp rmdr evalps] (first-group patterns eval-patterns) ordered []]
+      (println "first-groups: " [grp rmdr evalps])
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
+            _ (println "group-evals: " group-evals)
+            _ (println "group-countables: " group-countables)
+            _ (println "paths: " (paths group-countables count-map group-evals))
             all-ordered (->> (paths group-countables count-map group-evals)
                              (sort-by (partial estimated-counts count-map))
                              first
