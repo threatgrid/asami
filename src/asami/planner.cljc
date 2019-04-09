@@ -146,7 +146,7 @@
    general-patterns
    filter-patterns
    not-patterns]
-  (let [filter-vars (u/mapmap get-vars filter-patterns)
+  (let [filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
         all-bound-for? (fn [bound fltr] (every? bound (filter-vars fltr)))]
     (loop [plan []
            bound #{}
@@ -293,7 +293,7 @@
    patterns :- [CountablePattern]
    eval-patterns :- [EvalPattern]]
   (if (<= (count patterns) 1)
-    patterns
+    (concat patterns (order eval-patterns))
     (loop [[grp rmdr evalps] (first-group patterns eval-patterns) ordered []]
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
@@ -341,7 +341,7 @@
    patterns :- [PatternOrBindings]
    options]
   (let [{:keys [prebounds epv-patterns filter-patterns
-                eval-patterns not-patterns op-patterns unknown]} (extract-patterns-by-type patterns)
+                eval-patterns not-patterns op-patterns unknown] :as p} (extract-patterns-by-type patterns)
         _ (when (seq unknown) (throw (ex-info (str "Unknown form in query: " (str/join "," unknown))
                                               {:unknown unknown :query patterns})))
 
@@ -350,12 +350,14 @@
                    (u/mapmap count prebounds))
 
         ;; run the query planner
-        plan-operation (fn [[op & args]] (apply list op (map #(plan-path graph % options) args)))
+        ;; TODO: sub patterns use bindings and leave behind bindings
+        plan-operation (fn [[op & args :as sub]] (apply list op (plan-path graph args options)))
         planned-sub-patterns (map plan-operation op-patterns)
+        planned-not-patterns (map plan-operation not-patterns)
         planned (min-join-path count-map (concat prebounds epv-patterns) eval-patterns)]
 
     ;; result
-    (merge-operations planned planned-sub-patterns filter-patterns not-patterns)))
+    (merge-operations planned planned-sub-patterns filter-patterns planned-not-patterns)))
 
 (s/defn simplify-algebra :- [PatternOrBindings]
   "This operation simplifies the algebra into a sum-of-products form.
