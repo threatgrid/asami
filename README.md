@@ -26,7 +26,7 @@ Look at the `naga.store/Storage` protocol (in [threatgrid/naga-store](https://gi
 
 ## License
 
-Copyright © 2018 Cisco
+Copyright © 2018-2019 Cisco
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
