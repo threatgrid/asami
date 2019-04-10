@@ -18,10 +18,13 @@
   (let [simple-p '[[?a :a :b] [?b :c :d]]
         simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
         [g] (first-group nil simple-p [])
+        [g*] (first-group #{'?b} simple-p [])
         p (min-join-path nil simple-cm simple-p [])
         simple-p2 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm2 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
         [g2] (first-group nil simple-p2 [])
+        [g2*] (first-group #{'?a} simple-p2 [])
+        [g2**] (first-group #{'?c} simple-p2 [])
         p2 (min-join-path nil simple-cm2 simple-p2 [])
         patterns '[[?a :a :b]
                    [?b :c ?d]
@@ -51,9 +54,12 @@
         path (min-join-path nil count-map patterns [])]
 
     (is (= '[[?a :a :b]] g))
+    (is (= '[[?b :c :d]] g*))
     (is (= '[[?a :a :b] [?b :c :d]] p))
 
     (is (= '[[?a :a :b] [?a :c :d]] g2))
+    (is (= '[[?a :a :b] [?a :c :d]] g2*))
+    (is (= '[[?c :e ?b] [?b :c :d]] g2**))
     (is (= '[[?a :a :b] [?a :c :d] [?c :e ?b] [?b :c :d]] p2))
 
     (is (= '[[?a :a :b]
