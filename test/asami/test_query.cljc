@@ -2,7 +2,7 @@
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
             [asami.query :refer [add-to-graph pattern-left-join outer-product
-                                 create-binding create-bindings]]
+                                 create-binding create-bindings minus left-join]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [naga.util :as u]
@@ -165,6 +165,30 @@
     (let [[bds] (create-bindings '[?x [?a ...] [?b ?c] [[?d ?e]]] [5 [11 12] [2 3] [[:a :b] [:c :d]]])]
       (is (= [[5 11 2 3 :a :b] [5 11 2 3 :c :d] [5 12 2 3 :a :b] [5 12 2 3 :c :d]]))
       (is (= '[?x ?a ?b ?c ?d ?e])))))
+
+(def minus-data
+  [[:b :px :c]
+   [:b :px :d]
+   [:c :py :c]
+   [:d :px :c]
+   [:x :py :c]
+   [:z :px :c]])
+
+(deftest test-minus
+  (let [graph (add-to-graph empty-graph minus-data)
+        part-result (with-meta
+                      [[:p1 :a] [:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
+                      {:cols '[?p ?o]})
+        r1 (minus graph part-result '(not [?o :px :c]))
+        part-result2 (with-meta [[:b] [:c] [:d] [:x]] {:cols '[?o]})
+        r2 (minus graph part-result2 '(not [?o :px ?q] [?q :px ?r]))
+        r2' (left-join '(not [?o :px ?q] [?q :px ?r]) part-result2 graph)]
+    (is (= '[?p ?o] (:cols (meta r1))))
+    (is (= [[:p1 :a] [:p3 :x] [:p3 :t]] r1))
+    (is (= '[?o] (:cols (meta r2))))
+    (is (= [[:c] [:d] [:x]] r2))
+    (is (= [[:c] [:d] [:x]] r2'))))
+
 
 #?(:clj
    (deftest test-eval

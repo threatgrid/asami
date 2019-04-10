@@ -180,9 +180,12 @@
   [graph
    part :- Results
    [_ & patterns]]
-  (let [path (planner/plan-path graph patterns *plan-options*) ;; TODO: update optimizer to do this
-        ljoin #(left-join %2 %1 graph)]
-    (remove (fn [part-line] (seq (reduce ljoin part path))) part)))
+  (let [ljoin #(left-join %2 %1 graph)
+        col-meta (meta part)]
+    (with-meta
+      (remove (fn [part-line]
+                (seq (reduce ljoin (with-meta [part-line] col-meta) patterns))) part)
+      col-meta)))
 
 (s/defn disjunction
   "NOTE: This is a placeholder implementation. There is no optimization."
