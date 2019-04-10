@@ -17,12 +17,12 @@
 (deftest test-query-path
   (let [simple-p '[[?a :a :b] [?b :c :d]]
         simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
-        [g] (first-group simple-p [])
-        p (min-join-path simple-cm simple-p [])
+        [g] (first-group nil simple-p [])
+        p (min-join-path nil simple-cm simple-p [])
         simple-p2 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm2 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
-        [g2] (first-group simple-p2 [])
-        p2 (min-join-path simple-cm2 simple-p2 [])
+        [g2] (first-group nil simple-p2 [])
+        p2 (min-join-path nil simple-cm2 simple-p2 [])
         patterns '[[?a :a :b]
                    [?b :c ?d]
                    [?d :d ?e]
@@ -47,8 +47,8 @@
                     [?h :v2 ?v2] 6
                     [?i :i ?h] 7
                     [?other :id "id"] 1}
-        [group] (first-group patterns [])
-        path (min-join-path count-map patterns [])]
+        [group] (first-group nil patterns [])
+        path (min-join-path nil count-map patterns [])]
 
     (is (= '[[?a :a :b]] g))
     (is (= '[[?a :a :b] [?b :c :d]] p))
@@ -88,13 +88,13 @@
   (let [short-patterns '[[?a :b ?c]
                          [?d :e :f]
                          [?c ?d ?e]]
-        path1 (min-join-path (mapto short-patterns [1 2 3])
+        path1 (min-join-path nil (mapto short-patterns [1 2 3])
                              short-patterns [])
-        path2 (min-join-path (mapto short-patterns [2 1 3])
+        path2 (min-join-path nil (mapto short-patterns [2 1 3])
                              short-patterns [])
-        path3 (min-join-path (mapto short-patterns [2 3 1])
+        path3 (min-join-path nil (mapto short-patterns [2 3 1])
                              short-patterns [])
-        path4 (min-join-path (mapto short-patterns [3 2 1])
+        path4 (min-join-path nil (mapto short-patterns [3 2 1])
                              short-patterns [])]
     (is (= '[[?a :b ?c]
              [?c ?d ?e]
@@ -133,13 +133,13 @@
                         (with-meta '[(not= ?e ?a)] {:vars '#{?e ?a}})
                         '[?c ?d ?e]]
         path1 (plan-path (resolver-for short-patterns [nil 1 2 nil 3])
-                          short-patterns [])
+                          short-patterns {})
         path2 (plan-path (resolver-for short-patterns [nil 2 1 nil 3])
-                            short-patterns [])
+                            short-patterns {})
         path3 (plan-path (resolver-for short-patterns [nil 2 3 nil 1])
-                          short-patterns [])
+                          short-patterns {})
         path4 (plan-path (resolver-for short-patterns [nil 3 2 nil 1])
-                          short-patterns [])]
+                          short-patterns {})]
     (is (= '[[?a :b ?c]
              [?c ?d ?e]
              [(= ?d 5)]
@@ -176,11 +176,11 @@
     (is (= m4 {2 5, 5 4}))))
 
 (deftest test-merge-filters
-  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-operations '[[:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-operations nil {} '[[:a ?a ?b]] [] '[[(= ?b :z)]] [])))
   (is (= '[[:x ?c ?a] [:a ?a ?b] [(= ?b :z)]]
-         (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [])))
   (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]]
-         (merge-operations '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] []))))
+         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] []))))
 
 (deftest test-bindings-chain
   (let [[ins1 outs1] (bindings-chain '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]
@@ -201,15 +201,15 @@
 
 (deftest test-first-group-evals
   (let [
-        [in1 out1 ev1] (first-group '[ [?a :prop ?b] [?a :attr ?c]
-                                       [?x :label ?e] [?y :included true] ]
-                                    '[ [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
-        [in2 out2 ev2] (first-group '[ [?a :prop ?b] [?a :attr ?c]
-                                       [?x :label ?e] [?y :included true] ]
-                                    '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
-        [in3 out3 ev3] (first-group '[ [?a :prop ?b] [?a :attr ?c]
-                                       [?x :label ?e] [?y :included true] [?y :has ?f] ]
-                                    '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        [in1 out1 ev1] (first-group nil '[ [?a :prop ?b] [?a :attr ?c]
+                                           [?x :label ?e] [?y :included true] ]
+                                        '[ [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        [in2 out2 ev2] (first-group nil '[ [?a :prop ?b] [?a :attr ?c]
+                                           [?x :label ?e] [?y :included true] ]
+                                        '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
+        [in3 out3 ev3] (first-group nil '[ [?a :prop ?b] [?a :attr ?c]
+                                           [?x :label ?e] [?y :included true] [?y :has ?f] ]
+                                        '[ [(dec ?c) ?f] [(inc ?c) ?d] [(str ?b "-" ?d) ?e] ])
         ]
     (is (= in1 '[ [?a :prop ?b] [?a :attr ?c]
                   [(inc ?c) ?d] [(str ?b "-" ?d) ?e]
@@ -230,48 +230,48 @@
 (deftest test-query-path-evals
   (let [simple-p '[[?a :a :b] [?b :c :d]]
         simple-cm '{[?a :a :b] 1, [?b :c :d] 1}
-        [g] (first-group simple-p '[[(identity ?a) ?c]])
-        p (min-join-path simple-cm simple-p '[[(identity ?a) ?c]])
+        [g] (first-group nil simple-p '[[(identity ?a) ?c]])
+        p (min-join-path nil simple-cm simple-p '[[(identity ?a) ?c]])
 
         simple-p2 '[[?a :a :b] [?b :c :d]]
         simple-cm2 '{[?a :a :b] 1, [?b :c :d] 1}
-        [g2] (first-group simple-p2 '[[(identity ?a) ?b]])
-        p2 (min-join-path simple-cm2 simple-p2 '[[(identity ?a) ?b]])
+        [g2] (first-group nil simple-p2 '[[(identity ?a) ?b]])
+        p2 (min-join-path nil simple-cm2 simple-p2 '[[(identity ?a) ?b]])
 
         simple-p3 '[[?a :a :b] [?b :c :d]]
         simple-cm3 '{[?a :a :b] 1, [?b :c :d] 1}
-        [g3] (first-group simple-p3 '[[(identity ?b) ?a]])
-        p3 (min-join-path simple-cm3 simple-p3 '[[(identity ?b) ?a]])
+        [g3] (first-group nil simple-p3 '[[(identity ?b) ?a]])
+        p3 (min-join-path nil simple-cm3 simple-p3 '[[(identity ?b) ?a]])
 
         simple-p4 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm4 '{[?a :a :b] 1, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 1}
-        [g4] (first-group simple-p4 '[[(inc ?b) ?z]])
-        p4 (min-join-path simple-cm4 simple-p4 '[[(inc ?b) ?z]])
+        [g4] (first-group nil simple-p4 '[[(inc ?b) ?z]])
+        p4 (min-join-path nil simple-cm4 simple-p4 '[[(inc ?b) ?z]])
 
         simple-p5 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm5 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
-        [g5] (first-group simple-p5 '[[(inc ?b) ?z]])
-        p5 (min-join-path simple-cm5 simple-p5 '[[(inc ?b) ?z]])
+        [g5] (first-group nil simple-p5 '[[(inc ?b) ?z]])
+        p5 (min-join-path nil simple-cm5 simple-p5 '[[(inc ?b) ?z]])
 
         simple-p6 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm6 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
-        [g6] (first-group simple-p6 '[[(inc ?a) ?b]])
-        p6 (min-join-path simple-cm6 simple-p6 '[[(inc ?a) ?b]])
+        [g6] (first-group nil simple-p6 '[[(inc ?a) ?b]])
+        p6 (min-join-path nil simple-cm6 simple-p6 '[[(inc ?a) ?b]])
 
         simple-p7 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm7 '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3}
-        [g7] (first-group simple-p7 '[[(inc ?b) ?a]])
-        p7 (min-join-path simple-cm7 simple-p7 '[[(inc ?b) ?a]])
+        [g7] (first-group nil simple-p7 '[[(inc ?b) ?a]])
+        p7 (min-join-path nil simple-cm7 simple-p7 '[[(inc ?b) ?a]])
 
         simple-p8 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm8 '{[?a :a :b] 4, [?b :c :d] 2, [?c :e ?b] 1, [?a :c :d] 3}
-        [g8] (first-group simple-p8 '[[(inc ?b) ?a]])
-        p8 (min-join-path simple-cm8 simple-p8 '[[(inc ?b) ?a]])
+        [g8] (first-group nil simple-p8 '[[(inc ?b) ?a]])
+        p8 (min-join-path nil simple-cm8 simple-p8 '[[(inc ?b) ?a]])
 
         simple-p9 '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]]
         simple-cm9 '{[?a :a :b] 3, [?b :c :d] 5, [?c :e ?b] 4, [?a :c :d] 2}
-        [g9] (first-group simple-p9 '[[(inc ?a) ?b]])
-        p9 (min-join-path simple-cm9 simple-p9 '[[(inc ?a) ?b]])]
+        [g9] (first-group nil simple-p9 '[[(inc ?a) ?b]])
+        p9 (min-join-path nil simple-cm9 simple-p9 '[[(inc ?a) ?b]])]
 
     (is (= '[[?a :a :b]] g))
     (is (= '[[?a :a :b] [?b :c :d] [(identity ?a) ?c]] p))
@@ -311,35 +311,35 @@
         p (plan-path test-graph test-patterns {})]
     (is (= '[[?a :a :b] (not [?a :c :d]) [(identity ?a) ?c]] p)))
 
-  (comment
-    (let [test-patterns '[[?a :a :b] [?b :c :d] (not [?a :e :f]) [(identity ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 1, [?b :c :d] 1, [?a :e :f] 1})
-          p2 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :a :b] (not [?a :e :f]) [(identity ?a) ?b] [?b :c :d]] p2)))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] (not [?a :e :f]) [(identity ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 1, [?b :c :d] 1, [?a :e :f] 1})
+        p2 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :a :b] (not [?a :e :f]) [(identity ?a) ?b] [?b :c :d]] p2)))
 
-    (let [test-patterns '[[?a :a :b] [?b :c :d] (not [?b :e :f]) [(identity ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 1, [?b :c :d] 1, [?b :e :f] 1})
-          p3 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :a :b] [(identity ?a) ?b] [?b :c :d] (not [?b :e :f])] p3)))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] (not [?b :e :f]) [(identity ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 1, [?b :c :d] 1, [?b :e :f] 1})
+        p3 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :a :b] [(identity ?a) ?b] [?b :c :d] (not [?b :e :f])] p3)))
 
-    (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?b :s :o]) [(inc ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?b :s :o] 1})
-          p6 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?b :s :o]) [?a :a :b] [?b :c :d]] p6)))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?b :s :o]) [(inc ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?b :s :o] 1})
+        p6 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?b :s :o]) [?a :a :b] [?b :c :d]] p6)))
 
-    (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s :o]) [(inc ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?c :s :o] 1})
-          p6 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s :o]) [?a :a :b] [?b :c :d]] p6)))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s :o]) [(inc ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?c :s :o] 1})
+        p6 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s :o]) [?a :a :b] [?b :c :d]] p6)))
 
-    (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 1, [?z :x :y] 4})
-          p8 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?b :c :d]] p8)))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 1, [?z :x :y] 4})
+        p8 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p8)))
+  
 
-    (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
-          test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 4, [?z :x :y] 1})
-          p9 (plan-path test-graph test-patterns {})]
-      (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?c :e ?b] (not [?z :x :y] [?c :s ?z]) [?b :c :d]] p9)))))
+  (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 4, [?z :x :y] 1})
+        p9 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p9))))
 
 #?(:cljs (run-tests))

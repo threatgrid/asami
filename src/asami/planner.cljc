@@ -87,7 +87,8 @@
    The result of this expands the tree into a flattened form:
    [[A,B1,C1] [A,B1,C2] [A,B2,C3] [A,B2,C4]]
    These paths provide all the options for the optimizer to choose from."
-  [patterns :- [CountablePattern]
+  [prebound :- (s/maybe #{Var})
+   patterns :- [CountablePattern]
    pattern-counts :- {CountablePattern s/Num}
    eval-patterns :- [EvalPattern]]
   (s/letfn [(remaining-paths :- [[CountablePattern]]
@@ -131,23 +132,36 @@
                         rpatterns))
                 [[]]))]
     (let [binding-outs (u/mapmap second identity eval-patterns)
-          start (find-start pattern-counts (remove (comp (partial some binding-outs) get-vars) patterns))
+          start (->> (if (seq prebound)
+                       (filter (comp (partial some prebound) get-vars) patterns)
+                       patterns)
+                     (remove (comp (partial some binding-outs) get-vars))
+                     (find-start pattern-counts))
           all-paths (map (partial cons start)
                          (remaining-paths (get-vars start) (without start patterns) binding-outs))]
       (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
               (str "No valid paths through: " (vec patterns)))
       all-paths)))
 
+(declare plan-path)
+
 (s/defn merge-operations
   "Merges filters and NOT operations into the sequence of patterns, so that they appear
    as soon as all their variables are first bound. By pushing filters as far to the front
    as possible, it minimizes the work of subsequent joins."
-  [planned-patterns
+  [graph
+   options
+   planned-patterns
    general-patterns
    filter-patterns
    not-patterns]
-  (let [filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
-        all-bound-for? (fn [bound fltr] (every? bound (filter-vars fltr)))]
+  (let [all-non-negation-vars (set (mapcat get-vars (concat planned-patterns general-patterns)))
+        filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
+        all-bound-for? (fn [bound fltr]
+                         (every? #(or (bound %) (not (all-non-negation-vars %)))
+                                 (filter-vars fltr)))
+        plan-negation-path (fn [bound [op & patterns]]
+                             (apply list op (plan-path graph patterns (assoc options :bound bound))))]
     (loop [plan []
            bound #{}
            [np & rp :as patterns] planned-patterns
@@ -160,7 +174,9 @@
         ;; divide the filters into those which are fully bound, and the rest
         (let [all-bound? (partial all-bound-for? bound)
               nxt-filters (filter all-bound? filters)
-              nxt-negations (filter all-bound? negations)
+              nxt-negations (->> negations
+                                 (filter all-bound?)
+                                 (map (partial plan-negation-path bound)))
               all-nexts (concat nxt-negations nxt-filters)
               remaining-filters (remove all-bound? filters)
               remaining-negations (remove all-bound? negations)]
@@ -237,7 +253,8 @@
    The first returned element is the Patterns in the group, the second is what was left over.
    This remainder contains all the patterns that appear in other groups. The function can
    be called again on the remainder."
-  [patterns :- [CountablePattern]
+  [bound :- (s/maybe #{Var})
+   patterns :- [CountablePattern]
    eval-patterns :- [EvalPattern]]
   (letfn [ ;; Define a reduction step.
           ;; Accumulates a triple of: known vars; patterns that are part of the group;
@@ -253,7 +270,10 @@
           ;; again using the new known vars.
           (groups [[v i e]] (reduce step [v i []] e))]
     (let [eval-outs (set (map second eval-patterns))
-          [first-pattern] (remove #(some eval-outs (get-vars %)) patterns)]
+          independents (remove #(some eval-outs (get-vars %)) patterns)
+          [first-pattern] (if (seq bound)
+                            (filter #(some bound (get-vars %)) independents)
+                            independents)]
       (loop [included-vars (set (get-vars first-pattern))
              included [first-pattern]
              excluded (without first-pattern patterns)
@@ -289,21 +309,22 @@
    evaluated data. If it is not possible to create a path without a cross product,
    then return a plan which is a concatenation of all inner-product groups, where the
    groups are all ordered by minimized joins."
-  [count-map :- {CountablePattern s/Num}
+  [bound :- (s/maybe #{Var})
+   count-map :- {CountablePattern s/Num}
    patterns :- [CountablePattern]
    eval-patterns :- [EvalPattern]]
   (if (<= (count patterns) 1)
     (concat patterns (order eval-patterns))
-    (loop [[grp rmdr evalps] (first-group patterns eval-patterns) ordered []]
+    (loop [[grp rmdr evalps] (first-group bound patterns eval-patterns) ordered []]
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
-            all-ordered (->> (paths group-countables count-map group-evals)
+            all-ordered (->> (paths bound group-countables count-map group-evals)
                              (sort-by (partial estimated-counts count-map))
                              first
                              (concat ordered))]
         (if (empty? rmdr)
           (concat all-ordered (order evalps))
-          (recur (first-group rmdr evalps) all-ordered))))))
+          (recur (first-group bound rmdr evalps) all-ordered))))))
 
 (s/defn not-operation? :- s/Bool
   "Returns true if a pattern is an NOT operation"
@@ -350,14 +371,14 @@
                    (u/mapmap count prebounds))
 
         ;; run the query planner
+        bound (:bound options)
         ;; TODO: sub patterns use bindings and leave behind bindings
         plan-operation (fn [[op & args :as sub]] (apply list op (plan-path graph args options)))
         planned-sub-patterns (map plan-operation op-patterns)
-        planned-not-patterns (map plan-operation not-patterns)
-        planned (min-join-path count-map (concat prebounds epv-patterns) eval-patterns)]
+        planned (min-join-path bound count-map (concat prebounds epv-patterns) eval-patterns)]
 
     ;; result
-    (merge-operations planned planned-sub-patterns filter-patterns planned-not-patterns)))
+    (merge-operations graph options planned planned-sub-patterns filter-patterns not-patterns)))
 
 (s/defn simplify-algebra :- [PatternOrBindings]
   "This operation simplifies the algebra into a sum-of-products form.
