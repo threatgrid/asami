@@ -179,12 +179,28 @@
   "Removes matches."
   [graph
    part :- Results
-   [_ & patterns]]
+   [_ & [fpattern :as patterns]]]  ;; 'not symbol, then the pattern arguments
   (let [ljoin #(left-join %2 %1 graph)
         col-meta (meta part)]
     (with-meta
-      (remove (fn [part-line]
-                (seq (reduce ljoin (with-meta [part-line] col-meta) patterns))) part)
+      (remove
+       (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
+         (let [cols (:cols col-meta)
+               pattern->left (store-util/matching-vars fpattern cols)
+               pattern-vals (vals pattern->left)
+               first-cols {:cols (vec (st/vars fpattern))}]
+           (fn [part-line]
+             (let [lookup (modify-pattern part-line pattern->left fpattern)
+                   bound-cols (vec (map part-line pattern-vals))]
+               (seq
+                (reduce ljoin
+                        (with-meta
+                          (map (partial into bound-cols) (gr/resolve-pattern graph lookup))
+                          first-cols)
+                        (rest patterns))))))
+         (fn [part-line]
+           (seq (reduce ljoin (with-meta [part-line] col-meta) patterns))))
+       part)
       col-meta)))
 
 (s/defn disjunction
