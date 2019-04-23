@@ -325,12 +325,12 @@
   (let [test-patterns '[[?a :a :b] [?b :c :d] (not [?b :e :f]) [(identity ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 1, [?b :c :d] 1, [?b :e :f] 1})
         p3 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :a :b] [(identity ?a) ?b] [?b :c :d] (not [?b :e :f])] p3)))
+    (is (= '[[?a :a :b] [(identity ?a) ?b] (not [?b :e :f]) [?b :c :d]] p3)))
 
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?b :s :o]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?b :s :o] 1})
         p6 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?b :s :o]) [?a :a :b] [?b :c :d]] p6)))
+    (is (= '[[?a :c :d] [(inc ?a) ?b] (not [?b :s :o]) [?c :e ?b] [?a :a :b] [?b :c :d]] p6)))
 
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s :o]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?c :s :o] 1})
@@ -342,10 +342,16 @@
         p8 (plan-path test-graph test-patterns {})]
     (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p8)))
   
-
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 4, [?z :x :y] 1})
         p9 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p9))))
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p9)))
+
+  (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]
+                        (not [?z :x :y] [?e :s ?z])
+                        [(identity ?c) ?e] [(inc ?a) ?b]]
+        test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?e :s ?z] 4, [?z :x :y] 1})
+        p10 (plan-path test-graph test-patterns {})]
+    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?a :a :b] [?b :c :d] [(identity ?c) ?e] (not [?e :s ?z] [?z :x :y])] p10))))
 
 #?(:cljs (run-tests))
