@@ -2,11 +2,13 @@
   #?(:clj  (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
                      [asami.core :refer [empty-store]]
                      [clojure.test :as t :refer [testing is run-tests]]
+                     [clojure.edn :as edn]
                      [schema.test :as st :refer [deftest]])
      :cljs (:require [naga.store :refer [assert-data resolve-pattern count-pattern query start-tx commit-tx deltas]]
                      [asami.core :refer [empty-store]]
                      [clojure.test :as t :refer-macros [testing is run-tests]]
-                     [schema.test :as st :refer-macros [deftest]])))
+                     [schema.test :as st :refer-macros [deftest]]))
+  #?(:clj (:import [java.time ZonedDateTime])))
 
 (t/use-fixtures :once st/validate-schemas)
 
@@ -231,6 +233,35 @@
   (let [s (assert-data empty-store j4data)
         r1 (unordered-query s '[?o] '[[:a ?p ?o] [?o :px :c]])]
     (is (= #{[:b] [:z] [:x]} r1))))
+
+#?(:clj
+  (defn read-time [[t i s]]
+    (if (= 'java.time.ZonedDateTime t)
+      (java.time.ZonedDateTime/parse s)
+      (throw (ex-info (str "Unknown Java type: " t) {:type t :value s :id i})))))
+
+(def data-file "resources/test/data.edn")
+
+#?(:clj
+   (defn load-data [filename]
+     (let [data-text (slurp filename)
+           data (edn/read-string {:readers {'object read-time}} data-text)]
+       (assert-data empty-store data))))
+
+#?(:clj
+   (deftest test-minus-detailed
+     (let [store (load-data data-file)
+           pattern1 '[[?v :type "verdict"] [?v :disposition_name "Malicious"]
+                      [?v :observable ?o] [?o :type "domain"] [?o :value ?ov]
+                      [?v :module-name ?mn]]
+           pattern2 (concat pattern1
+                            '[(not [?vo :type "verdict"] [?vo :disposition_name "Malicious"]
+                                    [?vo :observable ?oo] [?oo :type "domain"] [?oo :value ?ov]
+                                    [?vo :module-name "OpenDNS"])])
+           r1 (query store '[?ov] pattern1)
+           r2 (query store '[?ov] pattern2)]
+       (is (= [["bibrath.eu"] ["bibrath.eu"]] r1))
+       (is (empty? r2)))))
 
 
 #?(:cljs (run-tests))

@@ -148,14 +148,17 @@
 (s/defn merge-operations
   "Merges filters and NOT operations into the sequence of patterns, so that they appear
    as soon as all their variables are first bound. By pushing filters as far to the front
-   as possible, it minimizes the work of subsequent joins."
+   as possible, it minimizes the work of subsequent joins.
+   TODO: if not-patterns relies on the output of an eval-pattern, then the eval can be pushed
+   further ahead in the path. This should happen before this merge is called."
   [graph
    options
    planned-patterns
    general-patterns
    filter-patterns
    not-patterns]
-  (let [all-non-negation-vars (set (mapcat get-vars (concat planned-patterns general-patterns)))
+  (let [out-vars (fn [p] (if (eval-pattern? p) [(second p)] (get-vars p)))
+        all-non-negation-vars (set (mapcat out-vars (concat planned-patterns general-patterns)))
         filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
         all-bound-for? (fn [bound fltr]
                          (every? #(or (bound %) (not (all-non-negation-vars %)))
@@ -169,7 +172,8 @@
            negations not-patterns]
       (if-not (seq patterns)
         ;; no patterns left, so add remaining general patterns, negations, then filters
-        (concat plan general-patterns negations filters)
+        (let [planned-negations (map (partial plan-negation-path bound) negations)]
+          (concat plan general-patterns planned-negations filters))
 
         ;; divide the filters into those which are fully bound, and the rest
         (let [all-bound? (partial all-bound-for? bound)
@@ -183,7 +187,7 @@
           ;; if filters were bound, append them, else get the next EPV pattern
           (if (seq all-nexts)
             (recur (into plan all-nexts) bound patterns remaining-filters remaining-negations)
-            (recur (conj plan np) (into bound (get-vars np)) rp filters negations)))))))
+            (recur (conj plan np) (into bound (out-vars np)) rp filters negations)))))))
 
 (s/defn bindings-chain :- (s/maybe
                            [(s/one [EvalPattern] "eval-patterns that can be used to bind a pattern")

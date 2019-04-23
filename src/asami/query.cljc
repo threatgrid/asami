@@ -187,11 +187,13 @@
        (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
          (let [cols (:cols col-meta)
                pattern->left (store-util/matching-vars fpattern cols)
-               pattern-vals (vals pattern->left)
-               first-cols {:cols (vec (st/vars fpattern))}]
+               pattern-vals (set (vals pattern->left))
+               pre-bound (keep-indexed #(when (pattern->left %1) %2) fpattern)
+               un-bound (keep-indexed #(when (and (vartest? %2) (not (pattern->left %1))) %2) fpattern)
+               first-cols {:cols (vec (concat pre-bound un-bound))}]
            (fn [part-line]
              (let [lookup (modify-pattern part-line pattern->left fpattern)
-                   bound-cols (vec (map part-line pattern-vals))]
+                   bound-cols (vec (keep-indexed #(when (pattern-vals %1) %2) part-line))]
                (seq
                 (reduce ljoin
                         (with-meta
