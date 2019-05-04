@@ -318,6 +318,36 @@
       :min planner/plan-path
       planner/plan-path)))
 
+(s/defn run-simple-query
+  [graph
+   [fpattern & patterns] :- [Pattern]]
+  ;; if provided with bindings, then join the entire path to them,
+  ;; otherwise, start with the first item in the path, and join the remainder
+  (let [;; execute the plan by joining left-to-right
+        ;; left-join has back-to-front params for dispatch reasons
+        ljoin #(left-join %2 %1 graph)
+        part-result (if (planner/bindings? fpattern)
+                      fpattern
+                      (with-meta
+                        (gr/resolve-pattern graph fpattern)
+                        {:cols (st/vars fpattern)}))]
+    (reduce ljoin part-result patterns)))
+
+(s/defn gate-fn
+  "Returns a function that allows data through it or not,
+   based on the results of a series of NOT operations.
+   If any operation returns results, then nothing may get through."
+  [graph
+   constraints :- [Pattern]]
+  (if-not (seq constraints)
+    identity
+    (loop [[[_ & patterns :as constraint] & remaining] constraints]
+      (if-not constraint
+        identity
+        (if (seq (run-simple-query graph patterns))
+          (constantly [])
+          (recur remaining))))))
+
 (s/defn join-patterns :- Results
   "Joins the resolutions for a series of patterns into a single result."
   [graph
@@ -328,23 +358,21 @@
         path-planner (select-planner options)
         [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
+
       ;; single path element - executed separately as an optimization
       (if (planner/bindings? fpath)
         fpath
         (with-meta
           (gr/resolve-pattern graph fpath)
           {:cols (st/vars fpath)}))
-      (let [;; execute the plan by joining left-to-right
-            ;; left-join has back-to-front params for dispatch reasons
-            ljoin #(left-join %2 %1 graph)
-            ;; if provided with bindings, then join the entire path to them,
-            ;; otherwise, start with the first item in the path, and join the remainder
-            part-result (if (planner/bindings? fpath)
-                          fpath
-                          (with-meta
-                            (gr/resolve-pattern graph fpath)
-                            {:cols (st/vars fpath)}))]
-        (reduce ljoin part-result rpath)))))
+
+      ;; normal operation
+      (let [;; if the plan begins with a negation, then it's not bound to the rest of
+            ;; the plan, and it creates a "gate" for the result
+            result-gate (gate-fn graph (take-while planner/not-operation? path))
+            [fpath & rpath] (drop-while planner/not-operation? path)]
+        (-> (run-simple-query graph path)
+            result-gate)))))
 
 (s/defn add-to-graph
   [graph
