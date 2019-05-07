@@ -331,10 +331,10 @@
           (recur (first-group bound rmdr evalps) all-ordered))))))
 
 (s/defn not-operation? :- s/Bool
-  "Returns true if a pattern is an NOT operation"
-  [pattern :- Pattern]
+  "Returns true if a pattern is a NOT operation"
+  [pattern :- PatternOrBindings]
   (and (list-like? pattern)
-       (= 'not (first pattern))))
+       (contains? #{'not 'NOT} (first pattern))))
 
 (s/defn extract-patterns-by-type :- {s/Keyword [PatternOrBindings]}
   "Categorizes elements of a WHERE clause, returning a keyword map"
