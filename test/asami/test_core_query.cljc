@@ -61,6 +61,33 @@
              ["Give Me Love (Give Me Peace on Earth)"]
              ["All Things Must Pass"]} (set results)))))
 
+(deftest test-not-query
+  (let [results (q '[:find ?rname
+                     :where [?a :artist/name "George Harrison"]
+                            [?r :release/artists ?a]
+                            [?r :release/name ?rname]
+                            (not [?r :release/name "Electronic Sound"])] store)]
+    (is (= #{["Give Me Love (Give Me Peace on Earth)"]
+             ["All Things Must Pass"]} (set results))))
+
+  (let [results (q '[:find ?rname
+                     :where [?a :artist/name "George Harrison"]
+                            [?r :release/artists ?a]
+                            [?r :release/name ?rname]
+                            (not [?ra :release/artists ?aa]
+                                 [?aa :artist/name "John Lennon"])] store)]
+    (is (empty? results)))
+
+  (let [results (q '[:find ?rname
+                     :where [?a :artist/name "George Harrison"]
+                            [?r :release/artists ?a]
+                            [?r :release/name ?rname]
+                            (not [?r :release/artists ?aa] [?aa :artist/name "Julian Lennon"])]
+                   store)]
+    (is (= #{["Electronic Sound"]
+             ["Give Me Love (Give Me Peace on Earth)"]
+             ["All Things Must Pass"]} (set results)))))
+
 (deftest test-bindings-query
   (let [all-results (q '[:find ?release-name
                          :where [?artist :artist/name ?artist-name]

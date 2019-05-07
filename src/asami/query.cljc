@@ -10,7 +10,7 @@
                                                  op-pattern? vartest?]]
               [naga.store :refer [Storage StorageType]]
               [naga.storage.store-util :as store-util]
-              [asami.planner :as planner :refer [Bindings HasVars get-vars]]
+              [asami.planner :as planner :refer [Bindings PatternOrBindings HasVars get-vars]]
               [asami.graph :as gr]
               [naga.util :refer [c-eval fn-for]]
               #?(:clj  [schema.core :as s]
@@ -320,7 +320,7 @@
 
 (s/defn run-simple-query
   [graph
-   [fpattern & patterns] :- [Pattern]]
+   [fpattern & patterns] :- [PatternOrBindings]]
   ;; if provided with bindings, then join the entire path to them,
   ;; otherwise, start with the first item in the path, and join the remainder
   (let [;; execute the plan by joining left-to-right
@@ -370,8 +370,8 @@
       (let [;; if the plan begins with a negation, then it's not bound to the rest of
             ;; the plan, and it creates a "gate" for the result
             result-gate (gate-fn graph (take-while planner/not-operation? path))
-            [fpath & rpath] (drop-while planner/not-operation? path)]
-        (-> (run-simple-query graph path)
+            path' (drop-while planner/not-operation? path)]
+        (-> (run-simple-query graph path')
             result-gate)))))
 
 (s/defn add-to-graph
