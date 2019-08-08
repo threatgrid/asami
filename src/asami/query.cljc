@@ -1,7 +1,6 @@
 (ns ^{:doc "Implements a full query engine based on fully indexed data."
       :author "Paula Gearon"}
     asami.query
-    #?(:clj (:refer-clojure :exclude [eval]))
     (:require [naga.schema.store-structs :as st
                                          :refer [EPVPattern FilterPattern Pattern
                                                  Results Value
@@ -12,7 +11,7 @@
               [naga.storage.store-util :as store-util]
               [asami.planner :as planner :refer [Bindings PatternOrBindings HasVars get-vars]]
               [asami.graph :as gr]
-              [naga.util :refer [c-eval fn-for]]
+              [naga.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj  [clojure.edn :as edn]
@@ -158,6 +157,8 @@
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
     (with-meta (filter filter-fn part) m)))
 
+;; the following is dead code. TODO: bring this back using the semantics in filter-join function calling
+(comment
 (s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
    Binds a new var to the result of the expression and adds it to the complete results."
@@ -165,11 +166,12 @@
    part :- Results
    [expr bnd-var] :- EvalPattern]
   (let [cols (vec (:cols (meta part)))
-        binding-fn (c-eval (list 'fn [cols] expr))
+        binding-fn (c-eval (list 'fn [cols] expr)) ;; do not use c-eval
         new-cols (conj cols bnd-var)]
     (with-meta
-     (map (fn [row] (concat row [(c-eval row)])) part)
+     (map (fn [row] (concat row [(c-eval row)])) part)  ;; do not use c-eval
      {:cols new-cols})))
+)
 
 (def ^:dynamic *plan-options* [:min])
 
