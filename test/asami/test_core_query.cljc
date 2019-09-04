@@ -123,3 +123,6 @@
                         (q '[:select ?e ?a ?v
                              :having [(?v > 5)]
                              :where [?e ?a ?v]] store))))
+
+#?(:cljs (run-tests))
+
