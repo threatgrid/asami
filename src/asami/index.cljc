@@ -10,7 +10,7 @@
 
 (s/defn index-add :- {s/Any {s/Any #{s/Any}}}
   "Add elements to a 3-level index"
-  [idx :- {s/Any {s/Any s/Any}}
+  [idx :- {s/Any {s/Any #{s/Any}}}
    a :- s/Any
    b :- s/Any
    c :- s/Any]
