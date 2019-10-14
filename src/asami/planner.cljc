@@ -302,10 +302,26 @@
   (memoize first-group*))
 
 (s/defn estimated-counts :- [s/Num]
-  "Return list of ordered counts for the patterns. This skips the eval-patterns"
+  "Return list of ordered counts for the patterns. This skips the eval-patterns.
+  It also attaches meta-data to indicate if a path can short circuit comparisons."
   [count-map :- {CountablePattern s/Num}
    path :- [CountablePattern]]
-  (into [] (keep count-map path)))
+  (let [counts (into [] (keep count-map path))]
+    (with-meta counts {:zero (some zero? counts) :single (every? (partial = 1) counts)})))
+
+(s/defn find-first :- [CountablePattern]
+  "Finds a min (or approximate minimum) path"
+  [count-map :- {CountablePattern s/Num}
+   [first-path & all-paths] :- [[CountablePattern]]]
+  (let [count-fn (partial estimated-counts count-map)]
+    (loop [min-path first-path min-counts (count-fn first-path) [fpath & rpaths] all-paths]
+      (if (or (nil? fpath)
+              (let [{:keys [zero single]} (meta min-path)] (or zero single)))
+        min-path
+        (let [f-min-counts (count-fn fpath)]
+          (if (= 1 (compare min-counts f-min-counts))
+            (recur fpath f-min-counts rpaths)
+            (recur min-path min-counts rpaths)))))))
 
 (s/defn min-join-path :- [CountablePattern]
   "Calculates a plan based on no outer joins (a cross product), and minimized joins.
@@ -323,8 +339,7 @@
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
             all-ordered (->> (paths bound group-countables count-map group-evals)
-                             (sort-by (partial estimated-counts count-map))
-                             first
+                             (find-first count-map)
                              (concat ordered))]
         (if (empty? rmdr)
           (concat all-ordered (order evalps))
