@@ -183,15 +183,27 @@
                                 (path-through (into bound (get-vars next-pattern))
                                               (without next-pattern rpatterns)
                                               binding-outs)))
-                        ;; TODO: bring in bindings
-                        (let [pattern->bindings (into {} (keep pattern-bindings-pair rpatterns))]  ;; TODO: pattern-bindings-pair
-                          (if (seq pattern->bindings)
-                            (let [p (min-pattern (keys pattern->bindings))
-                                  bindings (pattern->bindings p)
-                                  b (get-vars p)]
-                              )
+                        ;; no pattern can be linked, so bring in bindings
+                        (let [pattern->pre-reqs (into {} (keep pattern-prereq-pair rpatterns))] ;; TODO: pattern-prereq-pair
+                          (if (seq pattern->pre-reqs)
+                            (let [p (min-pattern (keys pattern->pre-reqs))
+                                  ordered-pre-reqs (order (pattern->pre-reqs p))
+                                  b (get-vars p)
+                                  ;; all the variables that became bound no longer need to be looked for
+                                  remaining-binding-outs (apply dissoc binding-outs b)]
+                              ;; if there are more patterns to add, then recurse
+                              (if-let [remaining (seq (without p rpatterns))]
+                                (concat ordered-pre-reqs
+                                        [p]
+                                        (path-through (-> bound (into b) (into (map second ordered-pre-reqs)))
+                                                      remaining
+                                                      remaining-binding-outs))
+                                ;; otherwise, return everything that's left
+                                [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))
                             (throw (ex-info (str "Unable to find path through: " rpatterns)
-                                            {:patterns rpatterns :bound bound :binding-outs binding-outs})))))))))]
+                                            {:patterns rpatterns :bound bound :binding-outs binding-outs})))))))
+                  ;; no patterns left, so add any remaining bindings
+                  (order (vals binding-outs))))]
       (let [binding-outs (u/mapmap second identity eval-patterns)
             _ (start-time "finding start")
             start (->> (if (seq prebound)
