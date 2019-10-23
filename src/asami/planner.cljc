@@ -16,6 +16,20 @@
     #?(:clj
         (:import [clojure.lang Symbol])))
 
+(def latest-time (atom (. System (nanoTime))))
+
+(defn start-time [label]
+  (println label)
+  (reset! latest-time (. System (nanoTime))))
+
+(defn print-time
+  ([label] (print-time label nil))
+  ([label x]
+   (let [next-time (. System (nanoTime))]
+     (println label ": " (/ (double (- next-time @latest-time)) 1000000.0) "ms")
+     (reset! latest-time next-time))
+   x))
+
 
 (defprotocol HasVars
   (get-vars [this] "Returns the vars for the object"))
@@ -91,57 +105,107 @@
    patterns :- [CountablePattern]
    pattern-counts :- {CountablePattern s/Num}
    eval-patterns :- [EvalPattern]]
-  (s/letfn [(remaining-paths :- [[CountablePattern]]
-              [bound :- #{Symbol}
-               rpatterns :- [CountablePattern]
-               binding-outs :- {Var CountablePattern}]
-              (if (seq rpatterns)
-                (apply concat
-                       (keep ;; discard paths that can't proceed (they return nil)
-                        (fn [p]
-                          (let [b (get-vars p)]
-                            ;; only proceed when the pattern matches what has been bound,
-                            ;; and does not rely on an expression binding
-                            (if (and (or (empty? bound) (seq (set/intersection b bound)))
-                                     (not (some binding-outs b)))
-                              ;; pattern can be added to the path, get the other patterns
-                              (let [remaining (without p rpatterns)]
-                                ;; if there are more patterns to add to the path, recurse
-                                (if (seq remaining)
-                                  (map (partial cons p)
-                                       (seq
-                                        (remaining-paths (into bound b) remaining binding-outs)))
-                                  [[p]]))
-                              ;; can this pattern be added if bindings are brought in?
-                              (let [pre-reqs (keep binding-outs b)]
-                                (if (seq pre-reqs)
-                                  ;; are all variables for these bindings already available?
-                                  (if (every? bound (mapcat get-vars pre-reqs))
-                                    ;; sort the bindings that are about to be used
-                                    (let [ordered-pre-reqs (order pre-reqs)
-                                          ;; all the variables that became bound no longer need to be looked for
-                                          remaining-binding-outs (apply dissoc binding-outs b)]
-                                      ;; if there are more patterns to add, then recurse
-                                      (if-let [remaining (seq (without p rpatterns))]
-                                        (map (partial concat ordered-pre-reqs [p])
-                                             (seq (remaining-paths (-> bound (into b) (into (map second pre-reqs)))
-                                                                   remaining
-                                                                   remaining-binding-outs)))
-                                        ;; otherwise, return everything
-                                        [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))))))))
-                        rpatterns))
-                [[]]))]
-    (let [binding-outs (u/mapmap second identity eval-patterns)
-          start (->> (if (seq prebound)
-                       (filter (comp (partial some prebound) get-vars) patterns)
-                       patterns)
-                     (remove (comp (partial some binding-outs) get-vars))
-                     (find-start pattern-counts))
-          all-paths (map (partial cons start)
-                         (remaining-paths (get-vars start) (without start patterns) binding-outs))]
-      (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
-              (str "No valid paths through: " (vec patterns)))
-      all-paths)))
+  (let [smallest-count (apply min (vals pattern-counts))]
+    (s/letfn [(remaining-paths :- [[CountablePattern]]
+                [bound :- #{Symbol}
+                 rpatterns :- [CountablePattern]
+                 binding-outs :- {Var CountablePattern}]
+                (if (seq rpatterns)
+                  ;; concatting on all possible path extensions.
+                  ;; Instead, only concat the extensions that add no new vars, unless that is empty
+                  (apply concat
+                         (keep ;; discard paths that can't proceed (they return nil)
+                          (fn [p]
+                            (let [b (get-vars p)]
+                              ;; only proceed when the pattern matches what has been bound,
+                              ;; and does not rely on an expression binding
+                              (if (and (or (empty? bound) (seq (set/intersection b bound)))
+                                       (not (some binding-outs b)))
+                                ;; pattern can be added to the path, get the other patterns
+                                (let [remaining (without p rpatterns)]
+                                  ;; if there are more patterns to add to the path, recurse
+                                  (if (seq remaining)
+                                    (map (partial cons p)
+                                         (seq
+                                          (remaining-paths (into bound b) remaining binding-outs)))
+                                    [[p]]))
+                                ;; can this pattern be added if bindings are brought in?
+                                (let [pre-reqs (keep binding-outs b)]
+                                  (if (seq pre-reqs)
+                                    ;; are all variables for these bindings already available?
+                                    (if (every? bound (mapcat get-vars pre-reqs))
+                                      ;; sort the bindings that are about to be used
+                                      (let [ordered-pre-reqs (order pre-reqs)
+                                            ;; all the variables that became bound no longer need to be looked for
+                                            remaining-binding-outs (apply dissoc binding-outs b)]
+                                        ;; if there are more patterns to add, then recurse
+                                        (if-let [remaining (seq (without p rpatterns))]
+                                          (map (partial concat ordered-pre-reqs [p])
+                                               (seq (remaining-paths (-> bound (into b) (into (map second pre-reqs)))
+                                                                     remaining
+                                                                     remaining-binding-outs)))
+                                          ;; otherwise, return everything
+                                          [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))))))))
+                          rpatterns))
+                  [[]]))
+              (path-through :- [CountablePattern]
+                [bound :- #{Symbol}
+                 rpatterns :- [CountablePattern]
+                 binding-outs :- {Var CountablePattern}]
+                (if (seq rpatterns)
+                  (letfn [(possible-next-pattern? [p]
+                            (let [b (get-vars p)]
+                              ;; only use this pattern when it matches what has been bound,
+                              ;; and does not rely on an expression binding
+                              (and (or (empty? bound) (seq (set/intersection b bound)))
+                                   (not (some binding-outs b)))))
+                          ;; test if every var in a pattern has already been bound
+                          (all-bound? [p] (every? bound (get-vars p)))
+                          ;; return the pattern with the smallest resolution count
+                          (min-pattern [ps]
+                            (loop [[p & rp] ps m p mcount 0]
+                              (if (nil? p)
+                                m
+                                (let [pcount (pattern-counts p)]
+                                  ;; optimization: short circuit when this is known to be the smallest possible value
+                                  (if (= smallest-count pcount)
+                                    p
+                                    (if (or (< pcount mcount) (zero? mcount))
+                                      (recur rp p pcount)
+                                      (recur rp m mcount)))))))]
+                    (let [nexts (filter possible-next-pattern? rpatterns)]
+                      (if (seq nexts)
+                        (let [fully-bound-nexts (filter all-bound? nexts)
+                              next-pattern (if (seq fully-bound-nexts)
+                                             (min-pattern fully-bound-nexts)
+                                             (min-pattern nexts))]
+                          (cons next-pattern
+                                (path-through (into bound (get-vars next-pattern))
+                                              (without next-pattern rpatterns)
+                                              binding-outs)))
+                        ;; TODO: bring in bindings
+                        (let [pattern->bindings (into {} (keep pattern-bindings-pair rpatterns))]  ;; TODO: pattern-bindings-pair
+                          (if (seq pattern->bindings)
+                            (let [p (min-pattern (keys pattern->bindings))
+                                  bindings (pattern->bindings p)
+                                  b (get-vars p)]
+                              )
+                            (throw (ex-info (str "Unable to find path through: " rpatterns)
+                                            {:patterns rpatterns :bound bound :binding-outs binding-outs})))))))))]
+      (let [binding-outs (u/mapmap second identity eval-patterns)
+            _ (start-time "finding start")
+            start (->> (if (seq prebound)
+                         (filter (comp (partial some prebound) get-vars) patterns)
+                         patterns)
+                       (remove (comp (partial some binding-outs) get-vars))
+                       (find-start pattern-counts))
+                                        ; _ (print-time (str "Got start: " start))
+            all-paths (map (partial cons start)
+                           (remaining-paths (get-vars start) (without start patterns) binding-outs))]
+                                        ; (print-time (str "path count: " (count all-paths)))
+        (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
+                (str "No valid paths through: " (vec patterns)))
+        all-paths))))
 
 (declare plan-path)
 

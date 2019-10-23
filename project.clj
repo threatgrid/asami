@@ -3,7 +3,7 @@
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.10.0"]
+  :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/clojurescript "1.10.520"]
                  [prismatic/schema "1.1.10"] 
                  [org.clojure/core.cache "0.7.2"]
