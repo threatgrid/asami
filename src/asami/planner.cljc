@@ -86,69 +86,16 @@
           (recur (conj chain p) (disj to-bind b) (without p remaining)))))))
 
 
-(s/defn paths :- [[CountablePattern]]
-  "Returns a seq of all paths through the constraints. A path is defined
+(s/defn path :- [CountablePattern]
+  "Returns an efficient path through the constraints. A path is defined
    by new patterns containing at least one variable common to the patterns
-   that appeared before it. Patterns must form a group.
-   Paths can be envisioned as a tree, like:
-   A-+--B1-+--C1
-     |     |
-     |     +--C2
-     |
-     +--B2-+--C3
-           |
-           +--C4
-   The result of this expands the tree into a flattened form:
-   [[A,B1,C1] [A,B1,C2] [A,B2,C3] [A,B2,C4]]
-   These paths provide all the options for the optimizer to choose from."
+   that appeared before it. Patterns must form a group."
   [prebound :- (s/maybe #{Var})
    patterns :- [CountablePattern]
    pattern-counts :- {CountablePattern s/Num}
    eval-patterns :- [EvalPattern]]
   (let [smallest-count (apply min (vals pattern-counts))]
-    (s/letfn [(remaining-paths :- [[CountablePattern]]
-                [bound :- #{Symbol}
-                 rpatterns :- [CountablePattern]
-                 binding-outs :- {Var CountablePattern}]
-                (if (seq rpatterns)
-                  ;; concatting on all possible path extensions.
-                  ;; Instead, only concat the extensions that add no new vars, unless that is empty
-                  (apply concat
-                         (keep ;; discard paths that can't proceed (they return nil)
-                          (fn [p]
-                            (let [b (get-vars p)]
-                              ;; only proceed when the pattern matches what has been bound,
-                              ;; and does not rely on an expression binding
-                              (if (and (or (empty? bound) (seq (set/intersection b bound)))
-                                       (not (some binding-outs b)))
-                                ;; pattern can be added to the path, get the other patterns
-                                (let [remaining (without p rpatterns)]
-                                  ;; if there are more patterns to add to the path, recurse
-                                  (if (seq remaining)
-                                    (map (partial cons p)
-                                         (seq
-                                          (remaining-paths (into bound b) remaining binding-outs)))
-                                    [[p]]))
-                                ;; can this pattern be added if bindings are brought in?
-                                (let [pre-reqs (keep binding-outs b)]
-                                  (if (seq pre-reqs)
-                                    ;; are all variables for these bindings already available?
-                                    (if (every? bound (mapcat get-vars pre-reqs))
-                                      ;; sort the bindings that are about to be used
-                                      (let [ordered-pre-reqs (order pre-reqs)
-                                            ;; all the variables that became bound no longer need to be looked for
-                                            remaining-binding-outs (apply dissoc binding-outs b)]
-                                        ;; if there are more patterns to add, then recurse
-                                        (if-let [remaining (seq (without p rpatterns))]
-                                          (map (partial concat ordered-pre-reqs [p])
-                                               (seq (remaining-paths (-> bound (into b) (into (map second pre-reqs)))
-                                                                     remaining
-                                                                     remaining-binding-outs)))
-                                          ;; otherwise, return everything
-                                          [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))))))))
-                          rpatterns))
-                  [[]]))
-              (path-through :- [CountablePattern]
+    (s/letfn [(path-through :- [CountablePattern]
                 [bound :- #{Symbol}
                  rpatterns :- [CountablePattern]
                  binding-outs :- {Var CountablePattern}]
@@ -184,7 +131,14 @@
                                               (without next-pattern rpatterns)
                                               binding-outs)))
                         ;; no pattern can be linked, so bring in bindings
-                        (let [pattern->pre-reqs (into {} (keep pattern-prereq-pair rpatterns))] ;; TODO: pattern-prereq-pair
+                        (let [pattern-prereq-pair (fn [p]
+                                                    ;; find all bindings that bind vars in this pattern
+                                                    (let [pre-reqs (keep binding-outs (get-vars p))]
+                                                      ;; if bindings are found,
+                                                      ;; and the vars that the binding depends on all bound?
+                                                      (if (and (seq pre-reqs) (every? bound (mapcat get-vars pre-reqs)))
+                                                        [p pre-reqs])))
+                              pattern->pre-reqs (into {} (keep pattern-prereq-pair rpatterns))]
                           (if (seq pattern->pre-reqs)
                             (let [p (min-pattern (keys pattern->pre-reqs))
                                   ordered-pre-reqs (order (pattern->pre-reqs p))
@@ -205,19 +159,15 @@
                   ;; no patterns left, so add any remaining bindings
                   (order (vals binding-outs))))]
       (let [binding-outs (u/mapmap second identity eval-patterns)
-            _ (start-time "finding start")
             start (->> (if (seq prebound)
                          (filter (comp (partial some prebound) get-vars) patterns)
                          patterns)
                        (remove (comp (partial some binding-outs) get-vars))
                        (find-start pattern-counts))
-                                        ; _ (print-time (str "Got start: " start))
-            all-paths (map (partial cons start)
-                           (remaining-paths (get-vars start) (without start patterns) binding-outs))]
-                                        ; (print-time (str "path count: " (count all-paths)))
-        (assert (every? (partial = (count patterns)) (map #(->> % (remove eval-pattern?) count) all-paths))
+            full-path (cons start (path-through (get-vars start) (without start patterns) binding-outs))]
+        (assert (= (count patterns) (count (remove eval-pattern? full-path)))
                 (str "No valid paths through: " (vec patterns)))
-        all-paths))))
+        full-path))))
 
 (declare plan-path)
 
@@ -414,9 +364,8 @@
     (loop [[grp rmdr evalps] (first-group bound patterns eval-patterns) ordered []]
       (let [group-evals (filter eval-pattern? grp)
             group-countables (remove eval-pattern? grp)
-            all-ordered (->> (paths bound group-countables count-map group-evals)
-                             (find-first count-map)
-                             (concat ordered))]
+            all-ordered (concat ordered
+                                (path bound group-countables count-map group-evals))]
         (if (empty? rmdr)
           (concat all-ordered (order evalps))
           (recur (first-group bound rmdr evalps) all-ordered))))))
