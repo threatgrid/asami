@@ -153,7 +153,7 @@
                                                       remaining
                                                       remaining-binding-outs))
                                 ;; otherwise, return everything that's left
-                                [(concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))]))
+                                (concat ordered-pre-reqs [p] (order (vals remaining-binding-outs)))))
                             (throw (ex-info (str "Unable to find path through: " rpatterns)
                                             {:patterns rpatterns :bound bound :binding-outs binding-outs})))))))
                   ;; no patterns left, so add any remaining bindings
