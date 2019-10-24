@@ -16,21 +16,6 @@
     #?(:clj
         (:import [clojure.lang Symbol])))
 
-(def latest-time (atom (. System (nanoTime))))
-
-(defn start-time [label]
-  (println label)
-  (reset! latest-time (. System (nanoTime))))
-
-(defn print-time
-  ([label] (print-time label nil))
-  ([label x]
-   (let [next-time (. System (nanoTime))]
-     (println label ": " (/ (double (- next-time @latest-time)) 1000000.0) "ms")
-     (reset! latest-time next-time))
-   x))
-
-
 (defprotocol HasVars
   (get-vars [this] "Returns the vars for the object"))
 
@@ -107,7 +92,9 @@
                               (and (or (empty? bound) (seq (set/intersection b bound)))
                                    (not (some binding-outs b)))))
                           ;; test if every var in a pattern has already been bound
-                          (all-bound? [p] (every? bound (get-vars p)))
+                          (all-bound?
+                            ([p] (all-bound? nil p))
+                            ([extra-bindings p] (every? (into bound extra-bindings) (get-vars p))))
                           ;; return the pattern with the smallest resolution count
                           (min-pattern [ps]
                             (loop [[p & rp] ps m p mcount 0]
@@ -122,9 +109,9 @@
                                       (recur rp m mcount)))))))]
                     (let [nexts (filter possible-next-pattern? rpatterns)]
                       (if (seq nexts)
-                        (let [fully-bound-nexts (filter all-bound? nexts)
-                              next-pattern (if (seq fully-bound-nexts)
-                                             (min-pattern fully-bound-nexts)
+                        (let [fully-bound-patterns (filter all-bound? nexts)
+                              next-pattern (if (seq fully-bound-patterns)
+                                             (min-pattern fully-bound-patterns)
                                              (min-pattern nexts))]
                           (cons next-pattern
                                 (path-through (into bound (get-vars next-pattern))
@@ -140,7 +127,12 @@
                                                         [p pre-reqs])))
                               pattern->pre-reqs (into {} (keep pattern-prereq-pair rpatterns))]
                           (if (seq pattern->pre-reqs)
-                            (let [p (min-pattern (keys pattern->pre-reqs))
+                            (let [fully-bound-patterns (keep (fn [[ptn pre-reqs]]
+                                                                 (if (all-bound? (map second pre-reqs) ptn) ptn))
+                                                               pattern->pre-reqs)
+                                  p (if (seq fully-bound-patterns)
+                                      (min-pattern fully-bound-patterns)
+                                      (min-pattern (keys pattern->pre-reqs)))
                                   ordered-pre-reqs (order (pattern->pre-reqs p))
                                   b (get-vars p)
                                   ;; all the variables that became bound no longer need to be looked for

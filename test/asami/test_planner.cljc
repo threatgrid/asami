@@ -110,9 +110,10 @@
              [?c ?d ?e]
              [?a :b ?c]]
            path2))
+    ;; fully bound vars are prioritized over shorter resolutions
     (is (= '[[?c ?d ?e]
-             [?a :b ?c]
-             [?d :e :f]]
+             [?d :e :f]
+             [?a :b ?c]]
            path3))
     (is (= '[[?c ?d ?e]
              [?d :e :f]
@@ -160,9 +161,9 @@
            path2))
     (is (= '[[?c ?d ?e]
              [(= ?d 5)]
+             [?d :e :f]
              [?a :b ?c]
-             [(not= ?e ?a)]
-             [?d :e :f]]
+             [(not= ?e ?a)]]
            path3))
     (is (= '[[?c ?d ?e]
              [(= ?d 5)]
@@ -295,16 +296,19 @@
     (is (= '[[?a :c :d] [?a :a :b] [?c :e ?b] [?b :c :d] [(inc ?b) ?z]] p5))
 
     (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] g6))
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?a :a :b] [?b :c :d]] p6))
+    ;; the [?a :a :b] and [?b :c :d] constraints are promoted when all their vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] p6))
 
     (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g7))
-    (is (= '[[?c :e ?b] [(inc ?b) ?a] [?a :c :d] [?a :a :b] [?b :c :d]] p7))
+    ;; the [?b :c :d] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?c :e ?b] [?b :c :d] [(inc ?b) ?a] [?a :c :d] [?a :a :b]] p7))
 
     (is (= '[[?b :c :d] [?c :e ?b] [(inc ?b) ?a] [?a :a :b] [?a :c :d]] g8))
     (is (= '[[?c :e ?b] [?b :c :d] [(inc ?b) ?a] [?a :c :d] [?a :a :b]] p8))
 
     (is (= '[[?a :a :b] [?a :c :d] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] g9))
-    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?c :e ?b] [?b :c :d]] p9))))
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b]] p9))))
+
 
 (defrecord TestGraph [m]
   Graph
@@ -330,28 +334,33 @@
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?b :s :o]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?b :s :o] 1})
         p6 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] (not [?b :s :o]) [?c :e ?b] [?a :a :b] [?b :c :d]] p6)))
+    ;; the [?a :a :b] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] (not [?b :s :o]) [?b :c :d] [?c :e ?b]] p6)))
 
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s :o]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 3, [?c :s :o] 1})
         p6 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s :o]) [?a :a :b] [?b :c :d]] p6)))
+    ;; the [?a :a :b] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b] (not [?c :s :o])] p6)))
 
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 1, [?z :x :y] 4})
         p8 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p8)))
+    ;; the [?a :a :b] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b] (not [?c :s ?z] [?z :x :y])] p8)))
   
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d] (not [?c :s ?z] [?z :x :y]) [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?c :s ?z] 4, [?z :x :y] 1})
         p9 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] (not [?c :s ?z] [?z :x :y]) [?a :a :b] [?b :c :d]] p9)))
+    ;; the [?a :a :b] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b] (not [?c :s ?z] [?z :x :y])] p9)))
 
   (let [test-patterns '[[?a :a :b] [?b :c :d] [?c :e ?b] [?a :c :d]
                         (not [?z :x :y] [?e :s ?z])
                         [(identity ?c) ?e] [(inc ?a) ?b]]
         test-graph (->TestGraph '{[?a :a :b] 4, [?b :c :d] 5, [?c :e ?b] 1, [?a :c :d] 2, [?e :s ?z] 4, [?z :x :y] 1})
         p10 (plan-path test-graph test-patterns {})]
-    (is (= '[[?a :c :d] [(inc ?a) ?b] [?c :e ?b] [?a :a :b] [?b :c :d] [(identity ?c) ?e] (not [?e :s ?z] [?z :x :y])] p10))))
+    ;; the [?a :a :b] constraint is promoted to second place because all its vars are already bound
+    (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b] [(identity ?c) ?e] (not [?e :s ?z] [?z :x :y])] p10))))
 
 #?(:cljs (run-tests))

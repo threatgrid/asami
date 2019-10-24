@@ -358,7 +358,7 @@
    & options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
         path-planner (select-planner options)
-        [fpath & rpath :as path] (time (path-planner graph all-patterns options))]
+        [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
 
       ;; single path element - executed separately as an optimization
