@@ -1,7 +1,7 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple transitive?]]
             [naga.schema.store-structs :as st]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
@@ -49,6 +49,15 @@
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
 
 
+(defmulti get-transitive-from-index
+  "Lookup an index in the graph for the requested data, and returns all data where the required predicate
+   is a transitive relationship. Unspecified predicates extend across the graph.
+   Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
+  simplify)
+
+(comment "all get-transitive-from-index defmethods")
+
+
 (defn count-embedded-index
   "Adds up the counts of embedded indexes"
   [edx]
@@ -66,6 +75,14 @@
 (defmethod count-from-index [ ? :v  ?] [{idx :pos} s p o] (count-embedded-index (idx p)))
 (defmethod count-from-index [ ?  ? :v] [{idx :osp} s p o] (count-embedded-index (idx o)))
 (defmethod count-from-index [ ?  ?  ?] [{idx :spo} s p o] (apply + (map count-embedded-index (vals idx))))
+
+
+(defmulti count-transitive-from-index
+  "Lookup an index in the graph for the requested data and count the results based on a transitive index."
+  simplify)
+
+(comment "all count-transitive-from-index defmethods")
+
 
 (defrecord GraphIndexed [spo pos osp]
   Graph
@@ -85,8 +102,12 @@
                        spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
-    (get-from-index this subj pred obj))
+    (if (transitive? pred)
+      (get-transitive-from-index this subj pred obj)
+      (get-from-index this subj pred obj)))
   (count-triple [this subj pred obj]
-    (count-from-index this subj pred obj)))
+    (if (transitive? pred)
+      (count-transitive-from-index this subj pred obj)
+      (count-from-index this subj pred obj))))
 
 (def empty-graph (->GraphIndexed {} {} {}))

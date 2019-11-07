@@ -19,3 +19,14 @@
   "Convenience function to extract elements out of a pattern to count the resolution"
   [graph [s p o :as pattern]]
   (count-triple graph s p o))
+
+(defn transitive?
+  "Tests if a predicate is transitive. Generally, this is determined by a * character at the end
+   of a symbol or keyword name, but it may be overridden by metadata containing an entry of:
+   {:trans truthy/falsy}
+   Returns a truthy value"
+  [pred]
+  (let [{trans? :trans :as meta-pred} (meta pred)
+        not-trans? (and (contains? meta-pred :trans) (not trans?))
+        star? (= \* (last (name pred)))]
+    (if star? (not not-trans?) trans?)))
