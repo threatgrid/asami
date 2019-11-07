@@ -30,6 +30,14 @@
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
             new-idx))))))
 
+(defn transitive
+  [idx s p]
+  (loop [seen? #{} starts [s]]
+    (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
+      (if (empty? step)
+        (map vector starts)
+        (recur (into seen step) (concat starts step))))))
+
 (defn simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
 
 (defmulti get-from-index
@@ -55,7 +63,43 @@
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
   simplify)
 
-(comment "all get-transitive-from-index defmethods")
+(defmethod get-transitive-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) [[]] []))
+
+(defmethod get-transitive-from-index [:v :v  ?]
+  [{idx :spo} s p o]
+  (loop [seen? #{} starts [s]]
+    (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
+      (if (empty? step)
+        (map vector starts)
+        (recur (into seen step) (concat starts step))))))
+
+(defmethod get-transitive-from-index [:v  ? :v]
+  [{idx :osp} s p o]
+  #_(map vector (get-in idx [o s]))) ;; is this a path?
+
+(defmethod get-transitive-from-index [:v  ?  ?]
+  [{idx :spo} s p o]
+  #_(let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o]))) ;; entire graph from a node IMPORTANT
+
+(defmethod get-transitive-from-index [ ? :v :v]
+  [{idx :pos} s p o]
+  (loop [seen? #{} starts [o]]
+    (let [step (for [o' starts s (get-in idx [p o']) :when (not (seen? s))] s)]
+      (if (empty? step)
+        (map vector starts)
+        (recur (into seen step) (concat starts step))))))
+
+(defmethod get-transitive-from-index [ ? :v  ?]
+  [{idx :pos} s p o]
+  #_(let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o]))) ;; every node that can reach every node with just a predicate
+
+(defmethod get-transitive-from-index [ ?  ? :v]
+  [{idx :osp} s p o]
+  #_(let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p]))) ;; entire graph from a node IMPORTANT
+
+(defmethod get-transitive-from-index [ ?  ?  ?]
+  [{idx :spo} s p o]
+  #_(for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o])) ;; every node that can reach every node
 
 
 (defn count-embedded-index
