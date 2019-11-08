@@ -59,28 +59,30 @@
 (defmethod get-transitive-from-index [:v :v :v]
   [{idx :spo} s p o]
   (letfn [(not-solution? [nodes]
-            (or (second nodes)  ;; more than one result
-                (not= o (first nodes))))  ;; single result, but not ending at the terminator
-          (edges-from [n]  ;; finds all property/value pairs from an entity
+            (or (second nodes) ;; more than one result
+                (not= o (first nodes)))) ;; single result, but not ending at the terminator
+          (edges-from [n] ;; finds all property/value pairs from an entity
             (let [edge-idx (idx s)]
               (for [p (keys edge-idx) o (edge-idx p)] [p o])))
-          (step [nodes]
+          (step [nodes already-seen]
             ;; Steps beyond each node to add all each value for the request properties as the next nodes
             ;; If the node being added is the terminator, then a solution was found and is returned
-            (loop [[node & rnodes] nodes result []]
-              (let [next-result (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result]
-                                  (if edge
-                                    (if (= o o')
-                                      [o']  ;; first solution, terminate early
-                                      (recur redges (conj edge-result o')))
-                                    edge-result))]
+            (loop [[node & rnodes] nodes result [] seen already-seen]
+              (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen]
+                                              (if edge
+                                                (if (= o o')
+                                                  [[o'] nil] ;; first solution, terminate early
+                                                  (if (seen? o')
+                                                    (recur redges edge-result seen?)
+                                                    (recur redges (conj edge-result o') (conj seen? o'))))
+                                                [edge-result seen?]))]
                 (if (not-solution? next-result)
-                  (recur rnodes next-result)
-                  next-result))))]  ;; solution found, or else empty result found
-    (loop [nodes [s]]
-      (let [next-nodes (step nodes)]
+                  (recur rnodes next-result next-seen)
+                  [next-result next-seen]))))] ;; solution found, or else empty result found
+    (loop [nodes [s] seen #{}]
+      (let [[next-nodes next-seen] (step nodes seen)]
         (if (not-solution? next-nodes)
-          (recur (step next-nodes))
+          (recur next-nodes next-seen)
           (if (seq next-nodes) [[]] []))))))
 
 ;; follows a predicate transitively from a node
@@ -96,31 +98,33 @@
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :osp} s p o]
   (letfn [(not-solution? [path-nodes]
-            (or (second path-nodes)  ;; more than one result
-                (not= o (second (first path-nodes)))))  ;; single result, but not ending at the terminator
-          (edges-from [n]  ;; finds all property/value pairs from an entity
+            (or (second path-nodes) ;; more than one result
+                (not= o (second (first path-nodes))))) ;; single result, but not ending at the terminator
+          (edges-from [n] ;; finds all property/value pairs from an entity
             (let [edge-idx (idx s)]
               (for [p (keys edge-idx) o (edge-idx p)] [p o])))
-          (step [path-nodes]
+          (step [path-nodes seen]
             ;; Extends path/node pairs to add all each property of the node to the path
             ;; and each associated value as the new node for that path.
             ;; If the node being added is the terminator, then the current path is the solution
             ;; and only that solution is returned, dropping everything else
-            (loop [[[path node] & rpathnodes] path-nodes result []]
-              (let [next-result (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result]
-                                  (if edge
-                                    (let [new-path-node [(conj path p') o']]
-                                      (if (= o o')
-                                        new-path-node  ;; first solution, terminate early
-                                        (recur redges (conj edge-result new-path-node))))
-                                    edge-result))]
+            (loop [[[path node] & rpathnodes] path-nodes result [] seen* seen]
+              (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
+                                              (if edge
+                                                (if (seen? o')
+                                                  (recur redges edge-result seen?)
+                                                  (let [new-path-node [(conj path p') o']]
+                                                    (if (= o o')
+                                                      [new-path-node seen?] ;; first solution, terminate early
+                                                      (recur redges (conj edge-result new-path-node) (conj seen? o')))))
+                                                [edge-result seen?]))]
                 (if (not-solution? next-result)
-                  (recur rpathnodes next-result)
-                  next-result))))]  ;; solution found, or else empty result found
-    (loop [paths [[[] s]]]
-      (let [next-paths (step paths)]
+                  (recur rpathnodes next-result next-seen)
+                  [next-result next-seen]))))] ;; solution found, or else empty result found
+    (loop [paths [[[] s]] seen #{}]
+      (let [[next-paths next-seen] (step paths seen)]
         (if (not-solution? next-paths)
-          (recur (step next-paths))
+          (recur next-paths next-seen)
           (map vector (ffirst next-paths)))))))
 
 ;; entire graph from a node IMPORTANT
