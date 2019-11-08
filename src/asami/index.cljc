@@ -30,14 +30,6 @@
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
             new-idx))))))
 
-(defn transitive
-  [idx s p]
-  (loop [seen? #{} starts [s]]
-    (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
-      (if (empty? step)
-        (map vector starts)
-        (recur (into seen step) (concat starts step))))))
-
 (defn simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
 
 (defmulti get-from-index
@@ -63,43 +55,106 @@
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
   simplify)
 
-(defmethod get-transitive-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) [[]] []))
+;; tests if a transitive path exists between nodes
+(defmethod get-transitive-from-index [:v :v :v]
+  [{idx :spo} s p o]
+  (letfn [(not-solution? [nodes]
+            (or (second nodes)  ;; more than one result
+                (not= o (first nodes))))  ;; single result, but not ending at the terminator
+          (edges-from [n]  ;; finds all property/value pairs from an entity
+            (let [edge-idx (idx s)]
+              (for [p (keys edge-idx) o (edge-idx p)] [p o])))
+          (step [nodes]
+            ;; Steps beyond each node to add all each value for the request properties as the next nodes
+            ;; If the node being added is the terminator, then a solution was found and is returned
+            (loop [[node & rnodes] nodes result []]
+              (let [next-result (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result]
+                                  (if edge
+                                    (if (= o o')
+                                      [o']  ;; first solution, terminate early
+                                      (recur redges (conj edge-result o')))
+                                    edge-result))]
+                (if (not-solution? next-result)
+                  (recur rnodes next-result)
+                  next-result))))]  ;; solution found, or else empty result found
+    (loop [nodes [s]]
+      (let [next-nodes (step nodes)]
+        (if (not-solution? next-nodes)
+          (recur (step next-nodes))
+          (if (seq next-nodes) [[]] []))))))
 
+;; follows a predicate transitively from a node
 (defmethod get-transitive-from-index [:v :v  ?]
   [{idx :spo} s p o]
   (loop [seen? #{} starts [s]]
     (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
       (if (empty? step)
         (map vector starts)
-        (recur (into seen step) (concat starts step))))))
+        (recur (into seen? step) (concat starts step))))))
 
+;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :osp} s p o]
-  #_(map vector (get-in idx [o s]))) ;; is this a path?
+  (letfn [(not-solution? [path-nodes]
+            (or (second path-nodes)  ;; more than one result
+                (not= o (second (first path-nodes)))))  ;; single result, but not ending at the terminator
+          (edges-from [n]  ;; finds all property/value pairs from an entity
+            (let [edge-idx (idx s)]
+              (for [p (keys edge-idx) o (edge-idx p)] [p o])))
+          (step [path-nodes]
+            ;; Extends path/node pairs to add all each property of the node to the path
+            ;; and each associated value as the new node for that path.
+            ;; If the node being added is the terminator, then the current path is the solution
+            ;; and only that solution is returned, dropping everything else
+            (loop [[[path node] & rpathnodes] path-nodes result []]
+              (let [next-result (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result]
+                                  (if edge
+                                    (let [new-path-node [(conj path p') o']]
+                                      (if (= o o')
+                                        new-path-node  ;; first solution, terminate early
+                                        (recur redges (conj edge-result new-path-node))))
+                                    edge-result))]
+                (if (not-solution? next-result)
+                  (recur rpathnodes next-result)
+                  next-result))))]  ;; solution found, or else empty result found
+    (loop [paths [[[] s]]]
+      (let [next-paths (step paths)]
+        (if (not-solution? next-paths)
+          (recur (step next-paths))
+          (map vector (ffirst next-paths)))))))
 
+;; entire graph from a node IMPORTANT
+;; TODO
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spo} s p o]
-  #_(let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o]))) ;; entire graph from a node IMPORTANT
+  #_(let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o])))
 
+;; finds all transitive paths that end at a node
 (defmethod get-transitive-from-index [ ? :v :v]
   [{idx :pos} s p o]
   (loop [seen? #{} starts [o]]
     (let [step (for [o' starts s (get-in idx [p o']) :when (not (seen? s))] s)]
       (if (empty? step)
         (map vector starts)
-        (recur (into seen step) (concat starts step))))))
+        (recur (into seen? step) (concat starts step))))))
 
+;; every node that can reach every node with just a predicate
+;; TODO
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos} s p o]
-  #_(let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o]))) ;; every node that can reach every node with just a predicate
+  #_(let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o])))
 
+;; entire graph from a node IMPORTANT
+;; TODO
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :osp} s p o]
-  #_(let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p]))) ;; entire graph from a node IMPORTANT
+  #_(let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
 
+;; every node that can reach every node
+;; TODO
 (defmethod get-transitive-from-index [ ?  ?  ?]
   [{idx :spo} s p o]
-  #_(for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o])) ;; every node that can reach every node
+  #_(for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
 
 
 (defn count-embedded-index
