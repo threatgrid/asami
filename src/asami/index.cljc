@@ -143,10 +143,34 @@
         (recur (into seen? step) (concat starts step))))))
 
 ;; every node that can reach every node with just a predicate
-;; TODO
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos} s p o]
-  #_(let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o])))
+  ;; function to add an extra step to a current resolution
+  (letfn [(step [resolution]
+            ;; for each subject node...
+            (loop [[s & ss] (keys resolution) result resolution]
+              (if s
+                ;; for each object associated with the current subject...
+                (let [next-result (loop [[o & os] (result s) s-result result]
+                                    (if o
+                                      ;; find all connections for this object with the current predicate
+                                      (let [next-result (if-let [next-os (result o)]
+                                                          ;; add all of these to the resolution
+                                                          ;; consider only adding if there are things to add
+                                                          (update s-result s into next-os)
+                                                          s-result)]
+                                        (recur os next-result))
+                                      s-result))]
+                  (recur ss next-result))
+                result)))]
+    (let [result-index (loop [result (idx p)]
+                         (let [next-result (step result)]
+                           ;; note: consider a faster comparison
+                           (if (= next-result result)
+                             result
+                             (recur next-result))))]
+      (for [s' (keys result-index) o' (result-index s')]
+        [s' o']))))
 
 ;; entire graph from a node IMPORTANT
 ;; TODO
@@ -155,6 +179,7 @@
   #_(let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
 
 ;; every node that can reach every node
+;; seems pointless?
 ;; TODO
 (defmethod get-transitive-from-index [ ?  ?  ?]
   [{idx :spo} s p o]
