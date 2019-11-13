@@ -3,6 +3,7 @@
     asami.index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple transitive?]]
             [naga.schema.store-structs :as st]
+            [clojure.set :as set]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -127,11 +128,40 @@
           (recur next-paths next-seen)
           (map vector (ffirst next-paths)))))))
 
-;; entire graph from a node IMPORTANT
-;; TODO
+;; TODO - these 2 functions can be merged after debugging
+
+(defn downstream-from
+  ([idx node] (downstream-from idx #{} node))
+  ([idx all-knowns node]
+   (let [next-nodes (apply set/union (vals (idx node)))
+         next-nodes' (set/difference next-nodes all-knowns)]
+     (reduce
+      downstream-from
+      (set/union all-knowns next-nodes')
+      next-nodes'))))
+
+(defn upstream-from
+  ([osp node] (downstream-from osp #{} node))
+  ([osp all-knowns node]
+   (let [next-nodes (keys (osp node))
+         next-nodes' (set/difference next-nodes all-knowns)]
+     (reduce
+      upstream-from
+      (set/union all-knowns next-nodes')
+      next-nodes'))))
+
+;; entire graph from a node
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spo} s p o]
-  #_(let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o])))
+  (let [s-idx (idx s)]
+    (for [pred (keys s-idx) obj (->> (s-idx pred) (reduce (partial downstream-from idx) #{}))]
+      [pred obj])))
+
+;; entire graph from a node IMPORTANT
+(defmethod get-transitive-from-index [ ?  ? :v]
+  [{idx :osp pos :pos} s p o]
+  (for [pred (keys pos) subj (->> (pos pred) o (reduce (partial upstream-from idx) #{}))]
+    [pred subj]))
 
 ;; finds all transitive paths that end at a node
 (defmethod get-transitive-from-index [ ? :v :v]
@@ -172,18 +202,11 @@
       (for [s' (keys result-index) o' (result-index s')]
         [s' o']))))
 
-;; entire graph from a node IMPORTANT
-;; TODO
-(defmethod get-transitive-from-index [ ?  ? :v]
-  [{idx :osp} s p o]
-  #_(let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
-
 ;; every node that can reach every node
-;; seems pointless?
-;; TODO
+;; expensive and pointless, so throw exception
 (defmethod get-transitive-from-index [ ?  ?  ?]
   [{idx :spo} s p o]
-  #_(for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
+  (throw (ex-info "Unable to do transitive closure with nothing bound" {:args [s p o]})))
 
 
 (defn count-embedded-index
