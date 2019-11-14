@@ -30,3 +30,13 @@
         not-trans? (and (contains? meta-pred :trans) (not trans?))
         star? (= \* (last (name pred)))]
     (if star? (not not-trans?) trans?)))
+
+(defn plain
+  "Converts a transitive-structured predicate into a plain one"
+  [pred]
+  (let [nm (name pred)]
+    (or
+     (and (= \* (last nm))
+          (cond (keyword? pred) (keyword (namespace pred) (subs nm 0 (dec (count nm))))
+                (symbol? pred) (symbol (namespace pred) (subs nm 0 (dec (count nm))))))
+     pred)))

@@ -1,7 +1,7 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple transitive?]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple transitive? plain]]
             [naga.schema.store-structs :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -89,11 +89,58 @@
 ;; follows a predicate transitively from a node
 (defmethod get-transitive-from-index [:v :v  ?]
   [{idx :spo} s p o]
-  (loop [seen? #{} starts [s]]
+  (loop [seen? #{} starts [s] result []]
     (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
       (if (empty? step)
-        (map vector starts)
-        (recur (into seen? step) (concat starts step))))))
+        (map vector result)
+        (recur (into seen? step) step (concat result step))))))
+
+;; finds all transitive paths that end at a node
+(defmethod get-transitive-from-index [ ? :v :v]
+  [{idx :pos} s p o]
+  (loop [seen? #{} starts [o] result []]
+    (let [step (for [o' starts s (get-in idx [p o']) :when (not (seen? s))] s)]
+      (if (empty? step)
+        (map vector result)
+        (recur (into seen? step) step (concat result step))))))
+
+(defn *stream-from
+  [selector all-knowns initial-node]
+  (letfn [(stream-from [knowns node]
+            (let [next-nodes (selector node)
+                  next-nodes' (set/difference next-nodes all-knowns)]
+              (reduce
+               stream-from
+               (set/union knowns next-nodes')
+               next-nodes')))]
+    (stream-from all-knowns initial-node)))
+
+(defn downstream-from
+  ([idx node] (downstream-from idx #{} node))
+  ([idx all-knowns node]
+   (*stream-from #(apply set/union (vals (idx %1))) all-knowns node)))
+
+(defn upstream-from
+  ([osp node] (downstream-from osp #{} node))
+  ([idx all-knowns node]
+   (*stream-from #(keys (idx %1)) all-knowns node)))
+
+;; entire graph from a node
+(defmethod get-transitive-from-index [:v  ?  ?]
+  [{idx :spo} s p o]
+  (let [s-idx (idx s)]
+    (for [pred (keys s-idx)
+          obj (let [objs (s-idx pred)]
+                (concat objs (reduce (partial downstream-from idx) #{} objs)))]
+      [pred obj])))
+
+;; entire graph that ends at a node
+(defmethod get-transitive-from-index [ ?  ? :v]
+  [{idx :osp pos :pos} s p o]
+  (for [pred (keys pos)
+        subj (let [subjs (get-in pos [pred o])]
+               (concat subjs (reduce (partial upstream-from idx) #{} subjs)))]
+    [subj pred]))
 
 ;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
@@ -127,50 +174,6 @@
         (if (not-solution? next-paths)
           (recur next-paths next-seen)
           (map vector (ffirst next-paths)))))))
-
-;; TODO - these 2 functions can be merged after debugging
-
-(defn downstream-from
-  ([idx node] (downstream-from idx #{} node))
-  ([idx all-knowns node]
-   (let [next-nodes (apply set/union (vals (idx node)))
-         next-nodes' (set/difference next-nodes all-knowns)]
-     (reduce
-      downstream-from
-      (set/union all-knowns next-nodes')
-      next-nodes'))))
-
-(defn upstream-from
-  ([osp node] (downstream-from osp #{} node))
-  ([osp all-knowns node]
-   (let [next-nodes (keys (osp node))
-         next-nodes' (set/difference next-nodes all-knowns)]
-     (reduce
-      upstream-from
-      (set/union all-knowns next-nodes')
-      next-nodes'))))
-
-;; entire graph from a node
-(defmethod get-transitive-from-index [:v  ?  ?]
-  [{idx :spo} s p o]
-  (let [s-idx (idx s)]
-    (for [pred (keys s-idx) obj (->> (s-idx pred) (reduce (partial downstream-from idx) #{}))]
-      [pred obj])))
-
-;; entire graph from a node IMPORTANT
-(defmethod get-transitive-from-index [ ?  ? :v]
-  [{idx :osp pos :pos} s p o]
-  (for [pred (keys pos) subj (->> (pos pred) o (reduce (partial upstream-from idx) #{}))]
-    [pred subj]))
-
-;; finds all transitive paths that end at a node
-(defmethod get-transitive-from-index [ ? :v :v]
-  [{idx :pos} s p o]
-  (loop [seen? #{} starts [o]]
-    (let [step (for [o' starts s (get-in idx [p o']) :when (not (seen? s))] s)]
-      (if (empty? step)
-        (map vector starts)
-        (recur (into seen? step) (concat starts step))))))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
@@ -254,11 +257,11 @@
       (map first s-po)))
   (resolve-triple [this subj pred obj]
     (if (transitive? pred)
-      (get-transitive-from-index this subj pred obj)
+      (get-transitive-from-index this subj (plain pred) obj)
       (get-from-index this subj pred obj)))
   (count-triple [this subj pred obj]
     (if (transitive? pred)
-      (count-transitive-from-index this subj pred obj)
+      (count-transitive-from-index this subj (plain pred) obj)
       (count-from-index this subj pred obj))))
 
 (def empty-graph (->GraphIndexed {} {} {}))
