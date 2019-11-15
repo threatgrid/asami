@@ -28,17 +28,18 @@
         r3 (unordered-resolve g '[:a ?p* ?x])
         r4 (unordered-resolve g '[?x ?p* :c])
         r5 (unordered-resolve g [:a (t '?p) '?x])  ;; duplicate of above, with alternate syntax
-        r6 (unordered-resolve g ['?x (t '?p) :c])
-        ; r7 (unordered-resolve g '[:a ?p* :c])
-        ]
+        r6 (unordered-resolve g ['?x (t '?p) :c])]
     (is (= #{[:b] [:c]} r1))
     (is (= #{[:b] [:a]} r2))
     (is (= #{[:p1 :b] [:p1 :c]} r3))
     (is (= #{[:b :p1] [:a :p1]} r4))
     (is (= #{[:p1 :b] [:p1 :c]} r5))
-    (is (= #{[:b :p1] [:a :p1]} r6))
-    ; (is (= #{[:p1]} r7))
-    ))
+    (is (= #{[:b :p1] [:a :p1]} r6))))
+
+(deftest test-simple-path
+  (let [g (assert-data empty-graph [[:a :p1 :b] [:b :p1 :c]])
+        r1 (resolve-pattern g '[:a ?p* :c])]
+    (is (= [[:p1] [:p1]] r1))))
 
 (def simple-branch-data
   [[:a :p1 :b]
