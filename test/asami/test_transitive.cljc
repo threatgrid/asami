@@ -57,9 +57,7 @@
         r5 (unordered-resolve g '[:b :p1* ?x])
         r6 (unordered-resolve g '[?x :p1* :c])
         r7 (unordered-resolve g '[:b ?p* ?x])
-        r8 (unordered-resolve g '[?x ?p* :c])
-        ; r9 (unordered-resolve g '[:a ?p* :c])
-        ]
+        r8 (unordered-resolve g '[?x ?p* :c])]
     (is (= #{[:b] [:c] [:d] [:e] [:f]} r1))
     (is (= #{[:c] [:b] [:a]} r2))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3))
@@ -67,9 +65,14 @@
     (is (= #{[:c] [:d] [:e] [:f]} r5))
     (is (= #{[:b] [:a]} r6))
     (is (= #{[:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r7))
-    (is (= #{[:b :p1] [:a :p1]} r8))
-    ; (is (= #{[:p1]} r9))
-    ))
+    (is (= #{[:b :p1] [:a :p1]} r8))))
+
+(deftest test-branch-path
+  (let [g (assert-data empty-graph simple-branch-data)
+        r1 (resolve-pattern g '[:a ?p* :c])
+        r2 (resolve-pattern g '[:a ?p* :e])]
+    (is (= [[:p1] [:p1]] r1))
+    (is (= [[:p1] [:p1] [:p1]] r2))))
 
 (def dbl-branch-data
   [[:a :p1 :b]
@@ -89,10 +92,7 @@
         r5 (unordered-resolve g '[:b :p1* ?x])
         r6 (unordered-resolve g '[?x :p1* :c])
         r7 (unordered-resolve g '[:b ?p* ?x])
-        r8 (unordered-resolve g '[?x ?p* :c])
-        ; r9 (unordered-resolve g '[:a ?p* :c])
-        ; r10 (unordered-resolve g '[:a ?p* :h])
-        ]
+        r8 (unordered-resolve g '[?x ?p* :c])]
     (is (= #{[:b] [:c] [:d]} r1))
     (is (= #{[:c] [:b]} r2))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3))
@@ -100,9 +100,17 @@
     (is (= #{[:c] [:d]} r5))
     (is (= #{[:b] [:a]} r6))
     (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e] [:p1 :f]} r7))
-    (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8))
-    ; (is (= #{[:p1] [:p2]} r9))
-    ; (is (= #{} r10))
+    (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8))))
+
+(deftest test-dbl-branch-path
+  (let [g (assert-data empty-graph simple-branch-data)
+        r1 (resolve-pattern g '[:a ?p* :c])
+        r2 (resolve-pattern g '[:a ?p* :f])
+        ;r3 (resolve-pattern g '[:a ?p* :h])
+        ]
+    (is (= [[:p1] [:p1]] r1))
+    ;(is (= [[:p1] [:p1] [:p2]] r2))
+    ;(is (= [] r3))
     ))
 
 

@@ -1,7 +1,7 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple transitive? plain]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple check-for-transitive]]
             [naga.schema.store-structs :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -50,15 +50,17 @@
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
 
 
+(defn trans-simplify [g tag & ks] (map #(if (st/vartest? %) ? :v) ks))
+
 (defmulti get-transitive-from-index
   "Lookup an index in the graph for the requested data, and returns all data where the required predicate
    is a transitive relationship. Unspecified predicates extend across the graph.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  simplify)
+  trans-simplify)
 
 ;; tests if a transitive path exists between nodes
 (defmethod get-transitive-from-index [:v :v :v]
-  [{idx :spo} s p o]
+  [{idx :spo} tag s p o]
   (letfn [(not-solution? [nodes]
             (or (second nodes) ;; more than one result
                 (not= o (first nodes)))) ;; single result, but not ending at the terminator
@@ -88,7 +90,7 @@
 
 ;; follows a predicate transitively from a node
 (defmethod get-transitive-from-index [:v :v  ?]
-  [{idx :spo} s p o]
+  [{idx :spo} tag s p o]
   (loop [seen? #{} starts [s] result []]
     (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
       (if (empty? step)
@@ -97,7 +99,7 @@
 
 ;; finds all transitive paths that end at a node
 (defmethod get-transitive-from-index [ ? :v :v]
-  [{idx :pos} s p o]
+  [{idx :pos} tag s p o]
   (loop [seen? #{} starts [o] result []]
     (let [step (for [o' starts s (get-in idx [p o']) :when (not (seen? s))] s)]
       (if (empty? step)
@@ -127,7 +129,7 @@
 
 ;; entire graph from a node
 (defmethod get-transitive-from-index [:v  ?  ?]
-  [{idx :spo} s p o]
+  [{idx :spo} tag s p o]
   (let [s-idx (idx s)]
     (for [pred (keys s-idx)
           obj (let [objs (s-idx pred)]
@@ -136,7 +138,7 @@
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
-  [{idx :osp pos :pos} s p o]
+  [{idx :osp pos :pos} tag s p o]
   (for [pred (keys pos)
         subj (let [subjs (get-in pos [pred o])]
                (concat subjs (reduce (partial upstream-from idx) #{} subjs)))]
@@ -144,7 +146,7 @@
 
 ;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
-  [{idx :spo} s p o]
+  [{idx :spo} tag s p o]
   (letfn [(not-solution? [path-nodes]
             (or (second path-nodes) ;; more than one result
                 (not= o (second (first path-nodes))))) ;; single result, but not ending at the terminator
@@ -179,7 +181,7 @@
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
-  [{idx :pos} s p o]
+  [{idx :pos} tag s p o]
   ;; function to add an extra step to a current resolution
   (letfn [(step [resolution]
             ;; for each subject node...
@@ -210,7 +212,7 @@
 ;; every node that can reach every node
 ;; expensive and pointless, so throw exception
 (defmethod get-transitive-from-index [ ?  ?  ?]
-  [{idx :spo} s p o]
+  [{idx :spo} tag s p o]
   (throw (ex-info "Unable to do transitive closure with nothing bound" {:args [s p o]})))
 
 
@@ -235,10 +237,12 @@
 
 (defmulti count-transitive-from-index
   "Lookup an index in the graph for the requested data and count the results based on a transitive index."
-  simplify)
+  trans-simplify)
 
-(comment "all count-transitive-from-index defmethods")
-
+;; TODO count these efficiently
+(defmethod count-transitive-from-index :default
+  [graph tag s p o]
+  (count (get-transitive-from-index graph tag s p o)))
 
 (defrecord GraphIndexed [spo pos osp]
   Graph
@@ -258,12 +262,12 @@
                        spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
-    (if (transitive? pred)
-      (get-transitive-from-index this subj (plain pred) obj)
+    (if-let [[plain-pred trans-tag] (check-for-transitive pred)]
+      (get-transitive-from-index this trans-tag subj plain-pred obj)
       (get-from-index this subj pred obj)))
   (count-triple [this subj pred obj]
-    (if (transitive? pred)
-      (count-transitive-from-index this subj (plain pred) obj)
+    (if-let [[plain-pred trans-tag] (check-for-transitive pred)]
+      (count-transitive-from-index this trans-tag subj plain-pred obj)
       (count-from-index this subj pred obj))))
 
 (def empty-graph (->GraphIndexed {} {} {}))
