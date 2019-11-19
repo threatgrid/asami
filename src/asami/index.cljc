@@ -106,14 +106,17 @@
         (map vector result)
         (recur (into seen? step) step (concat result step))))))
 
+(def counter (atom 0))
+
 (defn *stream-from
   [selector all-knowns initial-node]
   (letfn [(stream-from [knowns node]
             (let [next-nodes (selector node)
-                  next-nodes' (set/difference next-nodes all-knowns)]
+                  next-nodes' (set/difference next-nodes knowns)
+                  knowns' (set/union knowns next-nodes')]
               (reduce
                stream-from
-               (set/union knowns next-nodes')
+               knowns'
                next-nodes')))]
     (stream-from all-knowns initial-node)))
 
@@ -125,7 +128,7 @@
 (defn upstream-from
   ([osp node] (downstream-from osp #{} node))
   ([idx all-knowns node]
-   (*stream-from #(keys (idx %1)) all-knowns node)))
+   (*stream-from #(set (keys (idx %1))) all-knowns node)))
 
 ;; entire graph from a node
 (defmethod get-transitive-from-index [:v  ?  ?]
@@ -148,8 +151,9 @@
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spo} tag s p o]
   (letfn [(not-solution? [path-nodes]
-            (or (second path-nodes) ;; more than one result
-                (not= o (second (first path-nodes))))) ;; single result, but not ending at the terminator
+            (and (seq path-nodes)
+                 (or (second path-nodes) ;; more than one result
+                     (not= o (second (first path-nodes)))))) ;; single result, but not ending at the terminator
           (edges-from [n] ;; finds all property/value pairs from an entity
             (let [edge-idx (idx n)]
               (for [p (keys edge-idx) o (edge-idx p)] [p o])))

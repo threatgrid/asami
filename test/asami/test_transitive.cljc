@@ -103,15 +103,77 @@
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8))))
 
 (deftest test-dbl-branch-path
-  (let [g (assert-data empty-graph simple-branch-data)
+  (let [g (assert-data empty-graph dbl-branch-data)
         r1 (resolve-pattern g '[:a ?p* :c])
         r2 (resolve-pattern g '[:a ?p* :f])
-        ;r3 (resolve-pattern g '[:a ?p* :h])
-        ]
+        r3 (resolve-pattern g '[:a ?p* :h])]
     (is (= [[:p1] [:p1]] r1))
-    ;(is (= [[:p1] [:p1] [:p2]] r2))
-    ;(is (= [] r3))
-    ))
+    (is (= [[:p1] [:p1] [:p2]] r2))
+    (is (= [] r3))))
+
+(def simple-loop-data
+  [[:a :p1 :b]
+   [:b :p1 :c]
+   [:c :p1 :a]])
+
+(deftest test-loop
+  (let [g (assert-data empty-graph simple-loop-data)
+        r1 (unordered-resolve g '[:a :p1* ?x])
+        r2 (unordered-resolve g '[?x :p1* :a])
+        r3 (unordered-resolve g '[:a ?p* ?x])
+        r4 (unordered-resolve g '[?x ?p* :a])]
+    (is (= #{[:b] [:c] [:a]} r1))
+    (is (= #{[:c] [:b] [:a]} r2))
+    (is (= #{[:p1 :b] [:p1 :c] [:p1 :a]} r3))
+    (is (= #{[:c :p1] [:b :p1] [:a :p1]} r4))))
+
+(deftest test-loop-path
+  (let [g (assert-data empty-graph simple-loop-data)
+        r1 (resolve-pattern g '[:a ?p* :c])
+        r2 (resolve-pattern g '[:a ?p* :a])]
+    (is (= [[:p1] [:p1]] r1))
+    (is (= [[:p1] [:p1] [:p1]] r2))))
+
+(def dbl-branch-loop-data
+  [[:a :p1 :b]
+   [:b :p1 :c]
+   [:b :p2 :c]
+   [:b :p1 :d]
+   [:d :p1 :a]
+   [:c :p2 :e]
+   [:e :p2 :b]
+   [:d :p2 :f]
+   [:g :p2 :h]])
+
+(deftest test-dbl-branch-loop
+  (let [g (assert-data empty-graph dbl-branch-loop-data)
+        r1 (unordered-resolve g '[:a :p1* ?x])
+        r2 (unordered-resolve g '[?x :p2* :e])
+        r3 (unordered-resolve g '[:a ?p* ?x])
+        r4 (unordered-resolve g '[?x ?p* :e])
+        r5 (unordered-resolve g '[:b :p1* ?x])
+        r6 (unordered-resolve g '[?x :p1* :c])
+        r7 (unordered-resolve g '[:b ?p* ?x])
+        r8 (unordered-resolve g '[?x ?p* :c])]
+    (is (= #{[:b] [:c] [:d] [:a]} r1))
+    (is (= #{[:c] [:b] [:e]} r2))
+    (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :a] [:p1 :e] [:p1 :f]} r3))
+    (is (= #{[:c :p2] [:b :p2] [:a :p2] [:e :p2] [:d :p2]} r4))
+    (is (= #{[:c] [:d] [:a] [:b]} r5))
+    (is (= #{[:b] [:a] [:d]} r6))
+    (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
+             [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f] [:p1 :a] [:p2 :a]} r7))
+    (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2] [:d :p1] [:d :p2]
+             [:c :p1] [:c :p2] [:e :p1] [:e :p2]} r8))))
+
+(deftest test-dbl-branch-loop-path
+  (let [g (assert-data empty-graph dbl-branch-loop-data)
+        r1 (resolve-pattern g '[:a ?p* :c])
+        r2 (resolve-pattern g '[:a ?p* :f])
+        r3 (resolve-pattern g '[:a ?p* :h])]
+    (is (= [[:p1] [:p1]] r1))
+    (is (= [[:p1] [:p1] [:p2]] r2))
+    (is (= [] r3))))
 
 
 #?(:cljs (run-tests))
