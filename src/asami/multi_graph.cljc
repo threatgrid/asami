@@ -4,7 +4,7 @@ allow rules to successfully use this graph type."
       :author "Paula Gearon"}
     asami.multi-graph
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
-            [asami.index :refer [? simplify count-from-index]]
+            [asami.common-index :as common :refer [?]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -37,7 +37,7 @@ allow rules to successfully use this graph type."
 (defmulti get-from-multi-index
   "Lookup an index in the graph for the requested data.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  simplify)
+  common/simplify)
 
 ;; Extracts the required index (idx), and looks up the requested fields.
 ;; If an embedded index is pulled out, then this is referred to as edx.
@@ -75,6 +75,16 @@ allow rules to successfully use this graph type."
                                                                     _ (range c)]
                                                                 [s p o]))
 
+(defmulti count-transitive-from-index
+  "Lookup an index in the graph for the requested data and count the results based on a transitive index."
+  common/trans-simplify)
+
+;; TODO count these efficiently
+(defmethod count-transitive-from-index :default
+  [graph tag s p o]
+  (count (common/get-transitive-from-index graph tag s p o)))
+
+
 (defrecord MultiGraph [spo pos osp]
   Graph
   (graph-add [this subj pred obj]
@@ -91,9 +101,13 @@ allow rules to successfully use this graph type."
                        spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
-    (get-from-multi-index this subj pred obj))
+    (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
+      (common/get-transitive-from-index this trans-tag subj plain-pred obj)
+      (get-from-multi-index this subj pred obj)))
   (count-triple [this subj pred obj] ;; This intentionally ignores multi-edges, and is used for Naga
-    (count-from-index this subj pred obj)))
+    (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
+      (count-transitive-from-index this trans-tag subj plain-pred obj)
+      (common/count-from-index this subj pred obj))))
 
 (defn multi-graph-add
   ([graph subj pred obj n]

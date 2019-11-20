@@ -20,35 +20,3 @@
   [graph [s p o :as pattern]]
   (count-triple graph s p o))
 
-(defn plain
-  "Converts a transitive-structured predicate into a plain one"
-  [pred]
-  (let [nm (name pred)]
-    (or
-     (and (#{\* \+} (last nm))
-          (cond (keyword? pred) (keyword (namespace pred) (subs nm 0 (dec (count nm))))
-                (symbol? pred) (symbol (namespace pred) (subs nm 0 (dec (count nm))))))
-     pred)))
-
-(defn second-last
-  "Returns the second-last character in a string."
-  [s]
-  (let [c (count s)]
-    (when (< 1 c)
-      (nth s (- c 2)))))
-
-(defn check-for-transitive
-  "Tests if a predicate is transitive.
-  Returns a plain version of the predicate, along with a value to indicate if the predicate is transitive.
-  This value is nil for a plan predicate, or else is a keyword to indicate the kind of transitivity."
-  [pred]
-  (let [{trans? :trans :as meta-pred} (meta pred)
-        not-trans? (and (contains? meta-pred :trans) (not trans?))
-        pname (name pred)
-        tagged (and (not= \' (second-last pname)) ({\* :star \+ :plus} (last pname)))]
-    (if not-trans?
-      (when tagged [(plain pred) tagged])
-      (if tagged
-        [(plain pred) tagged]
-        (and trans?
-             [pred (get #{:star :plus} trans? :star)])))))
