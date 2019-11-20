@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
-            [asami.common-index :as common :refer [?]]
+            [asami.common-index :as common :refer [? NestedIndex]]
             [naga.schema.store-structs :as st]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
@@ -57,6 +57,11 @@
   (count (common/get-transitive-from-index graph tag s p o)))
 
 (defrecord GraphIndexed [spo pos osp]
+  NestedIndex
+  (lowest-level-fn [this] identity)
+  (lowest-level-sets-fn [this] identity)
+  (mid-level-map-fn [this] identity)
+
   Graph
   (graph-add [this subj pred obj]
     (let [new-spo (index-add spo subj pred obj)]
