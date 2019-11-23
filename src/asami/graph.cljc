@@ -19,3 +19,4 @@
   "Convenience function to extract elements out of a pattern to count the resolution"
   [graph [s p o :as pattern]]
   (count-triple graph s p o))
+

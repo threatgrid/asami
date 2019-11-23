@@ -2,11 +2,10 @@
       :author "Paula Gearon"}
     asami.index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+            [asami.common-index :as common :refer [? NestedIndex]]
             [naga.schema.store-structs :as st]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
-
-(def ? :?)
 
 (s/defn index-add :- {s/Any {s/Any #{s/Any}}}
   "Add elements to a 3-level index"
@@ -30,12 +29,10 @@
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
             new-idx))))))
 
-(defn simplify [g & ks] (map #(if (st/vartest? %) ? :v) ks))
-
 (defmulti get-from-index
   "Lookup an index in the graph for the requested data.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  simplify)
+  common/simplify)
 
 ;; Extracts the required index (idx), and looks up the requested fields.
 ;; If an embedded index is pulled out, then this is referred to as edx.
@@ -49,25 +46,23 @@
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
 
 
-(defn count-embedded-index
-  "Adds up the counts of embedded indexes"
-  [edx]
-  (apply + (map count (vals edx))))
 
-(defmulti count-from-index
-  "Lookup an index in the graph for the requested data and count the results."
-  simplify)
+(defmulti count-transitive-from-index
+  "Lookup an index in the graph for the requested data and count the results based on a transitive index."
+  common/trans-simplify)
 
-(defmethod count-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) 1 0))
-(defmethod count-from-index [:v :v  ?] [{idx :spo} s p o] (count (get-in idx [s p])))
-(defmethod count-from-index [:v  ? :v] [{idx :osp} s p o] (count (get-in idx [o s])))
-(defmethod count-from-index [:v  ?  ?] [{idx :spo} s p o] (count-embedded-index (idx s)))
-(defmethod count-from-index [ ? :v :v] [{idx :pos} s p o] (count (get-in idx [p o])))
-(defmethod count-from-index [ ? :v  ?] [{idx :pos} s p o] (count-embedded-index (idx p)))
-(defmethod count-from-index [ ?  ? :v] [{idx :osp} s p o] (count-embedded-index (idx o)))
-(defmethod count-from-index [ ?  ?  ?] [{idx :spo} s p o] (apply + (map count-embedded-index (vals idx))))
+;; TODO count these efficiently
+(defmethod count-transitive-from-index :default
+  [graph tag s p o]
+  (count (common/get-transitive-from-index graph tag s p o)))
 
 (defrecord GraphIndexed [spo pos osp]
+  NestedIndex
+  (lowest-level-fn [this] identity)
+  (lowest-level-sets-fn [this] identity)
+  (lowest-level-set-fn [this] identity)
+  (mid-level-map-fn [this] identity)
+
   Graph
   (graph-add [this subj pred obj]
     (let [new-spo (index-add spo subj pred obj)]
@@ -85,8 +80,12 @@
                        spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
-    (get-from-index this subj pred obj))
+    (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
+      (common/get-transitive-from-index this trans-tag subj plain-pred obj)
+      (get-from-index this subj pred obj)))
   (count-triple [this subj pred obj]
-    (count-from-index this subj pred obj)))
+    (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
+      (count-transitive-from-index this trans-tag subj plain-pred obj)
+      (common/count-from-index this subj pred obj))))
 
 (def empty-graph (->GraphIndexed {} {} {}))
