@@ -60,6 +60,7 @@
   NestedIndex
   (lowest-level-fn [this] identity)
   (lowest-level-sets-fn [this] identity)
+  (lowest-level-set-fn [this] identity)
   (mid-level-map-fn [this] identity)
 
   Graph

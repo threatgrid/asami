@@ -88,6 +88,7 @@ allow rules to successfully use this graph type."
 (defrecord MultiGraph [spo pos osp]
   NestedIndex
   (lowest-level-fn [this] keys)
+  (lowest-level-set-fn [this] (comp set keys))
   (lowest-level-sets-fn [this] (partial map (comp set keys)))
   (mid-level-map-fn [this] #(into {} (map (fn [[k v]] [k (set (keys v))]) %1)))
 

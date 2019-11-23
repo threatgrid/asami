@@ -11,6 +11,7 @@ and multigraph implementations."
 (defprotocol NestedIndex
   (lowest-level-fn [this] "Returns a function for handling the lowest index level retrieval")
   (lowest-level-sets-fn [this] "Returns a function retrieving all lowest level values as sets")
+  (lowest-level-set-fn [this] "Returns a function retrieving a lowest level value as a set")
   (mid-level-map-fn [this] "Returns a function that converts the mid->lowest in a simple map"))
 
 (def ? :?)
@@ -165,9 +166,10 @@ and multigraph implementations."
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spo :as graph} tag s p o]
   (let [object-sets-fn (lowest-level-sets-fn graph)
+        object-set-fn (lowest-level-set-fn graph)
         s-idx (idx s)]
     (for [pred (keys s-idx)
-          obj (let [objs (s-idx pred)]
+          obj (let [objs (object-set-fn (s-idx pred))]
                 (concat objs (reduce (partial downstream-from idx object-sets-fn) #{} objs)))]
       [pred obj])))
 
