@@ -1,7 +1,8 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :refer [Graph GraphAnalytics
+                                 graph-add graph-delete graph-diff resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
             [naga.schema.store-structs :as st]
             #?(:clj  [schema.core :as s]
@@ -86,6 +87,10 @@
   (count-triple [this subj pred obj]
     (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
       (count-transitive-from-index this trans-tag subj plain-pred obj)
-      (common/count-from-index this subj pred obj))))
+      (common/count-from-index this subj pred obj)))
+
+  GraphAnalytics
+  (subgraph-from-node [this node] (common/subgraph-from-node this node))
+  (subgraphs [this] (common/subgraphs this)))
 
 (def empty-graph (->GraphIndexed {} {} {}))

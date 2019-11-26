@@ -3,7 +3,8 @@ Resolution counting ignores multiple edges connecting nodes, so as to
 allow rules to successfully use this graph type."
       :author "Paula Gearon"}
     asami.multi-graph
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :refer [Graph GraphAnalytics
+                                 graph-add graph-delete graph-diff resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
@@ -113,7 +114,11 @@ allow rules to successfully use this graph type."
   (count-triple [this subj pred obj] ;; This intentionally ignores multi-edges, and is used for Naga
     (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
       (count-transitive-from-index this trans-tag subj plain-pred obj)
-      (common/count-from-index this subj pred obj))))
+      (common/count-from-index this subj pred obj)))
+  
+  GraphAnalytics
+  (subgraph-from-node [this node] (common/subgraph-from-node this node))
+  (subgraphs [this] (common/subgraphs this)))
 
 (defn multi-graph-add
   ([graph subj pred obj n]

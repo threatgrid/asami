@@ -10,6 +10,10 @@
   (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only")
   (count-triple [this subj pred obj] "Resolves patterns from the graph, and returns the size of the resolution"))
 
+(defprotocol GraphAnalytics
+  (subgraph-from-node [this node] "Returns the entities that belong to the same subgraph as the given node")
+  (subgraphs [this] "Returns a seq of subgraph members. Each one of the subgraph members is a seq of entities that belong to just that subgraph."))
+
 (defn resolve-pattern
   "Convenience function to extract elements out of a pattern to query for it"
   [graph [s p o :as pattern]]
