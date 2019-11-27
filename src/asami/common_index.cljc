@@ -255,29 +255,3 @@ and multigraph implementations."
 (defmethod get-transitive-from-index [ ?  ?  ?]
   [{idx :spo} tag s p o]
   (throw (ex-info "Unable to do transitive closure with nothing bound" {:args [s p o]})))
-
-
-;; subgraph functions
-
-(s/defn subgraph-from-node :- [s/Any]
-  "Finds a single subgraph for an index graph. Returns all entity IDs that appear in the same subgraph as the provided node."
-  [{:keys [spo] :as graph} node]
-  ;; validate that the node is an entity
-  (when (spo node)
-    (let [graph-entities (set (keys spo))
-          upstream-nodes (map first (resolve-triple graph '?node '?property* node))
-          downstream-nodes (map second (resolve-triple graph node '?property* '?node))]
-      (concat upstream-nodes (filter graph-entities downstream-nodes)))))
-
-(s/defn subgraphs :- [[s/Any]]
-  "Finds subgraphs for index graphs. This returns a seq of subgraph groups.
-   Each subgraph group is a seq of entity nodes for the nodes in a subgraph."
-  [{:keys [spo] :as graph}]
-  (letfn [(none-of [graph-sets node]
-            (when-not (some #(%1 node) graph-sets) node))]
-    (loop [subgraphs [] node (first (keys spo))]
-      (if (nil? node)
-        subgraphs
-        (let [subgraph (set (subgraph-from-node node))
-              next-node (some (partial none-of subgraphs) (keys spo))]
-          (recur (conj subgraphs subgraph) next-node))))))

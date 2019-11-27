@@ -3,9 +3,10 @@ Resolution counting ignores multiple edges connecting nodes, so as to
 allow rules to successfully use this graph type."
       :author "Paula Gearon"}
     asami.multi-graph
-  (:require [asami.graph :refer [Graph GraphAnalytics
-                                 graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :refer [Graph new-graph graph-add graph-delete graph-diff
+                                 resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
+            [asami.analytics :as analytics]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -85,6 +86,7 @@ allow rules to successfully use this graph type."
   [graph tag s p o]
   (count (common/get-transitive-from-index graph tag s p o)))
 
+(declare empty-multi-graph)
 
 (defrecord MultiGraph [spo pos osp]
   NestedIndex
@@ -94,6 +96,7 @@ allow rules to successfully use this graph type."
   (mid-level-map-fn [this] #(into {} (map (fn [[k v]] [k (set (keys v))]) %1)))
 
   Graph
+  (new-graph [this] empty-multi-graph)
   (graph-add [this subj pred obj]
     (assoc this
            :spo (multi-add spo subj pred obj)
@@ -114,11 +117,7 @@ allow rules to successfully use this graph type."
   (count-triple [this subj pred obj] ;; This intentionally ignores multi-edges, and is used for Naga
     (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
       (count-transitive-from-index this trans-tag subj plain-pred obj)
-      (common/count-from-index this subj pred obj)))
-  
-  GraphAnalytics
-  (subgraph-from-node [this node] (common/subgraph-from-node this node))
-  (subgraphs [this] (common/subgraphs this)))
+      (common/count-from-index this subj pred obj))))
 
 (defn multi-graph-add
   ([graph subj pred obj n]
