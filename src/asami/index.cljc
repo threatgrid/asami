@@ -3,7 +3,7 @@
     asami.index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
-            [naga.schema.store-structs :as st]
+            [asami.analytics :as analytics]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -56,6 +56,8 @@
   [graph tag s p o]
   (count (common/get-transitive-from-index graph tag s p o)))
 
+(declare empty-graph)
+
 (defrecord GraphIndexed [spo pos osp]
   NestedIndex
   (lowest-level-fn [this] identity)
@@ -64,6 +66,7 @@
   (mid-level-map-fn [this] identity)
 
   Graph
+  (new-graph [this] empty-graph)
   (graph-add [this subj pred obj]
     (let [new-spo (index-add spo subj pred obj)]
       (if (identical? spo new-spo)
