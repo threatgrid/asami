@@ -4,7 +4,8 @@
             [asami.graph :refer [Graph graph-add resolve-pattern]]
             [asami.index :refer [empty-graph]]
             [asami.multi-graph :refer [empty-multi-graph]]
-            [schema.core :as s]
+            #?(:clj  [schema.core :as s]
+               :cljs [schema.core :as s :include-macros true])
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
             #?(:clj  [schema.test :as st :refer [deftest]]
