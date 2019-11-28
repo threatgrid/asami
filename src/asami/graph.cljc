@@ -13,7 +13,7 @@
   (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only")
   (count-triple [this subj pred obj] "Resolves patterns from the graph, and returns the size of the resolution"))
 
-(def GraphType (s/pred (partial satisfies? Graph)))
+(def GraphType (s/pred #(satisfies? Graph %1)))
 
 (defn resolve-pattern
   "Convenience function to extract elements out of a pattern to query for it"
