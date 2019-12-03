@@ -24,6 +24,9 @@ Query using:
 
 Look at the `naga.store/Storage` protocol (in [threatgrid/naga-store](https://github.com/threatgrid/naga-store) ) for the full suite of functions to apply to the storage.
 
+## TODO
+Using the API needs to be expanded upon. The `asami.core/q` function has significantly more functionality now, and roughly follows the Datomic function of the same name. Also, the `asami.analytics` namespace has been created to offer some graph analytics. For now, this jsut covers subgraph identification and isolation.
+
 ## License
 
 Copyright © 2018-2019 Cisco
