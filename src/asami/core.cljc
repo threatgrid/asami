@@ -125,6 +125,11 @@
 (registry/register-storage! :memory create-store)
 (registry/register-storage! :memory-multi create-multi-store)
 
+(s/defn graph->store :- StorageType
+  "Wraps a graph in the Storage record"
+  [graph :- gr/GraphType]
+  (->MemoryStore nil graph))
+
 (s/defn q
   [query & inputs]
   (let [{:keys [find in with where]} (-> (query/query-map query)
