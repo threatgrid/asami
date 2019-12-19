@@ -9,6 +9,12 @@
                :cljs [schema.core :as s :include-macros true])))
 
 
+(defn entity-node?
+  "Returns true if a node represents an entity.
+   No access to the storage type, so look for namespaced keywords."
+  [n]
+  (and (keyword? n) (namespace n)))
+
 (s/defn subgraph-from-node :- #{s/Any}
   "Finds a single subgraph for an index graph. Returns all entity IDs that appear
    in the same subgraph as the provided node."
@@ -19,7 +25,7 @@
               (let [down-connected (set/difference
                                     (->> (spo n) vals get-object-sets-fn (apply set/union))
                                     seen)
-                    down-connected-entities (set/select keyword? down-connected)
+                    down-connected-entities (set/select entity-node? down-connected)
                     up-connected (->> (osp n) keys (remove seen) set)]
                 (set/union down-connected-entities up-connected)))]
       (loop [nodes #{node} seen #{node}]

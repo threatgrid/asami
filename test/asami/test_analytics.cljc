@@ -16,54 +16,54 @@
 (use-fixtures :once st/validate-schemas)
 
 (def edges1
-  [[:a :p1 :b]
-   [:a :p2 2]
-   [:a :p3 :c]
-   [:b :p1 :d]
-   [:b :p2 3]
-   [:b :p3 :e]
-   [:c :p1 :f]
-   [:c :p2 4]
-   [:c :p3 :g]
-   [:d :p1 :h]
-   [:d :p2 5]
-   [:e :p2 6]
-   [:f :p2 7]
-   [:g :p1 :i]
-   [:g :p2 8]
-   [:g :p3 :j]])
+  [[:mem/a :p1 :mem/b]
+   [:mem/a :p2 2]
+   [:mem/a :p3 :mem/c]
+   [:mem/b :p1 :mem/d]
+   [:mem/b :p2 3]
+   [:mem/b :p3 :mem/e]
+   [:mem/c :p1 :mem/f]
+   [:mem/c :p2 4]
+   [:mem/c :p3 :mem/g]
+   [:mem/d :p1 :mem/h]
+   [:mem/d :p2 5]
+   [:mem/e :p2 6]
+   [:mem/f :p2 7]
+   [:mem/g :p1 :mem/i]
+   [:mem/g :p2 8]
+   [:mem/g :p3 :mem/j]])
 
 (def edges2
-  [[:m :pr :n]
-   [:o :pr :n]
-   [:o :pr :p]
-   [:q :pr :p]
-   [:q :pr :r]
-   [:s :pr :r]
-   [:s :pr :t]
-   [:u :pr :t]
-   [:u :pr :v]])
+  [[:mem/m :pr :mem/n]
+   [:mem/o :pr :mem/n]
+   [:mem/o :pr :mem/p]
+   [:mem/q :pr :mem/p]
+   [:mem/q :pr :mem/r]
+   [:mem/s :pr :mem/r]
+   [:mem/s :pr :mem/t]
+   [:mem/u :pr :mem/t]
+   [:mem/u :pr :mem/v]])
 
 (def edges3
-  [[:x :p :y]
-   [:y :p :x]])
+  [[:mem/x :p :mem/y]
+   [:mem/y :p :mem/x]])
 
 (def edges4
-  [[:z :p :z]])
+  [[:mem/z :p :mem/z]])
 
 (defn edges [graph] (resolve-triple graph '?s '?p '?o))
 
 (defn node-subgraph
   [graph]
   (let [graph-1 (reduce (partial apply graph-add) graph edges1)
-        subgraph-1 (subgraph-from-node graph-1 :c)
+        subgraph-1 (subgraph-from-node graph-1 :mem/c)
         graph-2 (reduce (partial apply graph-add) graph edges2)
-        subgraph-2 (subgraph-from-node graph-2 :q)
-        subgraph-2e (subgraph-from-node graph-2 :c)
+        subgraph-2 (subgraph-from-node graph-2 :mem/q)
+        subgraph-2e (subgraph-from-node graph-2 :mem/c)
         graph-3 (reduce (partial apply graph-add) graph edges3)
-        subgraph-3 (subgraph-from-node graph-3 :y)
+        subgraph-3 (subgraph-from-node graph-3 :mem/y)
         graph-4 (reduce (partial apply graph-add) graph edges4)
-        subgraph-4 (subgraph-from-node graph-4 :z)]
+        subgraph-4 (subgraph-from-node graph-4 :mem/z)]
     (is (= 7 (count subgraph-1)))
     (is (= 5 (count subgraph-2)))
     (is (empty? subgraph-2e))
