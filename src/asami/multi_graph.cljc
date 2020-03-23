@@ -27,7 +27,7 @@ allow rules to successfully use this graph type."
    c :- s/Any]
   (update-in idx [a b c :count] (fnil *insert-op* 0)))
 
-(s/defn multi-delete :- IndexStructure
+(s/defn multi-delete :- (s/maybe IndexStructure)
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
   [idx :- IndexStructure
    a :- s/Any

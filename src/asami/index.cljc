@@ -15,7 +15,7 @@
    c :- s/Any]
   (update-in idx [a b] (fn [v] (if (seq v) (conj v c) #{c}))))
 
-(s/defn index-delete :- {s/Any {s/Any #{s/Any}}}
+(s/defn index-delete :- (s/maybe {s/Any {s/Any #{s/Any}}})
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
   [idx :- {s/Any {s/Any #{s/Any}}}
    a :- s/Any
