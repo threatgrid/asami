@@ -112,6 +112,7 @@
              ["All Things Must Pass"]}
            (set results)))))
 
+
 (deftest test-query-error
   (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
                         (q '[:select ?e ?a ?v
@@ -123,6 +124,117 @@
                         (q '[:select ?e ?a ?v
                              :having [(?v > 5)]
                              :where [?e ?a ?v]] store))))
+
+(comment "The next structure represents the following data"
+  {:disposition 5
+   :observable {:type "domain"
+                :value "cisco.com"
+                :deliberated true}}
+  {:disposition 5
+   :observable {:type "ip"
+                :value "72.163.4.161"
+                :deliberated false}}
+  {:disposition 1
+   :observable {:type "domain"
+                :value "ipo.pl"
+                :deliberated true
+                :internal true}}
+  {:disposition 1
+   :observable {:type "domain"
+                :value "cisco.com"
+                :deliberated true}}
+  {:disposition 5
+   :observable {:type "ip"
+                :value "72.163.4.177"
+                :deliberated true}})
+
+
+(def obs1 (nn))
+(def obs2 (nn))
+(def obs3 (nn))
+(def obs4 (nn))
+(def obs5 (nn))
+(def v1 (nn))
+(def v2 (nn))
+(def v3 (nn))
+(def v4 (nn))
+(def v5 (nn))
+
+(def idata [[obs1 :type "domain"]
+            [obs1 :value "cisco.com"]
+            [obs1 :deliberated true]
+            [obs2 :type "ip"]
+            [obs2 :value "72.163.4.161"]
+            [obs2 :deliberated false]
+            [obs3 :type "domain"]
+            [obs3 :value "ipo.pl"]
+            [obs3 :deliberated true]
+            [obs3 :internal true]
+            [obs4 :type "domain"]
+            [obs4 :value "cisco.com"]
+            [obs4 :deliberated true]
+            [obs5 :type "ip"]
+            [obs5 :value "72.163.4.177"]
+            [obs5 :deliberated true]
+            [v1 :disposition 5]
+            [v1 :observable obs1]
+            [v2 :disposition 5]
+            [v2 :observable obs2]
+            [v3 :disposition 1]
+            [v3 :observable obs3]
+            [v4 :disposition 1]
+            [v4 :observable obs4]
+            [v5 :disposition 5]
+            [v5 :observable obs5]])
+
+(deftest test-negation-query
+  (let [st (-> empty-store (assert-data idata))
+        observables (q '[:find ?type ?value
+                         :where [?observable :type ?type]
+                         [?observable :value ?value]
+                         [?observable :deliberated true]]
+                       st)
+        int-observables (q '[:find ?type ?value
+                             :where [?observable :type ?type]
+                             [?observable :value ?value]
+                             [?observable :deliberated true]
+                             (not [?observable :internal true])]
+                           st)
+        disp-observables (q '[:find ?type ?value
+                              :where [?observable :type ?type]
+                              [?observable :value ?value]
+                              [?observable :deliberated true]
+                              (not [?observable :internal true])
+                              (not [?verdict :disposition 1]
+                                   [?verdict :observable ?verdict-observable]
+                                   [?verdict-observable :type ?type]
+                                   [?verdict-observable :value ?value])] 
+                            st)]
+    (is (= #{["domain" "cisco.com"]
+             ["domain" "ipo.pl"]
+             ["ip" "72.163.4.177"]}
+           (set observables)))
+    (is (= #{["domain" "cisco.com"]
+             ["ip" "72.163.4.177"]}
+           (set int-observables)))
+    (is (= [["ip" "72.163.4.177"]]
+           disp-observables))))
+
+(deftest test-negation-binding-query
+  (let [st (-> empty-store (assert-data idata))
+        observables (q '[:find ?type ?value
+                         :in $ ?observable-type
+                         :where [?observable :type ?type]
+                         [?observable :value ?value]
+                         [?observable :deliberated true]
+                         (not [?observable :internal true])
+                         (not [?verdict :disposition ?observable-type]
+                              [?verdict :observable ?verdict-observable]
+                              [?verdict-observable :type ?type]
+                              [?verdict-observable :value ?value])] 
+                       st 1)]
+    (is (= [["ip" "72.163.4.177"]]
+           observables))))
 
 #?(:cljs (run-tests))
 

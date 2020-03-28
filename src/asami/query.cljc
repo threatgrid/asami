@@ -178,7 +178,9 @@
 (declare left-join)
 
 (s/defn minus
-  "Removes matches."
+  "Removes matches.
+   For each line in the current results, performs a subquery with NOT clause.
+   When the NOT clause returns data then that line in the results should be removed."
   [graph
    part :- Results
    [_ & [fpattern :as patterns]]]  ;; 'not symbol, then the pattern arguments
@@ -187,21 +189,35 @@
     (with-meta
       (remove
        (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
-         (let [cols (:cols col-meta)
+         (let [cols (:cols col-meta)  ;; existing bound column names
+               ;; map the first pattern's vars into the existing binding columns. Used for the first resolution.
                pattern->left (store-util/matching-vars fpattern cols)
-               pattern-vals (set (vals pattern->left))
-               pre-bound (keep-indexed #(when (pattern->left %1) %2) fpattern)
+               ;; find all bound vars that will be needed for the entire subquery
+               vars (reduce #(into %1 (get-vars %2)) #{} patterns)
+               ;; get the required bound column names, in order
+               pre-bound (keep vars cols)
+               ;; the required bound column indexes
+               pattern-val-idxs (set (keep-indexed (fn [n col] (when (vars col) n)) cols))
+               ;; the columns about to get bound from the first pattern of the subquery
                un-bound (keep-indexed #(when (and (vartest? %2) (not (pattern->left %1))) %2) fpattern)
+               ;; all the columns resulting from resolving the first pattern of the subquery
                first-cols {:cols (vec (concat pre-bound un-bound))}]
            (fn [part-line]
+             ;; update the first pattern of the subquery to include the current bindings
              (let [lookup (modify-pattern part-line pattern->left fpattern)
-                   bound-cols (vec (keep-indexed #(when (pattern-vals %1) %2) part-line))]
+                   ;; start the bindings with the known bound values. Based on column number, not string comparison
+                   bound-cols (vec (keep-indexed #(when (pattern-val-idxs %1) %2) part-line))]
+               ;; Perform the subquery.
+               ;; Start by resolving the first pattern with the contextual bindings
+               ;; and then left-join through the rest of the subquery.
+               ;; seq returns truthy when results are found, and falsey when there are no results.
                (seq
                 (reduce ljoin
                         (with-meta
                           (map (partial into bound-cols) (gr/resolve-pattern graph lookup))
                           first-cols)
                         (rest patterns))))))
+         ;; general subquery operation when the first element is not a graph resolution pattern
          (fn [part-line]
            (seq (reduce ljoin (with-meta [part-line] col-meta) patterns))))
        part)
@@ -261,7 +277,7 @@
 
 (s/defn create-binding :- Bindings
   "Creates a bindings between a name and a set of values.
-   If the name is singular, then that name is bound to the values.
+   If the name is singular, then that name is bound to the singular element found in values.
    If the name is a seq, then each name in the seq is bound to the corresponding offset in each value."
   [nm :- InSpec values]
   (cond
