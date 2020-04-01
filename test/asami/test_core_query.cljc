@@ -236,5 +236,47 @@
     (is (= [["ip" "72.163.4.177"]]
            observables))))
 
+(def o1 (nn))
+(def o2 (nn))
+(def o3 (nn))
+(def ver1 (nn))
+(def sight1 (nn))
+(def other1 (nn))
+
+(def ddata [[o1 :type "domain"]
+            [o1 :value "cisco.com"]
+            [o1 :verdict ver1]
+            [o2 :type "ip"]
+            [o2 :value "72.163.4.161"]
+            [o2 :sighting sight1]
+            [o3 :type "domain"]
+            [o3 :value "ilo.pl"]
+            [o3 :other other1]
+            [ver1 :id "verdict-1"]
+            [sight1 :id "sighting-1"]
+            [other1 :id "other-1"]])
+
+(deftest test-disjunctions
+  (let [st (-> empty-store (assert-data ddata))
+        r1 (q '[:find ?related ?type ?value
+                :where [?observable :value ?value]
+                [?observable :type ?type]
+                (or [?observable :verdict ?related]
+                    [?observable :sighting ?related])]
+              st)
+        r2 (q '[:find ?id ?type ?value
+                :where [?observable :value ?value]
+                [?observable :type ?type]
+                (or [?observable :verdict ?related]
+                    [?observable :sighting ?related])
+                [?related :id ?id]]
+              st)]
+    (is (= #{[ver1 "domain" "cisco.com"]
+             [sight1 "ip" "72.163.4.161"]}
+           (set r1)))
+    (is (= #{["verdict-1" "domain" "cisco.com"]
+             ["sighting-1" "ip" "72.163.4.161"]}
+           (set r2)))))
+
 #?(:cljs (run-tests))
 
