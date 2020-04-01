@@ -2,7 +2,7 @@
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
             [asami.query :refer [add-to-graph pattern-left-join outer-product
-                                 create-binding create-bindings minus left-join]]
+                                 create-binding create-bindings minus left-join disjunction]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [naga.util :as u]
@@ -188,6 +188,26 @@
     (is (= '[?o] (:cols (meta r2))))
     (is (= [[:c] [:d] [:x]] r2))
     (is (= [[:c] [:d] [:x]] r2'))))
+
+(def or-data
+  [[:a :px :m]
+   [:a :py :n]
+   [:b :px :o]
+   [:c :py :p]
+   [:d :pz :q]])
+
+(deftest test-or
+  (let [graph (add-to-graph empty-graph or-data)
+        part-result (with-meta
+                      [[:a] [:b] [:c] [:d]]
+                      {:cols '[?e]})
+        r1 (disjunction graph part-result '(or [?e :px ?v] [?e :py ?v]))]
+    (is (= '[?e ?v] (:cols (meta r1))))
+    (is (= [[:a :m] [:b :o] [:a :n] [:c :p]] r1))
+    (is (thrown-with-msg?
+         ExceptionInfo
+         #"Alternate sides of OR clauses may not contain different vars"
+         (disjunction graph part-result '(or [?e :px ?v] [?e :py ?w]))))))
 
 
 #?(:clj

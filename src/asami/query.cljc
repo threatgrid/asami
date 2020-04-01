@@ -228,7 +228,16 @@
   [graph
    part :- Results
    [_ & patterns]]
-  (apply concat (map #(left-join % part graph) patterns)))
+  (let [spread (map #(left-join % part graph) patterns)
+        cols (:cols (meta (first spread)))]
+    (doseq [s (rest spread)]
+      (when (not= (:cols (meta s)) cols)
+        (throw (ex-info
+                "Alternate sides of OR clauses may not contain different vars"
+                (zipmap patterns (map (comp :cols meta) spread))))))
+    (with-meta
+      (apply concat (map #(left-join % part graph) patterns))
+      {:cols (:cols (meta (first spread)))})))
 
 (def operators
   {'not {:get-vars #(mapcat get-vars (rest %))
