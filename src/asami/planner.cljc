@@ -4,8 +4,7 @@
     #?(:clj (:refer-clojure :exclude [eval]))
     (:require [clojure.set :as set]
               [clojure.string :as str]
-              [naga.schema.store-structs :as st
-                                         :refer [EPVPattern Pattern EvalPattern Var vartest?
+              [naga.schema.store-structs :refer [EPVPattern Pattern EvalPattern Var
                                                  epv-pattern? filter-pattern? eval-pattern? op-pattern?
                                                  list-like?]]
               [naga.util :as u]
@@ -437,7 +436,5 @@
   "Returns the original order of patterns specified by the user. No optimization is attempted."
   [graph
    patterns :- [CountablePattern]
-   {:keys [simplify] :as options}]
-  (if simplify
-    (simplify-algebra patterns options)
-    patterns))
+   options]
+  patterns)

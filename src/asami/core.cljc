@@ -6,6 +6,7 @@
               [asami.index :as mem]
               [asami.multi-graph :as multi]
               [asami.query :as query]
+              [asami.intern :as intern]
               [naga.storage.store-util :as store-util]
               [naga.store :as store :refer [Storage StorageType]]
               [naga.store-registry :as registry]
@@ -57,24 +58,19 @@
            (sort-by #(subs (name %) 5)))))
 
   (new-node [this]
-    (->> "node-"
-        gensym
-        name
-        (keyword "mem")))
+    (intern/new-node))
 
   (node-id [this n]
-    (subs (name n) 5))
+    (intern/node-id n))
 
   (node-type? [this prop value]
-    (and (keyword? value)
-         (= "mem" (namespace value))
-         (str/starts-with? (name value) "node-")))
+    (intern/node-type? value))
 
   (data-property [_ data]
-    :naga/first)
+    intern/data-property)
 
   (container-property [_ data]
-    :naga/contains)
+    intern/container-property)
 
   (resolve-pattern [_ pattern]
     (gr/resolve-pattern graph pattern))

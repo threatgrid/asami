@@ -1,16 +1,15 @@
 (ns ^{:doc "Implements a full query engine based on fully indexed data."
       :author "Paula Gearon"}
     asami.query
-    (:require [naga.schema.store-structs :as st
-                                         :refer [EPVPattern FilterPattern Pattern
-                                                 Results Value
+    (:require [naga.schema.store-structs :refer [EPVPattern Results Value
+                                                 FilterPattern Pattern
                                                  EvalPattern eval-pattern?
                                                  epv-pattern? filter-pattern?
-                                                 op-pattern? vartest?]]
+                                                 op-pattern?]]
               [naga.store :refer [Storage StorageType]]
-              [naga.storage.store-util :as store-util]
               [asami.planner :as planner :refer [Bindings PatternOrBindings HasVars get-vars]]
               [asami.graph :as gr]
+              [asami.intern :as intern]
               [naga.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -18,7 +17,7 @@
                  :cljs [cljs.reader :as edn])))
 
 
-(s/defn find-vars [f] (set (filter st/vartest? f)))
+(s/defn find-vars [f] (set (intern/vars f)))
 
 (defn op-error
   [pattern]
@@ -38,13 +37,13 @@
     (cond
       ;; bindings will pass the epv-pattern? test, so must check for this first
       (planner/bindings? pattern) (set (:cols (meta pattern)))
-      (epv-pattern? pattern) (set (st/vars pattern))
+      (epv-pattern? pattern) (find-vars pattern)
       (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
       (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
                               (get-vars pattern)
                               (op-error pattern))
       (eval-pattern? pattern) (let [[expr _] pattern]
-                                (filter vartest? expr))
+                                (filter intern/vartest? expr))
       :default (pattern-error pattern))))
 
 (s/defn without :- [s/Any]
@@ -81,11 +80,11 @@
    part :- Results
    pattern :- EPVPattern]
   (let [cols (:cols (meta part))
-        total-cols (->> (st/vars pattern)
+        total-cols (->> (intern/vars pattern)
                         (remove (set cols))
                         (concat cols)
                         (into []))
-        pattern->left (store-util/matching-vars pattern cols)]
+        pattern->left (intern/matching-vars pattern cols)]
     ;; iterate over part, lookup pattern
     (with-meta
       (for [lrow part
@@ -113,7 +112,7 @@
                         (remove (set lcols))
                         (concat lcols)
                         (into []))
-        left->binding (store-util/matching-vars lcols rcols)]
+        left->binding (intern/matching-vars lcols rcols)]
     (with-meta
       (if (seq left->binding)
         (let [key-indices (sort (keys left->binding))
@@ -191,7 +190,7 @@
        (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
          (let [cols (:cols col-meta)  ;; existing bound column names
                ;; map the first pattern's vars into the existing binding columns. Used for the first resolution.
-               pattern->left (store-util/matching-vars fpattern cols)
+               pattern->left (intern/matching-vars fpattern cols)
                ;; find all bound vars that will be needed for the entire subquery
                vars (reduce #(into %1 (get-vars %2)) #{} patterns)
                ;; get the required bound column names, in order
@@ -199,7 +198,7 @@
                ;; the required bound column indexes
                pattern-val-idxs (set (keep-indexed (fn [n col] (when (vars col) n)) cols))
                ;; the columns about to get bound from the first pattern of the subquery
-               un-bound (keep-indexed #(when (and (vartest? %2) (not (pattern->left %1))) %2) fpattern)
+               un-bound (keep-indexed #(when (and (intern/vartest? %2) (not (pattern->left %1))) %2) fpattern)
                ;; all the columns resulting from resolving the first pattern of the subquery
                first-cols {:cols (vec (concat pre-bound un-bound))}]
            (fn [part-line]
@@ -329,12 +328,11 @@
 
 (s/defn select-planner
   "Selects a query planner function, based on user-selected options"
-  [options]
-  (let [opt (set options)]
-    (case (get opt :planner)
-      :user planner/user-plan
-      :min planner/plan-path  ; TODO: switch to minimal-first-planner
-      planner/plan-path)))
+  [{:keys [planner] :as options}]
+  (case planner
+    :user planner/user-plan
+    :min planner/plan-path  ; TODO: switch to minimal-first-planner
+    planner/plan-path))
 
 (s/defn run-simple-query
   [graph
@@ -348,7 +346,7 @@
                       fpattern
                       (with-meta
                         (gr/resolve-pattern graph fpattern)
-                        {:cols (st/vars fpattern)}))]
+                        {:cols (intern/vars fpattern)}))]
     (reduce ljoin part-result patterns)))
 
 (s/defn gate-fn
@@ -373,6 +371,7 @@
    bindings :- (s/maybe Bindings)
    & options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
+        options (apply (fn [& {:as o}] o) options)
         path-planner (select-planner options)
         [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
@@ -382,7 +381,7 @@
         fpath
         (with-meta
           (gr/resolve-pattern graph fpath)
-          {:cols (st/vars fpath)}))
+          {:cols (intern/vars fpath)}))
 
       ;; normal operation
       (let [;; if the plan begins with a negation, then it's not bound to the rest of
