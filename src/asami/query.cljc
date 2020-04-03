@@ -157,9 +157,7 @@
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
     (with-meta (filter filter-fn part) m)))
 
-;; the following is dead code. TODO: bring this back using the semantics in filter-join function calling
-(comment
-(s/defn binding-join
+#_(s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
    Binds a new var to the result of the expression and adds it to the complete results."
   [graph
@@ -169,9 +167,9 @@
         binding-fn (c-eval (list 'fn [cols] expr)) ;; do not use c-eval
         new-cols (conj cols bnd-var)]
     (with-meta
-     (map (fn [row] (concat row [(c-eval row)])) part)  ;; do not use c-eval
-     {:cols new-cols})))
-)
+      (map (fn [row] (concat row [(c-eval row)])) part)  ;; do not use c-eval
+      {:cols new-cols})))
+
 
 (def ^:dynamic *plan-options* [:min])
 
@@ -224,10 +222,11 @@
       col-meta)))
 
 (s/defn disjunction
-  "NOTE: This is a placeholder implementation. There is no optimization."
+  "Implements an OR operation by repeating a join across each arm of the operation,
+   and concatenating the results"
   [graph
    part :- Results
-   [_ & patterns]]
+   [_ & patterns]]  ;; Discard the first element, since it is just the OR operator
   (let [spread (map #(left-join % part graph) patterns)
         cols (:cols (meta (first spread)))]
     (doseq [s (rest spread)]
@@ -239,11 +238,20 @@
       (apply concat (map #(left-join % part graph) patterns))
       {:cols (:cols (meta (first spread)))})))
 
+(s/defn conjunction
+  "Reorders arguments for left-join and drop the AND operator"
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (left-join patterns part graph))
+
 (def operators
   {'not {:get-vars #(mapcat get-vars (rest %))
          :left-join minus}
    'or {:get-vars #(mapcat get-vars (rest %))
-        :left-join disjunction}})
+        :left-join disjunction}
+   'and {:get-vars #(mapcat get-vars (rest %))
+         :left-join conjunction}})
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
@@ -350,14 +358,15 @@
    [fpattern & patterns] :- [PatternOrBindings]]
   ;; if provided with bindings, then join the entire path to them,
   ;; otherwise, start with the first item in the path, and join the remainder
-  (let [;; execute the plan by joining left-to-right
+  (let [ ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
-        part-result (if (planner/bindings? fpattern)
-                      fpattern
-                      (with-meta
-                        (gr/resolve-pattern graph fpattern)
-                        {:cols (st/vars fpattern)}))]
+        part-result (cond
+                      (planner/bindings? fpattern) fpattern
+                      (epv-pattern? fpattern) (with-meta
+                                                (gr/resolve-pattern graph fpattern)
+                                                {:cols (st/vars fpattern)})
+                      :default (with-meta [] {:cols []}))]
     (reduce ljoin part-result patterns)))
 
 (s/defn gate-fn
