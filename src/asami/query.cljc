@@ -157,17 +157,36 @@
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
     (with-meta (filter filter-fn part) m)))
 
-#_(s/defn binding-join
+(s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
    Binds a new var to the result of the expression and adds it to the complete results."
   [graph
    part :- Results
-   [expr bnd-var] :- EvalPattern]
+   [[op & args :as expr] bnd-var] :- EvalPattern]
   (let [cols (vec (:cols (meta part)))
-        binding-fn (c-eval (list 'fn [cols] expr)) ;; do not use c-eval
-        new-cols (conj cols bnd-var)]
+        new-cols (conj cols bnd-var)
+        var-map (->> cols
+                     (map-indexed (fn [a b] [b a]))
+                     (into {}))
+        arg-indexes (map-indexed #(var-map %2 (- %1)) expr)
+        binding-fn (if (var? op)
+                     (fn [row]
+                       (concat row
+                               [(apply (nth row (var-map 0))
+                                       (map
+                                        #(if (neg? %) (nth expr (- %)) (nth row %))
+                                        arg-indexes))]))
+                     (let [callable-op (cond (fn? op) op
+                                             (symbol? op) (fn-for op)
+                                             (string? op) (fn-for (symbol op)))]
+                       (fn [row]
+                         (concat row
+                                 [(apply callable-op
+                                         (map
+                                          #(if (neg? %) (nth expr (- %)) (nth row %))
+                                          arg-indexes))]))))]
     (with-meta
-      (map (fn [row] (concat row [(c-eval row)])) part)  ;; do not use c-eval
+      (map binding-fn part)
       {:cols new-cols})))
 
 
@@ -262,6 +281,7 @@
     (planner/bindings? pattern) (prebound-left-join results pattern)
     (epv-pattern? pattern) (pattern-left-join graph results pattern)
     (filter-pattern? pattern) (filter-join graph results pattern)
+    (eval-pattern? pattern) (binding-join graph results pattern)
     (op-pattern? pattern) (if-let [{:keys [left-join]} (operators (first pattern))]
                             (left-join graph results pattern)
                             (op-error pattern))
@@ -355,19 +375,26 @@
 
 (s/defn run-simple-query
   [graph
-   [fpattern & patterns] :- [PatternOrBindings]]
+   [fpattern & patterns :as all-patterns] :- [PatternOrBindings]]
   ;; if provided with bindings, then join the entire path to them,
   ;; otherwise, start with the first item in the path, and join the remainder
   (let [ ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
-        part-result (cond
-                      (planner/bindings? fpattern) fpattern
-                      (epv-pattern? fpattern) (with-meta
-                                                (gr/resolve-pattern graph fpattern)
-                                                {:cols (st/vars fpattern)})
-                      :default (with-meta [] {:cols []}))]
-    (reduce ljoin part-result patterns)))
+        ;; resolve the initial part of the query, and get the remaining patterns to join
+        [part-result proc-patterns] (cond
+                                      ;; the first element is already a partial result
+                                      (planner/bindings? fpattern) [fpattern patterns]
+                                      ;; the first element is a pattern lookup
+                                      (epv-pattern? fpattern) [(with-meta
+                                                                 (gr/resolve-pattern graph fpattern)
+                                                                 {:cols (st/vars fpattern)})
+                                                               patterns]
+                                      ;; the first element is an operation,
+                                      ;; start with an empty result and process all the patterns
+                                      :default [(with-meta [[]] {:cols []}) all-patterns])]
+    ;; process the remaining query
+    (reduce ljoin part-result proc-patterns)))
 
 (s/defn gate-fn
   "Returns a function that allows data through it or not,
