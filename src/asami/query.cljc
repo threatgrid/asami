@@ -168,14 +168,16 @@
         var-map (->> cols
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
-        arg-indexes (map-indexed #(var-map %2 (- %1)) expr)
+        arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
+        expr (vec expr)
         binding-fn (if (var? op)
-                     (fn [row]
-                       (concat row
-                               [(apply (nth row (var-map 0))
-                                       (map
-                                        #(if (neg? %) (nth expr (- %)) (nth row %))
-                                        arg-indexes))]))
+                     (let [op-idx (var-map 0)]
+                       (fn [row]
+                         (concat row
+                                 [(apply (nth row op-idx)
+                                         (map
+                                          #(if (neg? %) (nth expr (- %)) (nth row %))
+                                          arg-indexes))])))
                      (let [callable-op (cond (fn? op) op
                                              (symbol? op) (fn-for op)
                                              (string? op) (fn-for (symbol op)))]
@@ -423,14 +425,15 @@
     (if-not rpath
 
       ;; single path element - executed separately as an optimization
-      (if (planner/bindings? fpath)
-        fpath
-        (with-meta
-          (gr/resolve-pattern graph fpath)
-          {:cols (st/vars fpath)}))
+      (cond
+        (planner/bindings? fpath) fpath
+        (epv-pattern? fpath) (with-meta
+                               (gr/resolve-pattern graph fpath)
+                               {:cols (st/vars fpath)})
+        :default (run-simple-query graph [fpath]))
 
       ;; normal operation
-      (let [;; if the plan begins with a negation, then it's not bound to the rest of
+      (let [ ;; if the plan begins with a negation, then it's not bound to the rest of
             ;; the plan, and it creates a "gate" for the result
             result-gate (gate-fn graph (take-while planner/not-operation? path))
             path' (drop-while planner/not-operation? path)]
