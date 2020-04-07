@@ -170,8 +170,8 @@
                      (into {}))
         arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
         expr (vec expr)
-        binding-fn (if (var? op)
-                     (let [op-idx (var-map 0)]
+        binding-fn (if (vartest? op)
+                     (let [op-idx (var-map op)]
                        (fn [row]
                          (concat row
                                  [(apply (nth row op-idx)
