@@ -132,9 +132,4 @@
 
 (s/defn q
   [query & inputs]
-  (let [{:keys [find in with where]} (-> (query/query-map query)
-                                         query/query-validator)
-        [bindings default-store] (query/create-bindings in inputs)
-        store (or default-store empty-store)
-        graph (or (:graph store) mem/empty-graph)]
-    (store-util/project store find (query/join-patterns graph where bindings))))
+  (query/query-entry query empty-store mem/empty-graph inputs))

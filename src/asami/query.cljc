@@ -17,6 +17,7 @@
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
+(def ^:dynamic *select-distinct* distinct)
 
 (s/defn find-vars [f] (set (filter st/vartest? f)))
 
@@ -256,7 +257,8 @@
                 "Alternate sides of OR clauses may not contain different vars"
                 (zipmap patterns (map (comp :cols meta) spread))))))
     (with-meta
-      (apply concat (map #(left-join % part graph) patterns))
+      ;; Does distinct create a scaling issue?
+      (*select-distinct* (apply concat (map #(left-join % part graph) patterns)))
       {:cols (:cols (meta (first spread)))})))
 
 (s/defn conjunction
@@ -453,15 +455,28 @@
 (def query-keys #{:find :in :with :where})
 
 (s/defn query-map
+  "Parses a query into it's main components.
+   Queries can be a sequence, a map, or an EDN string. These are based on Datomic-style queries.
+   The return map contains:
+   :find - The elements to be projected from a query.
+   :all - true if duplicates are to be returned, false otherwise. Defaults to false.
+   :in - A list of data sources. Optional.
+   :with - list of variables for grouping.
+   :where - A sequence of constraints for the query."
   [query]
-  (cond
-    (map? query) query
-    (string? query) (query-map (edn/read-string query))
-    (sequential? query) (->> query
-                             (partition-by query-keys)
-                             (partition 2)
-                             (map (fn [[[k] v]] [k v]))
-                             (into {}))))
+  (let [{find :find :as qmap}
+        (cond
+          (map? query) query
+          (string? query) (query-map (edn/read-string query))
+          (sequential? query) (->> query
+                                   (partition-by query-keys)
+                                   (partition 2)
+                                   (map (fn [[[k] v]] [k v]))
+                                   (into {})))
+        [find' all] (if (= :all (first find))
+                      [(rest find) true]
+                      [(remove #{:distinct} find) false])]
+    (assoc qmap :find find' :all all)))
 
 (s/defn newl :- s/Str
   [s :- (s/maybe s/Str)
@@ -469,8 +484,9 @@
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
 (s/defn query-validator
-  [{:keys [find in with where] :as query} :- {s/Keyword [s/Any]}]
-  (let [unknown-keys (->> (keys query) (remove query-keys) seq) 
+  [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
+  (let [extended-query-keys (into query-keys [:all :distinct])
+        unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq) 
         non-seq-wheres (seq (remove sequential? where))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
@@ -480,3 +496,16 @@
     (if err-text
       (throw (ex-info err-text {:query query}))
       query)))
+
+(s/defn query-entry
+  "Main entry point of user queries"
+  [query empty-store empty-graph inputs]
+  (let [{:keys [find all in with where]} (-> (query-map query)
+                                             query-validator)
+        [bindings default-store] (create-bindings in inputs)
+        store (or default-store empty-store)
+        graph (or (:graph store) empty-graph)]
+    (binding [*select-distinct* (if all identity distinct)]
+      (->> (join-patterns graph where bindings)
+           (store-util/project store find)
+           *select-distinct*))))
