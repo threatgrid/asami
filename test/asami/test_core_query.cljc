@@ -286,5 +286,74 @@
                ["sighting-1" "ip" "72.163.4.161"]}
              (set r3))))))
 
+
+(let [b1 (nn)
+      b2 (nn)
+      b3 (nn)
+      ver1 (nn)
+      sight1 (nn)
+      other1 (nn)
+
+      data [[b1 :title "The Art of Computer Programming"]
+            [b1 :author-last "Knuth"]
+            [b1 :author-first "Donald"]
+            [b1 :price 55.66]
+            [b1 :profit 20.00]
+            [b2 :title "Basic Category Theory for Computer Scientists"]
+            [b2 :author-last "Pierce"]
+            [b2 :author-first "Benjamin"]
+            [b2 :price 38.17]
+            [b2 :profit 12.00]
+            [b3 :title "Purely Functional Data Structures"]
+            [b3 :author-last "Okasaki"]
+            [b3 :author-first "Chris"]
+            [b3 :price 47.77]
+            [b3 :profit 15.00]]]
+
+  (deftest test-value-bindings
+    (let [st (-> empty-store (assert-data data))
+          r1 (q '[:find ?title ?cost
+                  :where [?book :title ?title]
+                  [?book :price ?price]
+                  [?book :profit ?profit]
+                  [(- ?price ?profit) ?cost]]
+                st)
+          r2 (q '[:find ?title ?author
+                  :where [?book :title ?title]
+                  [?book :author-first ?first]
+                  [?book :author-last ?last]
+                  [(str ?last ", " ?first) ?author]]
+                st)
+          name-fn #(str %2 ", " %1)
+          r3 (q [:find '?title '?author
+                 :where '[?book :title ?title]
+                 '[?book :author-first ?first]
+                 '[?book :author-last ?last]
+                 [(list name-fn '?first '?last) '?author]]
+                st)
+          r4 (q '[:find ?title ?author
+                  :in $ ?name-fn
+                  :where [?book :title ?title]
+                  [?book :author-first ?first]
+                  [?book :author-last ?last]
+                  [(?name-fn ?first ?last) ?author]]
+                st name-fn)]
+      (is (= #{["The Art of Computer Programming" 35.66]
+               ["Basic Category Theory for Computer Scientists" 26.17]
+               ["Purely Functional Data Structures" 32.77]}
+             (set r1)))
+      (is (= #{["The Art of Computer Programming" "Knuth, Donald"]
+               ["Basic Category Theory for Computer Scientists" "Pierce, Benjamin"]
+               ["Purely Functional Data Structures" "Okasaki, Chris"]}
+             (set r2)))
+      (is (= #{["The Art of Computer Programming" "Knuth, Donald"]
+               ["Basic Category Theory for Computer Scientists" "Pierce, Benjamin"]
+               ["Purely Functional Data Structures" "Okasaki, Chris"]}
+             (set r3)))
+      (is (= #{["The Art of Computer Programming" "Knuth, Donald"]
+               ["Basic Category Theory for Computer Scientists" "Pierce, Benjamin"]
+               ["Purely Functional Data Structures" "Okasaki, Chris"]}
+             (set r4))))))
+
 #?(:cljs (run-tests))
 

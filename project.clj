@@ -1,4 +1,4 @@
-(defproject org.clojars.quoll/asami "0.4.6-SNAPSHOT"
+(defproject org.clojars.quoll/asami "0.4.7"
   :description "An in-memory implementation of a graph store, implementing the naga-store protocol"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"

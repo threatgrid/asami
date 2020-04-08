@@ -215,4 +215,8 @@
      (is (= 5 (u/c-eval 5)))
      (is ((u/c-eval '(fn [[?a ?b]] (= ?b :z))) [0 :z]))))
 
+(deftest test-fn-for
+  (is ((u/fn-for '=) 5 5))
+  (is (= ((u/fn-for 'str) "a" 5) "a5")))
+
 #?(:cljs (run-tests))
