@@ -3,7 +3,7 @@
     asami.query
     (:require [naga.schema.store-structs :as st
                                          :refer [EPVPattern FilterPattern Pattern
-                                                 Results Value
+                                                 Results Value Var
                                                  EvalPattern eval-pattern?
                                                  epv-pattern? filter-pattern?
                                                  op-pattern? vartest?]]
@@ -497,6 +497,41 @@
       (throw (ex-info err-text {:query query}))
       query)))
 
+(s/defn execute-query
+  [selection constraints bindings graph store]
+  (->> (join-patterns graph constraints bindings)
+       (store-util/project store selection)
+       *select-distinct*))
+
+(def aggregate-types
+  '#{max min count count-distinct sample
+     sum avg median variance stddev})
+
+(defn aggregate-form?
+  "Determines if a term is an aggregate"
+  [s]
+  (and (list? s)
+       (= 2 (count s))
+       (aggregate-types (first s))))
+
+(def Aggregate (s/pred aggregate-form?))
+
+(s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
+                                  (s/one [s/Any] "outer query constraints")]
+  "Splits a WHERE clause up into the part suitable for an outer query,
+   and the remaining constraints, which will be used for an inner query."
+  [constraints :- [Pattern]
+   aggregates :- [Aggregate]]
+  )
+
+(s/defn aggregate-over :- Results
+  "For each row in the partial results, executes an inner query, and aggregates the results"
+  [aggregates :- [Aggregate]
+   with-terms :- [Var]
+   agg-constraints :- [Pattern]
+   partial-results :- Results]
+  )
+
 (s/defn query-entry
   "Main entry point of user queries"
   [query empty-store empty-graph inputs]
@@ -505,7 +540,11 @@
         [bindings default-store] (create-bindings in inputs)
         store (or default-store empty-store)
         graph (or (:graph store) empty-graph)]
-    (binding [*select-distinct* (if all identity distinct)]
-      (->> (join-patterns graph where bindings)
-           (store-util/project store find)
-           *select-distinct*))))
+    (if-let [aggregates (seq (filter aggregate-form? find))]
+      (binding [*select-distinct* distinct]
+        (let [[outer-where inner-where] (split-aggregate-terms where aggregates)
+              outer-terms (remove (set aggregates) find)
+              outer-result (execute-query outer-terms outer-where bindings graph store)]
+          (aggregate-over aggregates with inner-where outer-result)))
+      (binding [*select-distinct* (if all identity distinct)]
+        (execute-query find where bindings graph store)))))
