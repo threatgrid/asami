@@ -9,7 +9,7 @@
                                                  op-pattern? vartest?]]
               [naga.store :refer [Storage StorageType]]
               [naga.storage.store-util :as store-util]
-              [asami.planner :as planner :refer [Bindings PatternOrBindings HasVars get-vars]]
+              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [naga.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
@@ -503,27 +503,6 @@
        (store-util/project store selection)
        *select-distinct*))
 
-(def aggregate-types
-  '#{max min count count-distinct sample
-     sum avg median variance stddev})
-
-(defn aggregate-form?
-  "Determines if a term is an aggregate"
-  [s]
-  (and (list? s)
-       (= 2 (count s))
-       (aggregate-types (first s))))
-
-(def Aggregate (s/pred aggregate-form?))
-
-(s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
-                                  (s/one [s/Any] "outer query constraints")]
-  "Splits a WHERE clause up into the part suitable for an outer query,
-   and the remaining constraints, which will be used for an inner query."
-  [constraints :- [Pattern]
-   aggregates :- [Aggregate]]
-  )
-
 (s/defn aggregate-over :- Results
   "For each row in the partial results, executes an inner query, and aggregates the results"
   [aggregates :- [Aggregate]
@@ -540,9 +519,9 @@
         [bindings default-store] (create-bindings in inputs)
         store (or default-store empty-store)
         graph (or (:graph store) empty-graph)]
-    (if-let [aggregates (seq (filter aggregate-form? find))]
+    (if-let [aggregates (seq (filter planner/aggregate-form? find))]
       (binding [*select-distinct* distinct]
-        (let [[outer-where inner-where] (split-aggregate-terms where aggregates)
+        (let [[outer-where inner-where] (planner/split-aggregate-terms where find with)
               outer-terms (remove (set aggregates) find)
               outer-result (execute-query outer-terms outer-where bindings graph store)]
           (aggregate-over aggregates with inner-where outer-result)))

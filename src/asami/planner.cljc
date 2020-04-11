@@ -441,3 +441,52 @@
   (if simplify
     (simplify-algebra patterns options)
     patterns))
+
+(def aggregate-types
+  '#{max min count count-distinct sample
+     sum avg median variance stddev})
+
+(defn aggregate-form?
+  "Determines if a term is an aggregate"
+  [s]
+  (and (list? s)
+       (= 2 (count s))
+       (aggregate-types (first s))))
+
+(def Aggregate (s/pred aggregate-form?))
+
+(s/defn non-aggregate-constraint :- (s/maybe Pattern)
+  "Returns a constraint when it doesn't contain an aggregate-var.
+   For a compound constraint (and, or, not) then returns all non-empty elements
+   that do not contain aggregate vars."
+  [aggregate-vars :- #{Var}
+   constraint :- Pattern]
+  (cond
+    (vector? constraint)
+    (when-not (some aggregate-vars (get-vars constraint)) constraint)
+
+    (list? constraint)
+    (let [[op & args] constraint
+          new-args (keep non-aggregate-constraint args)]
+      (when (seq new-args)
+        (list op new-args)))
+
+    :default (throw (ex-info (str "Unknown constraint structure: " constraint)
+                             {:constraint constraint}))))
+
+(s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
+                                  (s/one [s/Any] "outer query constraints")]
+  "Splits a WHERE clause up into the part suitable for an outer query,
+   and the remaining constraints, which will be used for an inner query."
+  [constraints :- [Pattern]
+   selection :- [(s/cond-pre Var Aggregate)]
+   withs :- [Var]]
+  (let [vars (-> (filter vartest? selection) set (into withs))
+        agg-vars (set (remove vartest? selection))
+        ;; remove the aggregates
+        non-agg-constraints (keep (partial non-aggregate-constraint agg-vars) constraints)
+        ;; now build up the query from the non-aggregate constraints, containing only
+        ;; the required vars, and any constraints needed to join them
+        ]
+    )
+  )
