@@ -521,7 +521,8 @@
         graph (or (:graph store) empty-graph)]
     (if-let [aggregates (seq (filter planner/aggregate-form? find))]
       (binding [*select-distinct* distinct]
-        (let [[outer-where inner-where] (planner/split-aggregate-terms where find with)
+        (let [simplified (planner/simplify-algebra where)
+              [outer-where inner-where] (planner/split-aggregate-terms where find with)
               outer-terms (remove (set aggregates) find)
               outer-result (execute-query outer-terms outer-where bindings graph store)]
           (aggregate-over aggregates with inner-where outer-result)))

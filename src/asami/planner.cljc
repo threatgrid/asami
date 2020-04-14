@@ -416,12 +416,85 @@
     ;; result
     (merge-operations graph options planned planned-sub-patterns filter-patterns not-patterns)))
 
+(s/defn new-or
+  "Create an OR expression from a sequence of arguments.
+   If an argument is a nested OR, then these terms are flattened into this level.
+   If an argument is a NOT, then an exception is thrown."
+  [terms]
+  (if (= 1 count terms)
+    (first terms)
+    (->> terms
+         (reduce
+          (fn [acc [op & args :as term]]
+            (if (list? term)
+              (case op
+                or (into acc args)
+                not (throw (ex-info "Illegal use of NOT expression in OR expression" {:or terms :not term}))
+                (conj acc term)))
+            (conj acc term))
+          [])
+         (list* 'or))))
+
+(s/defn new-and
+  "Create an AND expression from a sequence of arguments.
+   If an argument is a nested AND, then these terms are flattened into this level."
+  [terms]
+  (if (= 1 (count terms))
+    (first terms)
+    (->> terms
+         (reduce
+          (fn [acc [op & args :as term]]
+            (if (= 'and op)
+              (into acc args)
+              (conj acc term)))
+          [])
+         (list* 'and))))
+
+(s/defn append
+  "Appends a single element to the end of a seq"
+  [s e]
+  (if (vector? s) (conj s e) (concat s [e])))
+
 (s/defn simplify-algebra :- [PatternOrBindings]
   "This operation simplifies the algebra into a sum-of-products form.
    Currently a placeholder that does nothing."
   [patterns :- [PatternOrBindings]
    options]
-  patterns)
+  (letfn [(or-term? [term] (= 'or (first term)))
+          (sum-of-products
+            ;; a term is either a single triple binding
+            ;; or a list of (operator arg1 [arg2...])
+            [term]
+            (cond
+              (vector? term) term
+              (list? term) (let [[op & args] patterns]
+                             (case op
+                               not (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                     (cond
+                                       (vector? processed) (list 'not processed)  ; single term, wrap as (not term)
+                                       (vector? op) (list* 'not processed)   ; multiple terms, wrap as (not t1 t2...)
+                                       (= 'not op) (list* 'and args)         ; nested not. Convert to (and t1 t2...)
+                                       (= 'and op) (list* 'not args)         ; and term, unwrap and just use (not t1 t2...)
+                                       :default (list 'not processed)))      ; other terms, just wrap in (not terms)
+                               optional (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                          (cond
+                                            (vector? processed) (list 'optional processed)  ; single term, wrap as (optional term)
+                                            (vector? op) (list* 'optional processed)  ; multiple terms, wrap as (optional t1 t2...)
+                                            (= 'and op) (list* 'optional args)  ; and term, unwrap and just use (optional t1 t2...)
+                                            :default (list 'optional processed)))
+                               or (new-or (map sum-of-products args))
+                               and (let [processed-args (map sum-of-products args)
+                                         or-terms (filter or-term? processed-args)]
+                                     (if (seq or-terms)
+                                       (let [other-terms (remove or-term? processed-args)]
+                                         (new-or (map #(new-and (append other-terms %)) or-terms)))
+                                       (new-and processed-args)))
+                               (throw (ex-info (str "Unknown query operator: " op) {:op op :args args}))))
+              :default (throw (ex-info (str "Unknown query term: " term) {:term term}))))]
+    (let [[maybe-op & args :as result] (sum-of-products (list* 'and patterns))]
+      (if (= 'and maybe-op)
+        args
+        result))))
 
 (s/defn minimal-first-planner :- [PatternOrBindings]
   "Attempts to optimize a query, based on the principle that if smaller resolutions appear
@@ -430,17 +503,14 @@
   [graph
    patterns :- [PatternOrBindings]
    options]
-  (let [simplified-patterns (simplify-algebra patterns options)]
-    (plan-path graph patterns options)))
+  (plan-path graph patterns options))
 
 (s/defn user-plan :- [CountablePattern]
   "Returns the original order of patterns specified by the user. No optimization is attempted."
   [graph
-   patterns :- [CountablePattern]
-   {:keys [simplify] :as options}]
-  (if simplify
-    (simplify-algebra patterns options)
-    patterns))
+   patterns :- [PatternOrBindings]
+   options]
+  patterns)
 
 (def aggregate-types
   '#{max min count count-distinct sample
