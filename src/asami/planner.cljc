@@ -425,7 +425,7 @@
     (->> terms
          (reduce
           (fn [acc [op & args :as term]]
-            (if (list? term)
+            (if (seq? term)
               (case op
                 or (into acc args)
                 not (throw (ex-info "Illegal use of NOT expression in OR expression" {:or terms :not term}))
@@ -469,29 +469,36 @@
                (vector? term) term
                (seq? term) (let [[op & args] term]
                              (case op
-                               not (let [[op & args :as processed] (sum-of-products (list* 'and args))]
-                                     (cond
-                                       (vector? processed) (list 'not processed) ; single term, wrap as (not term)
-                                       (vector? op) (list* 'not processed) ; multiple terms, wrap as (not t1 t2...)
-                                       (= 'not op) (list* 'and args) ; nested not. Convert to (and t1 t2...)
-                                       (= 'and op) (list* 'not args) ; and term, unwrap and just use (not t1 t2...)
-                                       :default (list 'not processed))) ; other terms, just wrap in (not terms)
-                               optional (let [[op & args :as processed] (sum-of-products (list* 'and args))]
-                                          (cond
-                                            (vector? processed) (list 'optional processed) ; single term, wrap as (optional term)
-                                            (vector? op) (list* 'optional processed) ; multiple terms, wrap as (optional t1 t2...)
-                                            (= 'and op) (list* 'optional args) ; and term, unwrap and just use (optional t1 t2...)
-                                            :default (list 'optional processed)))
-                               or (new-or (map sum-of-products args))
-                               and (let [processed-args (doall (map sum-of-products args))
-                                         or-terms (doall (filter or-term? processed-args))]
-                                     (if (seq or-terms)
-                                       (let [other-terms (remove or-term? processed-args)
-                                             distribute-or (fn [acc [_ & args :as term]]
-                                                             (concat acc
-                                                                     (map #(new-and (append other-terms %)) args)))]
-                                         (new-or (reduce distribute-or [] or-terms)))
-                                       (new-and processed-args)))
+                               (not NOT)
+                               (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                 (cond
+                                   (vector? processed) (list 'not processed) ; single term, wrap as (not term)
+                                   (vector? op) (list* 'not processed) ; multiple terms, wrap as (not t1 t2...)
+                                   (= 'not op) (list* 'and args) ; nested not. Convert to (and t1 t2...)
+                                   (= 'and op) (list* 'not args) ; and term, unwrap and just use (not t1 t2...)
+                                   :default (list 'not processed))) ; other terms, just wrap in (not terms)
+
+                               (optional OPTIONAL)
+                               (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                 (cond
+                                   (vector? processed) (list 'optional processed) ; single term, wrap as (optional term)
+                                   (vector? op) (list* 'optional processed) ; multiple terms, wrap as (optional t1 t2...)
+                                   (= 'and op) (list* 'optional args) ; and term, unwrap and just use (optional t1 t2...)
+                                   :default (list 'optional processed)))
+
+                               (or OR)
+                               (new-or (map sum-of-products args))
+
+                               (and AND)
+                               (let [processed-args (doall (map sum-of-products args))
+                                     or-terms (doall (filter or-term? processed-args))]
+                                 (if (seq or-terms)
+                                   (let [other-terms (remove or-term? processed-args)
+                                         distribute-or (fn [acc [_ & args :as term]]
+                                                         (concat acc
+                                                                 (map #(new-and (append other-terms %)) args)))]
+                                     (new-or (reduce distribute-or [] or-terms)))
+                                   (new-and processed-args)))
                                (throw (ex-info (str "Unknown query operator: " op) {:op op :args args}))))
                :default (throw (ex-info (str "Unknown query term: " term) {:term term :type (type term)}))))]
      (let [[maybe-op & args :as result] (sum-of-products (list* 'and patterns))]

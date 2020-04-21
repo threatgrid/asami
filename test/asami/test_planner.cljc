@@ -365,7 +365,18 @@
     (is (= '[[?a :c :d] [?a :a :b] [(inc ?a) ?b] [?b :c :d] [?c :e ?b] [(identity ?c) ?e] (not [?e :s ?z] [?z :x :y])] p10))))
 
 (deftest test-algebra-flattening
-  (let [w1 (simplify-algebra '[[?a :p1 ?b] [?b :p2 ?c] (or [?c :p3 ?d] [?b :p3 ?d])])]
-    (is (= w1 '[(or (and [?a :p1 ?b] [?b :p2 ?c] [?c :p3 ?d]) (and [?a :p1 ?b] [?b :p2 ?c] [?b :p3 ?d]))]))))
+  (let [w1 (simplify-algebra '[[?a :p1 ?b] [?b :p2 ?c] (or [?c :p3 ?d] [?b :p3 ?d])])
+        w2 (simplify-algebra '[[?a :p1 ?b] [?b :p2 ?c] (or [?c :p3 ?d] [?b :p3 ?d]) [?d :z ?e]])
+        w3 (simplify-algebra '[[?a :p1 ?b] [?b :p2 ?c] (or (and [?c :p3 ?c2] [?c2 :px ?d]) [?b :p3 ?d])])
+        w4 (simplify-algebra '[[?a :p1 ?b] [?b :p2 ?c] (or (and [?c :p3 ?c2] (or [?c2 :px ?d] [?c2 :py ?d])) [?b :p3 ?d])])]
+    (is (= w1 '[(or (and [?a :p1 ?b] [?b :p2 ?c] [?c :p3 ?d])
+                    (and [?a :p1 ?b] [?b :p2 ?c] [?b :p3 ?d]))]))
+    (is (= w2 '[(or (and [?a :p1 ?b] [?b :p2 ?c] [?d :z ?e] [?c :p3 ?d])
+                    (and [?a :p1 ?b] [?b :p2 ?c] [?d :z ?e] [?b :p3 ?d]))]))
+    (is (= w3 '[(or (and [?a :p1 ?b] [?b :p2 ?c] [?c :p3 ?c2] [?c2 :px ?d])
+                    (and [?a :p1 ?b] [?b :p2 ?c] [?b :p3 ?d]))]))
+    (is (= w4 '[(or (and [?a :p1 ?b] [?b :p2 ?c] [?c :p3 ?c2] [?c2 :px ?d]) 
+                    (and [?a :p1 ?b] [?b :p2 ?c] [?c :p3 ?c2] [?c2 :py ?d])
+                    (and [?a :p1 ?b] [?b :p2 ?c] [?b :p3 ?d]))]))))
 
 #?(:cljs (run-tests))
