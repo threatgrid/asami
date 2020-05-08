@@ -1,4 +1,4 @@
-(ns ^{:doc "Implements a full query engine based on fully indexed data."
+(ns ^{:doc "Implements query operations based on data accessible through the Graph protocol."
       :author "Paula Gearon"}
     asami.query
     (:require [naga.schema.store-structs :as st
