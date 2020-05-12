@@ -455,8 +455,7 @@
   (if (vector? s) (conj s e) (concat s [e])))
 
 (s/defn simplify-algebra :- [PatternOrBindings]
-  "This operation simplifies the algebra into a sum-of-products form.
-   Currently a placeholder that does nothing."
+  "This operation simplifies the algebra into a sum-of-products form. "
   ([patterns :- [PatternOrBindings]] (simplify-algebra patterns {}))
   ([patterns :- [PatternOrBindings]
     options]
@@ -506,6 +505,13 @@
          args
          [result])))))
 
+(s/defn normalize-sum-of-products
+  "Converts an expression that is not a sum into a sum operation of one argument."
+  [patterns]
+  (if (and (seq? patterns) (#{'or 'OR} (first patterns)))
+    patterns
+    (list 'or patterns)))
+
 (s/defn minimal-first-planner :- [PatternOrBindings]
   "Attempts to optimize a query, based on the principle that if smaller resolutions appear
    first in a product term, then lazy evaluation will lead to less iteration on the later terms.
@@ -529,44 +535,53 @@
 (defn aggregate-form?
   "Determines if a term is an aggregate"
   [s]
-  (and (list? s)
+  (and (seq? s)
        (= 2 (count s))
        (aggregate-types (first s))))
 
 (def Aggregate (s/pred aggregate-form?))
 
-(s/defn non-aggregate-constraint :- (s/maybe Pattern)
-  "Returns a constraint when it doesn't contain an aggregate-var.
+(defn xor [a b] (if a (not b) b))
+
+(s/defn aggregate-constraint :- (s/maybe Pattern)
+  "Returns a constraint when it does or does not contains aggregates, selected by the aggregating? flag.
    For a compound constraint (and, or, not) then returns all non-empty elements
-   that do not contain aggregate vars."
-  [aggregate-vars :- #{Var}
+   that contain or do-not-contain aggregate vars."
+  [aggregating? :- s/Bool
+   aggregate-vars :- #{Var}
    constraint :- Pattern]
-  (cond
-    (vector? constraint)
-    (when-not (some aggregate-vars (get-vars constraint)) constraint)
+  (letfn [(agg-constraint [cnstrnt]
+            (cond
+              (vector? cnstrnt)
+              (when-not (xor aggregating? (some aggregate-vars (get-vars cnstrnt)))
+                cnstrnt)
 
-    (list? constraint)
-    (let [[op & args] constraint
-          new-args (keep non-aggregate-constraint args)]
-      (when (seq new-args)
-        (list op new-args)))
+              (seq? cnstrnt)
+              (let [[op & args] cnstrnt
+                    new-args (keep agg-constraint args)]
+                (when (seq new-args)
+                  (if (> (count new-args) 1)
+                    (list* op new-args)
+                    (first new-args))))
 
-    :default (throw (ex-info (str "Unknown constraint structure: " constraint)
-                             {:constraint constraint}))))
+              :default (throw (ex-info (str "Unknown constraint structure: " cnstrnt)
+                                       {:constraint cnstrnt}))))]
+    (agg-constraint constraint)))
 
 (s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
-                                  (s/one [s/Any] "outer query constraints")]
+                                  (s/one [s/Any] "inner query constraints")]
   "Splits a WHERE clause up into the part suitable for an outer query,
    and the remaining constraints, which will be used for an inner query."
-  [constraints :- [Pattern]
-   selection :- [(s/cond-pre Var Aggregate)]
-   withs :- [Var]]
-  (let [vars (-> (filter vartest? selection) set (into withs))
-        agg-vars (set (remove vartest? selection))
-        ;; remove the aggregates
-        non-agg-constraints (keep (partial non-aggregate-constraint agg-vars) constraints)
-        ;; now build up the query from the non-aggregate constraints, containing only
-        ;; the required vars, and any constraints needed to join them
-        ]
-    )
-  )
+  [constraints :- [Pattern]                    ;; the WHERE clause
+   selection :- [(s/cond-pre Var Aggregate)]   ;; the FIND clause
+   withs :- [Var]]                             ;; the WITH clause
+  ;; extract the vars we know have to be in the outer query
+  (let [[op args] constraints
+        _ (assert (= op 'or))
+        vars (-> (filter vartest? selection) set (into withs))
+        ;; extract the vars from the aggregation terms
+        agg-vars (->> selection (filter aggregate-form?) (map second) set)
+        ;; remove the constraints containing aggregates
+        non-agg-constraints (map (partial aggregate-constraint false agg-vars) args)
+        agg-constraints (map (partial aggregate-constraint true agg-vars) args)]
+    [non-agg-constraints agg-constraints]))

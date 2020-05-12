@@ -503,11 +503,16 @@
        (store-util/project store selection)
        *select-distinct*))
 
+(s/defn context-execute-query
+  "For each line in a context, execute a query specified by the where clause"
+  [context :- Results
+   where :- [Pattern]]
+  )
+
 (s/defn aggregate-over :- Results
-  "For each row in the partial results, executes an inner query, and aggregates the results"
-  [aggregates :- [Aggregate]
-   with-terms :- [Var]
-   agg-constraints :- [Pattern]
+  "For each seq of results, aggregates individually, and then together"
+  [selection :- [s/Any]
+   aggregates :- [Aggregate]
    partial-results :- Results]
   )
 
@@ -521,10 +526,17 @@
         graph (or (:graph store) empty-graph)]
     (if-let [aggregates (seq (filter planner/aggregate-form? find))]
       (binding [*select-distinct* distinct]
+        ;; flatten the query
         (let [simplified (planner/simplify-algebra where)
-              [outer-where inner-where] (planner/split-aggregate-terms where find with)
-              outer-terms (remove (set aggregates) find)
-              outer-result (execute-query outer-terms outer-where bindings graph store)]
-          (aggregate-over aggregates with inner-where outer-result)))
+              ;; ensure that it is an (or ...) expression
+              normalized (planner/normalize-sum-of-products simplified)
+              ;; extract every element of the or into an outer/inner pair of queries. The results zip
+              [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
+              ;; execute the outer queries
+              outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph store))) outer-wheres)
+              ;; execute the inner queries within the context provided by the outer queries
+              inner-results (map context-execute-query outer-results inner-wheres)]
+          ;; calculate the aggregates from the final results and project
+          (aggregate-over find aggregates inner-results)))
       (binding [*select-distinct* (if all identity distinct)]
         (execute-query find where bindings graph store)))))
