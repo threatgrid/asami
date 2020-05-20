@@ -505,7 +505,8 @@
 
 (s/defn context-execute-query
   "For each line in a context, execute a query specified by the where clause"
-  [context :- Results
+  [graph
+   context :- Results
    where :- [Pattern]]
   (let [context-cols (meta context)
         subquery (fn [row]
@@ -516,32 +517,34 @@
 
 (def aggregate-fns
   "Map of aggregate symbols to functions that accept a seq of data to be aggregated"
-  {'sum (partial apply sum)
+  {'sum (partial apply +)
    'count count
-   'avg #(/ (apply sum %) (count %))
+   'avg #(/ (apply + %) (count %))
    'max (partial apply max)
    'min (partial apply min)
-   'first first})
+   'first first
+   'last last})
 
 (s/defn result-label :- s/Symbol
-  "Convert an element from a select/find clause into an appropriate label"
+  "Convert an element from a select/find clause into an appropriate label.
+   Note that duplicate columns are not considered"
   [e]
-  (if (vartest? e)
-    e
-    (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))))
+  (cond
+    (vartest? e) e
+    (and (seq? e) (= 2 (count e))) (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))
+    :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
 
 (s/defn aggregate-over :- Results
   "For each seq of results, aggregates individually, and then together"
   [selection :- [s/Any]
-   aggregates :- [Aggregate]
    partial-results :- [Results]]
   (letfn [(var-index [columns]
             (into {} (map-indexed (fn [n c] [c n]) columns)))
           (get-selectors [idxs]
             (map (fn [s]
                    (if (vartest? s)
-                     [first (var-index s)]
-                     [(aggregate-fns (first s)) (var-index (second s))]))
+                     [first (idxs s)]
+                     [(aggregate-fns (first s)) (idxs (second s))]))
                  selection))
           (project-aggregate [result]
             (let [idxs (var-index (:cols (meta result)))]
@@ -569,6 +572,7 @@
               ;; extract every element of the or into an outer/inner pair of queries. The results zip
               [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
               ;; execute the outer queries
+              outer-terms (filter vartest? find)
               outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph store))) outer-wheres)
               ;; execute the inner queries within the context provided by the outer queries
               inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
