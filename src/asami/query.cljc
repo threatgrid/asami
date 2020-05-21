@@ -553,7 +553,24 @@
                   (col-fn col-data)))))]
     (with-meta
       (map project-aggregate partial-results)
-      {:cols (vec (map result-label selection))})))
+      {:cols (mapv result-label selection)})))
+
+(s/defn aggregate-query
+  [aggregates find bindings with where graph store]
+  (binding [*select-distinct* distinct]
+    ;; flatten the query
+    (let [simplified (planner/simplify-algebra where)
+          ;; ensure that it is an (or ...) expression
+          normalized (planner/normalize-sum-of-products simplified)
+          ;; extract every element of the or into an outer/inner pair of queries. The results zip
+          [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
+          ;; execute the outer queries
+          outer-terms (filter vartest? find)
+          outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph store))) outer-wheres)
+          ;; execute the inner queries within the context provided by the outer queries
+          inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
+      ;; calculate the aggregates from the final results and project
+      (aggregate-over find aggregates inner-results))))
 
 (s/defn query-entry
   "Main entry point of user queries"
@@ -564,19 +581,6 @@
         store (or default-store empty-store)
         graph (or (:graph store) empty-graph)]
     (if-let [aggregates (seq (filter planner/aggregate-form? find))]
-      (binding [*select-distinct* distinct]
-        ;; flatten the query
-        (let [simplified (planner/simplify-algebra where)
-              ;; ensure that it is an (or ...) expression
-              normalized (planner/normalize-sum-of-products simplified)
-              ;; extract every element of the or into an outer/inner pair of queries. The results zip
-              [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
-              ;; execute the outer queries
-              outer-terms (filter vartest? find)
-              outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph store))) outer-wheres)
-              ;; execute the inner queries within the context provided by the outer queries
-              inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
-          ;; calculate the aggregates from the final results and project
-          (aggregate-over find aggregates inner-results)))
+      (aggregate-query aggregates find bindings with where graph store)
       (binding [*select-distinct* (if all identity distinct)]
         (execute-query find where bindings graph store)))))
