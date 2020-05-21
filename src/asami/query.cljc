@@ -17,6 +17,8 @@
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
+(def ^:dynamic *env* {})
+
 (def ^:dynamic *select-distinct* distinct)
 
 (s/defn find-vars [f] (set (filter st/vartest? f)))
@@ -151,7 +153,7 @@
                      (into {}))
         arg-indexes (map-indexed #(var-map %2 (- %1)) args)
         callable-op (cond (fn? op) op
-                          (symbol? op) (fn-for op)
+                          (symbol? op) (or (get *env* op) (fn-for op))
                           (string? op) (fn-for (symbol op))
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]

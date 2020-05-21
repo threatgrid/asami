@@ -2,6 +2,7 @@
   "Tests the public query functionality"
   (:require [naga.store :refer [new-node assert-data]]
             [asami.core :refer [empty-store q]]
+            [asami.query :refer [*env*]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -353,7 +354,28 @@
       (is (= #{["The Art of Computer Programming" "Knuth, Donald"]
                ["Basic Category Theory for Computer Scientists" "Pierce, Benjamin"]
                ["Purely Functional Data Structures" "Okasaki, Chris"]}
-             (set r4))))))
+             (set r4)))))
+  
+ (deftest test-filter-queries
+    (let [st (-> empty-store (assert-data data))
+          r1 (q '[:find ?title ?profit
+                  :where [?book :title ?title]
+                  [?book :price ?price]
+                  [?book :profit ?profit]
+                  [(>= ?price 40)]]
+                st)
+          r2 (binding [*env* {'right-price #(>= % 40)}]
+               (q '[:find ?title
+                    :where [?book :title ?title]
+                    [?book :price ?price]
+                    [(right-price ?price)]]
+                  st))]
+      (is (= #{["The Art of Computer Programming" 20.00]
+               ["Purely Functional Data Structures" 15.00]}
+             (set r1)))
+      (is (= #{["The Art of Computer Programming"]
+               ["Purely Functional Data Structures"]}
+             (set r2))))))
 
 #?(:cljs (run-tests))
 
