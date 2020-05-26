@@ -1,14 +1,14 @@
 (ns asami.test-query
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
-            [asami.query :refer [add-to-graph pattern-left-join outer-product
-                                 create-binding create-bindings minus left-join disjunction
-                                 result-label aggregate-over]]
+            [asami.query :as q :refer [add-to-graph pattern-left-join outer-product
+                                       create-binding create-bindings minus left-join disjunction
+                                       result-label aggregate-over aggregate-query]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [naga.util :as u]
             [asami.core :refer [empty-store]]
-            [naga.storage.store-util :refer [matching-vars]]
+            [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -273,6 +273,33 @@
     (is (= '[[:a 5] [:a 8] [:t 12]] results4))
     (is (= '[?a ?min-c] (:cols (meta results5))))
     (is (= '[[:a 1] [:a 6] [:t 10]] results5))))
+
+
+(let [agg-data [[:a :p "first"]
+                [:a :p2 :one]
+                [:a :p2 :two]
+                [:a :p2 :three]
+                [:b :p "second"]
+                [:b :p2 :b-one]
+                [:b :p2 :b-two]
+                [:b :p2 :b-three]
+                [:b :p2 :b-four]
+                [:b :p2 :b-five]]]
+  
+
+  (deftest test-aggregate-query
+    "Tests the function that does query aggregation.
+   This function does lots of work after the arguments have been extracted"
+    (let [find '[?a ?b (count ?c)]
+          bindings q/empty-bindings
+          with []
+          where '[[?a :p ?b] [?a :p2 ?c]]
+          graph (add-to-graph empty-graph agg-data)
+          project-fn (partial project empty-store)
+
+          r1 (aggregate-query find bindings with where graph project-fn)]
+      (is (= '[?a ?b ?count-c] (:cols (meta r1))))
+      (is (= [[:a "first" 3] [:b "second" 5]] r1)))))
 
 #?(:clj
    (deftest test-eval

@@ -510,7 +510,10 @@
   [patterns]
   (if (and (seq? patterns) (#{'or 'OR} (first patterns)))
     patterns
-    (list 'or patterns)))
+    (list 'or
+          (if (= 1 (count patterns))
+            patterns
+            (list* 'and patterns)))))
 
 (s/defn minimal-first-planner :- [PatternOrBindings]
   "Attempts to optimize a query, based on the principle that if smaller resolutions appear
@@ -566,17 +569,20 @@
 
               :default (throw (ex-info (str "Unknown constraint structure: " cnstrnt)
                                        {:constraint cnstrnt}))))]
-    (agg-constraint constraint)))
+    (let [top-constraint (agg-constraint constraint)]
+      (if (vector? top-constraint)
+        (list 'and top-constraint)
+        top-constraint))))
 
 (s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
                                   (s/one [s/Any] "inner query constraints")]
   "Splits a WHERE clause up into the part suitable for an outer query,
    and the remaining constraints, which will be used for an inner query."
-  [constraints :- [Pattern]                    ;; the WHERE clause
+  [constraints :- Pattern                      ;; the WHERE clause
    selection :- [(s/cond-pre Var Aggregate)]   ;; the FIND clause
    withs :- [Var]]                             ;; the WITH clause
   ;; extract the vars we know have to be in the outer query
-  (let [[op args] constraints
+  (let [[op & args] constraints
         _ (assert (= op 'or))
         vars (-> (filter vartest? selection) set (into withs))
         ;; extract the vars from the aggregation terms

@@ -500,21 +500,39 @@
       query)))
 
 (s/defn execute-query
-  [selection constraints bindings graph store]
-  (->> (join-patterns graph constraints bindings)
-       (store-util/project store selection)
-       *select-distinct*))
+  [selection constraints bindings graph project-fn]
+  ;; joins must happen across a seq that is a conjunction
+  (let [top-conjunction (if (seq? constraints)  ;; is this a list?
+                          (let [[op & args] constraints]
+                            (cond
+                              (vector? op) constraints    ;; Starts with top level EPV. Already in the correct form
+                              (#{'and 'AND} op) args      ;; Starts with top level AND. Use the arguments
+                              (operators op) (list constraints) ;; top level form. Wrap as a conjunction
+                              (seq? op) constraints       ;; first form is an operation. Already in the correct form
+                              :default (throw (ex-info "Unknown constraint format" {:constraint constraints}))))
+                          (list constraints))             ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
+        select-distinct (fn [xs] (let [m (meta xs)] (with-meta (*select-distinct* xs) m)))]
+    (->> (join-patterns graph top-conjunction bindings)
+         (project-fn selection)
+         select-distinct)))
+
+(s/defn prepend
+  [element
+   pattern :- Pattern]
+  (let [[op & args] pattern]
+    (cond (vector? op) (cons element pattern))
+          (#{'and 'AND} op) (cons element args)
+          :default (list element pattern)))
 
 (s/defn context-execute-query
   "For each line in a context, execute a query specified by the where clause"
   [graph
    context :- Results
-   where :- [Pattern]]
+   [op & args :as where] :- Pattern]
   (let [context-cols (meta context)
-        subquery (fn [row]
-                   (run-simple-query
-                    graph
-                    (cons (with-meta [row] context-cols) where)))]
+        ljoin #(left-join %2 %1 graph)
+        where (if (#{'and 'AND} op) args (list where))
+        subquery (fn [row] (reduce ljoin (with-meta (list row) context-cols) where))]
     (map subquery context)))
 
 (def aggregate-fns
@@ -558,7 +576,7 @@
       {:cols (mapv result-label selection)})))
 
 (s/defn aggregate-query
-  [aggregates find bindings with where graph store]
+  [find bindings with where graph project-fn]
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -568,11 +586,12 @@
           [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
           ;; execute the outer queries
           outer-terms (filter vartest? find)
-          outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph store))) outer-wheres)
+          outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph project-fn))) outer-wheres)
+          ;; DEBUG: do outer results have columns?
           ;; execute the inner queries within the context provided by the outer queries
           inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
       ;; calculate the aggregates from the final results and project
-      (aggregate-over find aggregates inner-results))))
+      (aggregate-over find inner-results))))
 
 (s/defn query-entry
   "Main entry point of user queries"
@@ -581,8 +600,9 @@
                                              query-validator)
         [bindings default-store] (create-bindings in inputs)
         store (or default-store empty-store)
-        graph (or (:graph store) empty-graph)]
-    (if-let [aggregates (seq (filter planner/aggregate-form? find))]
-      (aggregate-query aggregates find bindings with where graph store)
+        graph (or (:graph store) empty-graph)
+        project-fn (partial store-util/project store)]
+    (if (seq (filter planner/aggregate-form? find))
+      (aggregate-query find bindings with where graph project-fn)
       (binding [*select-distinct* (if all identity distinct)]
-        (execute-query find where bindings graph store)))))
+        (execute-query find where bindings graph project-fn)))))
