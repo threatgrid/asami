@@ -437,6 +437,9 @@
           r4 (sq '[:find (count ?child)
                    :where
                    [?parent :child ?child]])
+          r5 (sq '[:find ?parent (count ?child)
+                   :where
+                   [?parent :child ?child]])
 
                 ]
       (is (= '[?count-person] (:cols (meta r1))))
@@ -447,21 +450,10 @@
       (is (= [[2]] r3))
       (is (= '[?count-child] (:cols (meta r4))))
       (is (= [[7]] r4))
+      (is (= '[?parent ?count-child] (:cols (meta r5))))
+      (is (= [[pa 3] [pb 2] [pc 2]] r5))
       ))
 
-  (deftest test-ag
-    (let [st (-> empty-store (assert-data data))
-          sq (fn [query] (q query st))
-
-          r3 (sq '[:find (count ?child)
-                   :where
-                   [?parent :name "Barbara"]
-                   [?parent :child ?child]])
-
-                ]
-      (is (= [[2]] r3))
-      ))
-  
  )
 
 #?(:cljs (run-tests))
