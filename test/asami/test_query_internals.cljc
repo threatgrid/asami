@@ -1,4 +1,4 @@
-(ns asami.test-query
+(ns asami.test-query-internals
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
             [asami.query :as q :refer [add-to-graph pattern-left-join outer-product

@@ -582,17 +582,24 @@
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
+          ; _ (prn "simplified" simplified)
           ;; ensure that it is an (or ...) expression
           normalized (planner/normalize-sum-of-products simplified)
+          ; _ (prn "normalized" normalized)
           ;; extract every element of the or into an outer/inner pair of queries. The results zip
           [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
+          ; _ (prn "outer-wheres" outer-wheres)
+          ; _ (prn "inner-wheres" inner-wheres)
           ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
           ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
 
           ;; execute the outer queries
           outer-terms (filter vartest? find)
+          ; _ (prn "outer-terms" outer-terms)
           ;; execute the outer query if it exists. If not then return an identity binding.
-          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project-fn) identity-binding)) outer-wheres)
+          project (fn [a b] b)
+          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project) identity-binding)) outer-wheres)
+          ; _ (prn "outer-results" outer-results)
           ;; execute the inner queries within the context provided by the outer queries
           inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
       ;; calculate the aggregates from the final results and project
