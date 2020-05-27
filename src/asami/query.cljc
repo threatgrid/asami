@@ -586,8 +586,7 @@
           [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
           ;; execute the outer queries
           outer-terms (filter vartest? find)
-          outer-results (map (fn [w] (when (seq w) (execute-query outer-terms w bindings graph project-fn))) outer-wheres)
-          ;; DEBUG: do outer results have columns?
+          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project-fn) [[]])) outer-wheres)
           ;; execute the inner queries within the context provided by the outer queries
           inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
       ;; calculate the aggregates from the final results and project

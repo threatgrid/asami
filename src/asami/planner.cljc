@@ -503,7 +503,7 @@
      (let [[maybe-op & args :as result] (sum-of-products (list* 'and patterns))]
        (if (= 'and maybe-op)
          args
-         [result])))))
+         (list result))))))
 
 (s/defn normalize-sum-of-products
   "Converts an expression that is not a sum into a sum operation of one argument."
@@ -512,7 +512,7 @@
     patterns
     (list 'or
           (if (= 1 (count patterns))
-            patterns
+            (first patterns)
             (list* 'and patterns)))))
 
 (s/defn minimal-first-planner :- [PatternOrBindings]

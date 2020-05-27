@@ -297,9 +297,20 @@
           graph (add-to-graph empty-graph agg-data)
           project-fn (partial project empty-store)
 
-          r1 (aggregate-query find bindings with where graph project-fn)]
-      (is (= '[?a ?b ?count-c] (:cols (meta r1))))
-      (is (= [[:a "first" 3] [:b "second" 5]] r1)))))
+          r (aggregate-query find bindings with where graph project-fn)]
+      (is (= '[?a ?b ?count-c] (:cols (meta r))))
+      (is (= [[:a "first" 3] [:b "second" 5]] r)))
+
+    (let [find '[(count ?c)]
+          bindings q/empty-bindings
+          with []
+          where '[[?a :p ?c]]
+          graph (add-to-graph empty-graph agg-data)
+          project-fn (partial project empty-store)
+
+          r (aggregate-query find bindings with where graph project-fn)]
+      (is (= '[?count-c] (:cols (meta r))))
+      (is (= [[2]] r)))))
 
 #?(:clj
    (deftest test-eval
