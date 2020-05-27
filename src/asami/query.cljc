@@ -21,6 +21,8 @@
 
 (def ^:dynamic *select-distinct* distinct)
 
+(def ^:const identity-binding (with-meta [[]] {:cols []}))
+
 (s/defn find-vars [f] (set (filter st/vartest? f)))
 
 (defn op-error
@@ -398,7 +400,7 @@
                                                                patterns]
                                       ;; the first element is an operation,
                                       ;; start with an empty result and process all the patterns
-                                      :default [(with-meta [[]] {:cols []}) all-patterns])]
+                                      :default [identity-binding all-patterns])]
     ;; process the remaining query
     (reduce ljoin part-result proc-patterns)))
 
@@ -590,7 +592,7 @@
           ;; execute the outer queries
           outer-terms (filter vartest? find)
           ;; execute the outer query if it exists. If not then return an identity binding.
-          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project-fn) [[]])) outer-wheres)
+          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project-fn) identity-binding)) outer-wheres)
           ;; execute the inner queries within the context provided by the outer queries
           inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
       ;; calculate the aggregates from the final results and project
