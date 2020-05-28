@@ -557,9 +557,13 @@
               (vector? cnstrnt)
               (let [vars (get-vars cnstrnt)]
                 (when (or
-                       (and aggregating? (some aggregate-vars vars))
+                       (and aggregating?
+                            (or (some aggregate-vars vars)
+                                (nil? (some needed-vars vars))))
                        (and (not aggregating?)
-                            (or (nil? (some aggregate-vars vars)) (some needed-vars vars))))
+                            (some needed-vars vars)
+                            ;; (or (nil? (some aggregate-vars vars)) (some needed-vars vars))
+                            ))
                   cnstrnt))
 
               (seq? cnstrnt)

@@ -427,7 +427,7 @@
           sq (fn [query] (q query st))
 
           r1 (sq '[:find (count ?person)
-                  :where [?person :gender ?g]])
+                   :where [?person :gender ?g]])
           r2 (sq [:find '(count ?child)
                   :where [pb :child '?child]])
           r3 (sq '[:find (count ?child)
@@ -441,7 +441,18 @@
                    :where
                    [?parent :child ?child]])
 
-                ]
+          r6 (sq '[:find (count ?child)
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          r7 (sq '[:find (count ?child)
+                   :with ?parent
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          ]
       (is (= '[?count-person] (:cols (meta r1))))
       (is (= [[8]] r1))
       (is (= '[?count-child] (:cols (meta r2))))
@@ -452,11 +463,27 @@
       (is (= [[7]] r4))
       (is (= '[?parent ?count-child] (:cols (meta r5))))
       (is (= #{[pa 3] [pb 2] [pc 2]} (set r5)))
+      (is (= '[?count-child] (:cols (meta r6))))
+      (is (= [[5]] r6))
+      (is (= '[?count-child] (:cols (meta r7))))
+      (is (= #{[3] [2]} (set r7)))
 
-      ;; TODO: queries using WITH
       ))
 
- )
+  (deftest test-ag
+    (let [st (-> empty-store (assert-data data))
+          sq (fn [query] (q query st))
+
+          r6 (sq '[:find (count ?child)
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          ]
+      (is (= '[?count-child] (:cols (meta r6))))
+      (is (= [[5]] r6))
+      ))
+  )
 
 #?(:cljs (run-tests))
 

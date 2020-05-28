@@ -618,7 +618,8 @@
                                  identity-binding))
                              outer-wheres inner-wheres)
           ;; execute the inner queries within the context provided by the outer queries
-          inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
+          ;; remove the empty results. This means that empty values are not counted!
+          inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
       ;; calculate the aggregates from the final results and project
       (aggregate-over find inner-results))))
 
