@@ -6,8 +6,7 @@
               [clojure.string :as str]
               [naga.schema.store-structs :as st
                                          :refer [EPVPattern Pattern EvalPattern Var vartest?
-                                                 epv-pattern? filter-pattern? eval-pattern? op-pattern?
-                                                 list-like?]]
+                                                 epv-pattern? filter-pattern? eval-pattern? op-pattern?]]
               [naga.util :as u]
               [asami.graph :as gr]
               #?(:clj  [schema.core :as s]
@@ -42,7 +41,7 @@
 (def PatternOrBindings (s/conditional nested-seq? Bindings :else Pattern))
 
 (def CountablePattern  ;; fixed bindings, or a mathing pattern for an index, or a binding expression
-  (s/if nested-seq? Bindings (s/if (comp list-like? first) EvalPattern EPVPattern)))
+  (s/if nested-seq? Bindings (s/if (comp seq? first) EvalPattern EPVPattern)))
 
 (def addset (fnil conj #{}))
 
@@ -365,7 +364,7 @@
 (s/defn not-operation? :- s/Bool
   "Returns true if a pattern is a NOT operation"
   [pattern :- PatternOrBindings]
-  (and (list-like? pattern)
+  (and (seq? pattern)
        (contains? #{'not 'NOT} (first pattern))))
 
 (s/defn extract-patterns-by-type :- {s/Keyword [PatternOrBindings]}
@@ -416,12 +415,105 @@
     ;; result
     (merge-operations graph options planned planned-sub-patterns filter-patterns not-patterns)))
 
+(s/defn new-or
+  "Create an OR expression from a sequence of arguments.
+   If an argument is a nested OR, then these terms are flattened into this level.
+   If an argument is a NOT, then an exception is thrown."
+  [terms]
+  (if (= 1 count terms)
+    (first terms)
+    (->> terms
+         (reduce
+          (fn [acc [op & args :as term]]
+            (if (seq? term)
+              (case op
+                or (into acc args)
+                not (throw (ex-info "Illegal use of NOT expression in OR expression" {:or terms :not term}))
+                (conj acc term))
+              (conj acc term)))
+          [])
+         (list* 'or))))
+
+(s/defn new-and
+  "Create an AND expression from a sequence of arguments.
+   If an argument is a nested AND, then these terms are flattened into this level."
+  [terms]
+  (if (= 1 (count terms))
+    (first terms)
+    (->> terms
+         (reduce
+          (fn [acc [op & args :as term]]
+            (if (= 'and op)
+              (into acc args)
+              (conj acc term)))
+          [])
+         (list* 'and))))
+
+(s/defn append
+  "Appends a single element to the end of a seq"
+  [s e]
+  (if (vector? s) (conj s e) (concat s [e])))
+
 (s/defn simplify-algebra :- [PatternOrBindings]
-  "This operation simplifies the algebra into a sum-of-products form.
-   Currently a placeholder that does nothing."
-  [patterns :- [PatternOrBindings]
-   options]
-  patterns)
+  "This operation simplifies the algebra into a sum-of-products form. "
+  ([patterns :- [PatternOrBindings]] (simplify-algebra patterns {}))
+  ([patterns :- [PatternOrBindings]
+    options]
+   (letfn [(or-term? [term] (= 'or (first term)))
+           (sum-of-products
+             ;; a term is either a single triple binding
+             ;; or a list of (operator arg1 [arg2...])
+             [term]
+             (cond
+               (vector? term) term
+               (seq? term) (let [[op & args] term]
+                             (case op
+                               (not NOT)
+                               (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                 (cond
+                                   (vector? processed) (list 'not processed) ; single term, wrap as (not term)
+                                   (vector? op) (list* 'not processed) ; multiple terms, wrap as (not t1 t2...)
+                                   (= 'not op) (list* 'and args) ; nested not. Convert to (and t1 t2...)
+                                   (= 'and op) (list* 'not args) ; and term, unwrap and just use (not t1 t2...)
+                                   :default (list 'not processed))) ; other terms, just wrap in (not terms)
+
+                               (optional OPTIONAL)
+                               (let [[op & args :as processed] (sum-of-products (list* 'and args))]
+                                 (cond
+                                   (vector? processed) (list 'optional processed) ; single term, wrap as (optional term)
+                                   (vector? op) (list* 'optional processed) ; multiple terms, wrap as (optional t1 t2...)
+                                   (= 'and op) (list* 'optional args) ; and term, unwrap and just use (optional t1 t2...)
+                                   :default (list 'optional processed)))
+
+                               (or OR)
+                               (new-or (map sum-of-products args))
+
+                               (and AND)
+                               (let [processed-args (doall (map sum-of-products args))
+                                     or-terms (doall (filter or-term? processed-args))]
+                                 (if (seq or-terms)
+                                   (let [other-terms (remove or-term? processed-args)
+                                         distribute-or (fn [acc [_ & args :as term]]
+                                                         (concat acc
+                                                                 (map #(new-and (append other-terms %)) args)))]
+                                     (new-or (reduce distribute-or [] or-terms)))
+                                   (new-and processed-args)))
+                               (throw (ex-info (str "Unknown query operator: " op) {:op op :args args}))))
+               :default (throw (ex-info (str "Unknown query term: " term) {:term term :type (type term)}))))]
+     (let [[maybe-op & args :as result] (sum-of-products (list* 'and patterns))]
+       (if (= 'and maybe-op)
+         args
+         (list result))))))
+
+(s/defn normalize-sum-of-products
+  "Converts an expression that is not a sum into a sum operation of one argument."
+  [patterns]
+  (if (and (seq? patterns) (#{'or 'OR} (first patterns)))
+    patterns
+    (list 'or
+          (if (= 1 (count patterns))
+            (first patterns)
+            (list* 'and patterns)))))
 
 (s/defn minimal-first-planner :- [PatternOrBindings]
   "Attempts to optimize a query, based on the principle that if smaller resolutions appear
@@ -430,14 +522,80 @@
   [graph
    patterns :- [PatternOrBindings]
    options]
-  (let [simplified-patterns (simplify-algebra patterns options)]
-    (plan-path graph patterns options)))
+  (plan-path graph patterns options))
 
 (s/defn user-plan :- [CountablePattern]
   "Returns the original order of patterns specified by the user. No optimization is attempted."
   [graph
-   patterns :- [CountablePattern]
-   {:keys [simplify] :as options}]
-  (if simplify
-    (simplify-algebra patterns options)
-    patterns))
+   patterns :- [PatternOrBindings]
+   options]
+  patterns)
+
+(def aggregate-types
+  '#{max min count count-distinct sample
+     sum avg median variance stddev})
+
+(defn aggregate-form?
+  "Determines if a term is an aggregate"
+  [s]
+  (and (seq? s)
+       (= 2 (count s))
+       (aggregate-types (first s))))
+
+(def Aggregate (s/pred aggregate-form?))
+
+(s/defn aggregate-constraint :- (s/maybe Pattern)
+  "Returns a constraint when it does or does not contains aggregates, selected by the aggregating? flag.
+   For a compound constraint (and, or, not) then returns all non-empty elements
+   that contain or do-not-contain aggregate vars."
+  [aggregating? :- s/Bool
+   needed-vars :- #{Var}
+   aggregate-vars :- #{Var}
+   constraint :- Pattern]
+  (letfn [(agg-constraint [cnstrnt]
+            (cond
+              (vector? cnstrnt)
+              (let [vars (get-vars cnstrnt)]
+                (when (or
+                       (and aggregating?
+                            (or (some aggregate-vars vars)
+                                (nil? (some needed-vars vars))))
+                       (and (not aggregating?)
+                            (some needed-vars vars)
+                            ;; (or (nil? (some aggregate-vars vars)) (some needed-vars vars))
+                            ))
+                  cnstrnt))
+
+              (seq? cnstrnt)
+              (let [[op & args] cnstrnt
+                    new-args (keep agg-constraint args)]
+                (when (seq new-args)
+                  (if (> (count new-args) 1)
+                    (list* op new-args)
+                    (first new-args))))
+
+              :default (throw (ex-info (str "Unknown constraint structure: " cnstrnt)
+                                       {:constraint cnstrnt}))))]
+    (let [top-constraint (agg-constraint constraint)]
+      (if (vector? top-constraint)
+        (list 'and top-constraint)
+        top-constraint))))
+
+(s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
+                                  (s/one [s/Any] "inner query constraints")
+                                  (s/one #{Var} "vars to get aggregations for")]
+  "Splits a WHERE clause up into the part suitable for an outer query,
+   and the remaining constraints, which will be used for an inner query."
+  [constraints :- Pattern                      ;; the WHERE clause
+   selection :- [(s/cond-pre Var Aggregate)]   ;; the FIND clause
+   withs :- [Var]]                             ;; the WITH clause
+  ;; extract the vars we know have to be in the outer query
+  (let [[op & constaint-args] constraints
+        _ (assert (= op 'or))
+        vars (-> (filter vartest? selection) set (into withs))
+        ;; extract the vars from the aggregation terms
+        agg-vars (->> selection (filter aggregate-form?) (map second) set)
+        ;; remove the constraints containing aggregates
+        non-agg-constraints (map (partial aggregate-constraint false vars agg-vars) constaint-args)
+        agg-constraints (map (partial aggregate-constraint true vars agg-vars) constaint-args)]
+    [non-agg-constraints agg-constraints agg-vars]))

@@ -1,13 +1,14 @@
-(ns asami.test-query
+(ns asami.test-query-internals
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
-            [asami.query :refer [add-to-graph pattern-left-join outer-product
-                                 create-binding create-bindings minus left-join disjunction]]
+            [asami.query :as q :refer [add-to-graph pattern-left-join outer-product
+                                       create-binding create-bindings minus left-join disjunction
+                                       result-label aggregate-over aggregate-query]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [naga.util :as u]
             [asami.core :refer [empty-store]]
-            [naga.storage.store-util :refer [matching-vars]]
+            [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -209,6 +210,107 @@
          #"Alternate sides of OR clauses may not contain different vars"
          (disjunction graph part-result '(or [?e :px ?v] [?e :py ?w]))))))
 
+
+(deftest test-result-label
+  "Tests the result-label function, which renames aggregates to addressable labels"
+  (is (= '?a (result-label '?a)))
+  (is (= '?count-a (result-label '(count ?a))))
+  (is (thrown? ExceptionInfo (result-label '[?a])))
+  (is (thrown? ExceptionInfo (result-label '[count ?a]))))
+
+(deftest test-aggregate-over
+  "Tests the aggregation/projection operation"
+  (let [columns {:cols '[?a ?b ?c]}
+        data1 [[:a :b :c]
+               [:a :b :d]
+               [:a :b :e]
+               [:a :b :f]
+               [:a :b :g]]
+        data2 [[:a :m :c]
+               [:a :m :d]]
+        data3 [[:t :u :x]
+               [:t :u :y]
+               [:t :u :z]]
+        unaggregated [(with-meta data1 columns)
+                      (with-meta data2 columns)
+                      (with-meta data3 columns)]
+        results1 (aggregate-over '[?a ?b (count ?c)] unaggregated)
+        results2 (aggregate-over '[?a ?b (first ?c)] unaggregated)
+        results3 (aggregate-over '[?b ?a (last ?c)] unaggregated)]
+    (is (= '[?a ?b ?count-c] (:cols (meta results1))))
+    (is (= '[[:a :b 5] [:a :m 2] [:t :u 3]] results1))
+    (is (= '[?a ?b ?first-c] (:cols (meta results2))))
+    (is (= '[[:a :b :c] [:a :m :c] [:t :u :x]] results2))
+    (is (= '[?b ?a ?last-c] (:cols (meta results3))))
+    (is (= '[[:b :a :g] [:m :a :d] [:u :t :z]] results3)))
+
+  (let [columns {:cols '[?a ?c]}
+        data1 [[:a 1]
+               [:a 2]
+               [:a 3]
+               [:a 4]
+               [:a 5]]
+        data2 [[:a 6]
+               [:a 8]]
+        data3 [[:t 10]
+               [:t 11]
+               [:t 12]]
+        unaggregated [(with-meta data1 columns)
+                      (with-meta data2 columns)
+                      (with-meta data3 columns)]
+        results1 (aggregate-over '[(count ?c)] unaggregated)
+        results2 (aggregate-over '[?a (sum ?c)] unaggregated)
+        results3 (aggregate-over '[(avg ?c) ?a] unaggregated)
+        results4 (aggregate-over '[?a (max ?c)] unaggregated)
+        results5 (aggregate-over '[?a (min ?c)] unaggregated)]
+    (is (= '[?count-c] (:cols (meta results1))))
+    (is (= '[[5] [2] [3]] results1))
+    (is (= '[?a ?sum-c] (:cols (meta results2))))
+    (is (= '[[:a 15] [:a 14] [:t 33]] results2))
+    (is (= '[?avg-c ?a] (:cols (meta results3))))
+    (is (= '[[3 :a] [7 :a] [11 :t]] results3))
+    (is (= '[?a ?max-c] (:cols (meta results4))))
+    (is (= '[[:a 5] [:a 8] [:t 12]] results4))
+    (is (= '[?a ?min-c] (:cols (meta results5))))
+    (is (= '[[:a 1] [:a 6] [:t 10]] results5))))
+
+
+(let [agg-data [[:a :p "first"]
+                [:a :p2 :one]
+                [:a :p2 :two]
+                [:a :p2 :three]
+                [:b :p "second"]
+                [:b :p2 :b-one]
+                [:b :p2 :b-two]
+                [:b :p2 :b-three]
+                [:b :p2 :b-four]
+                [:b :p2 :b-five]]]
+  
+
+  (deftest test-aggregate-query
+    "Tests the function that does query aggregation.
+   This function does lots of work after the arguments have been extracted"
+    (let [find '[?a ?b (count ?c)]
+          bindings q/empty-bindings
+          with []
+          where '[[?a :p ?b] [?a :p2 ?c]]
+          graph (add-to-graph empty-graph agg-data)
+          project-fn (partial project empty-store)
+
+          r (aggregate-query find bindings with where graph project-fn)]
+      (is (= '[?a ?b ?count-c] (:cols (meta r))))
+      (is (= [[:a "first" 3] [:b "second" 5]] r)))
+
+    (let [find '[(count ?c)]
+          bindings q/empty-bindings
+          with []
+          where '[[?a :p ?c]]
+          graph (add-to-graph empty-graph agg-data)
+          project-fn (partial project empty-store)
+
+          r (aggregate-query find bindings with where graph project-fn)]
+      (is (= '[?count-c] (:cols (meta r))))
+      (is (= [[2]] r)))))
 
 #?(:clj
    (deftest test-eval

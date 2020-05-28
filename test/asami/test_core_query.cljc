@@ -377,5 +377,113 @@
                ["Purely Functional Data Structures"]}
              (set r2))))))
 
+(let [pa (nn)
+      paa (nn)
+      pab (nn)
+      pac (nn)
+      pb (nn)
+      pba (nn)
+      pbb (nn)
+      pc (nn)
+      f (nn)
+      m (nn)
+
+      data [[pa :name "Alice"]
+            [pa :gender f]
+            [pa :child paa]
+            [pa :child pab]
+            [pa :child pac]
+            [paa :name "Antoine"]
+            [paa :age 16]
+            [paa :gender m]
+            [pab :name "Betty"]
+            [pab :age 14]
+            [pab :gender f]
+            [pac :name "Chuck"]
+            [pac :age 12]
+            [pac :gender m]
+
+            [pb :name "Barbara"]
+            [pb :gender f]
+            [pb :child pba]
+            [pb :child pbb]
+            [pba :name "Ann"]
+            [pba :age 13]
+            [pba :gender f]
+            [pbb :name "Bob"]
+            [pbb :age 11]
+            [pbb :gender m]
+
+            [pc :name "Cary"]
+            [pc :gender m]
+            [pc :child pba]
+            [pc :child pbb]
+
+            [f :label "female"]
+            [m :label "male"]]]
+
+  (deftest test-aggregates
+    (let [st (-> empty-store (assert-data data))
+          sq (fn [query] (q query st))
+
+          r1 (sq '[:find (count ?person)
+                   :where [?person :gender ?g]])
+          r2 (sq [:find '(count ?child)
+                  :where [pb :child '?child]])
+          r3 (sq '[:find (count ?child)
+                   :where
+                   [?parent :name "Barbara"]
+                   [?parent :child ?child]])
+          r4 (sq '[:find (count ?child)
+                   :where
+                   [?parent :child ?child]])
+          r5 (sq '[:find ?parent (count ?child)
+                   :where
+                   [?parent :child ?child]])
+
+          r6 (sq '[:find (count ?child)
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          r7 (sq '[:find (count ?child)
+                   :with ?parent
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          ]
+      (is (= '[?count-person] (:cols (meta r1))))
+      (is (= [[8]] r1))
+      (is (= '[?count-child] (:cols (meta r2))))
+      (is (= [[2]] r2))
+      (is (= '[?count-child] (:cols (meta r3))))
+      (is (= [[2]] r3))
+      (is (= '[?count-child] (:cols (meta r4))))
+      (is (= [[7]] r4))
+      (is (= '[?parent ?count-child] (:cols (meta r5))))
+      (is (= #{[pa 3] [pb 2] [pc 2]} (set r5)))
+      (is (= '[?count-child] (:cols (meta r6))))
+      (is (= [[5]] r6))
+      (is (= '[?count-child] (:cols (meta r7))))
+      (is (= #{[3] [2]} (set r7)))
+
+      ))
+
+  (deftest test-ag
+    (let [st (-> empty-store (assert-data data))
+          sq (fn [query] (q query st))
+
+          r6 (sq '[:find (count ?child)
+                   :where
+                   [?parent :gender ?f]
+                   [?f :label "female"]
+                   [?parent :child ?child]])
+          ]
+      (is (= '[?count-child] (:cols (meta r6))))
+      (is (= [[5]] r6))
+      ))
+  )
+
 #?(:cljs (run-tests))
 
