@@ -36,8 +36,8 @@
 
 (declare operators)
 
-(extend-type #?(:clj Object :cljs object)
-  HasVars
+(extend-protocol HasVars
+  #?(:clj Object :cljs object)
   (get-vars
     [pattern]
     (cond
@@ -50,7 +50,9 @@
                               (op-error pattern))
       (eval-pattern? pattern) (let [[expr _] pattern]
                                 (filter vartest? expr))
-      :default (pattern-error pattern))))
+      :default (pattern-error pattern)))
+  nil
+  (get-vars [pattern] nil))
 
 (s/defn without :- [s/Any]
   "Returns a sequence minus a specific element"
@@ -582,24 +584,39 @@
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
-          ; _ (prn "simplified" simplified)
           ;; ensure that it is an (or ...) expression
           normalized (planner/normalize-sum-of-products simplified)
-          ; _ (prn "normalized" normalized)
-          ;; extract every element of the or into an outer/inner pair of queries. The results zip
-          [outer-wheres inner-wheres] (planner/split-aggregate-terms normalized find with)
-          ; _ (prn "outer-wheres" outer-wheres)
-          ; _ (prn "inner-wheres" inner-wheres)
+          ;; extract every element of the or into an outer/inner pair of queries.
+          ;; The inner/outer -wheres zip
+          [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
           ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
           ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
 
-          ;; execute the outer queries
-          outer-terms (filter vartest? find)
-          ; _ (prn "outer-terms" outer-terms)
+          ;; for each outer/inner pair, get all of the vars needed to be projected from the outer query
+          ;; also need anything that joins the outer query to the inner query
+          ;; start with the requested vars
+          find-vars (filter vartest? find)
+          ;; convert the requested vars into sets, for filtering
+          find-var-set (set find-vars)
+          with-set (set with)
+          ;; create a function that can find everything in the outer query that the inner query needs
+          ;; remove the columns which will already be projected from :find and :with
+          needed-vars (fn [outer-where inner-where]
+                        (let [inner-var-set (set (get-vars inner-where))]
+                          (sequence (comp
+                                     (remove find-var-set)
+                                     (remove with-set)
+                                     (remove agg-vars)
+                                     (filter inner-var-set))
+                                    (get-vars outer-where))))
           ;; execute the outer query if it exists. If not then return an identity binding.
-          project (fn [a b] b)
-          outer-results (map (fn [w] (if (seq w) (execute-query outer-terms w bindings graph project) identity-binding)) outer-wheres)
-          ; _ (prn "outer-results" outer-results)
+          outer-results (map (fn [ow iw]
+                               (if (seq ow)
+                                 ;; outer query exists, so find the terms to be projected and execute
+                                 (let [outer-terms (concat find-vars with (needed-vars ow iw))]
+                                   (execute-query outer-terms ow bindings graph project-fn))
+                                 identity-binding))
+                             outer-wheres inner-wheres)
           ;; execute the inner queries within the context provided by the outer queries
           inner-results (mapcat (partial context-execute-query graph) outer-results inner-wheres)]
       ;; calculate the aggregates from the final results and project

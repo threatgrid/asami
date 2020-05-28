@@ -451,7 +451,9 @@
       (is (= '[?count-child] (:cols (meta r4))))
       (is (= [[7]] r4))
       (is (= '[?parent ?count-child] (:cols (meta r5))))
-      (is (= [[pa 3] [pb 2] [pc 2]] r5))
+      (is (= #{[pa 3] [pb 2] [pc 2]} (set r5)))
+
+      ;; TODO: queries using WITH
       ))
 
  )
