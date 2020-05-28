@@ -29,7 +29,7 @@ Using the API needs to be expanded upon. The `asami.core/q` function has signifi
 
 ## License
 
-Copyright © 2018-2019 Cisco
+Copyright © 2018-2020 Cisco
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
