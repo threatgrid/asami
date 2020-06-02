@@ -41,6 +41,19 @@
           (reset! m {graph f})
           f)))))
 
+(defn shorten
+  "truncates a symbol or keyword to exclude a ' character"
+  [a]
+  (if (string? a)
+    a
+    (let [nns (namespace a)
+          n (name a)
+          cns (cond
+                (symbol? a) symbol
+                (keyword? a) keyword
+                :default (throw (ex-info "Invalid attribute type in rule head" {:attribute a :type (type a)})))]
+      (cns nns (subs n 0 (dec (count n)))))))
+
 (declare ->MemoryStore)
 
 (defrecord MemoryStore [before-graph graph]
@@ -58,9 +71,9 @@
 
   (new-node [this]
     (->> "node-"
-        gensym
-        name
-        (keyword "mem")))
+         gensym
+         name
+         (keyword "mem")))
 
   (node-id [this n]
     (subs (name n) 5))
@@ -96,13 +109,33 @@
   (assert-schema-opts [this _ _] this)
 
   (query-insert [this assertion-patterns patterns]
-    (letfn [(ins-project [data]
-              (let [cols (:cols (meta data))]
-                (store-util/insert-project this assertion-patterns cols data)))]
-      (->> (query/join-patterns graph patterns nil)
-           ins-project
-           (query/add-to-graph graph)
-           (->MemoryStore before-graph)))))
+    ;; convert projection patterns to output form
+    ;; remember which patterns were converted
+    (let [[assertion-patterns'
+           update-attributes] (reduce (fn [[pts upd] [e a v :as p]]
+                                        (if (or (str/ends-with? (name a) "'") (:update (meta p)))
+                                          (let [short-a (shorten a)]
+                                            [(conj pts [e short-a v]) (conj upd short-a)])
+                                          [(conj pts p) upd]))
+                                      [[] #{}]
+                                      patterns)
+          ins-project (fn [data]
+                        (let [cols (:cols (meta data))]
+                          (store-util/insert-project this assertion-patterns' cols data)))
+          lookup-triple (fn [part-pattern]
+                          (let [pattern (conj part-pattern '?v)
+                                values (gr/resolve-pattern graph pattern)]
+                            (map (partial conj part-pattern) values)))
+          is-update? #(update-attributes (nth % 1))
+          additions (ins-project (query/join-patterns graph patterns nil))
+          removals (->> additions
+                        (filter is-update?)
+                        (map #(vec (take 2 %)))
+                        (mapcat lookup-triple))]
+      (->MemoryStore before-graph
+                     (-> graph
+                         (query/delete-from-graph removals)
+                         (query/add-to-graph additions))))))
 
 (def empty-store (->MemoryStore nil mem/empty-graph))
 

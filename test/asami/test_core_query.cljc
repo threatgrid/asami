@@ -440,6 +440,11 @@
           r5 (sq '[:find ?parent (count ?child)
                    :where
                    [?parent :child ?child]])
+          r5' (sq '[:find ?pname (count ?child)
+                    :where
+                    [?parent :name ?pname]
+                    [?parent :child ?child]])
+
 
           r6 (sq '[:find (count ?child)
                    :where
@@ -463,6 +468,8 @@
       (is (= [[7]] r4))
       (is (= '[?parent ?count-child] (:cols (meta r5))))
       (is (= #{[pa 3] [pb 2] [pc 2]} (set r5)))
+      (is (= '[?pname ?count-child] (:cols (meta r5'))))
+      (is (= #{["Alice" 3] ["Barbara" 2] ["Cary" 2]} (set r5')))
       (is (= '[?count-child] (:cols (meta r6))))
       (is (= [[5]] r6))
       (is (= '[?count-child] (:cols (meta r7))))
