@@ -118,20 +118,25 @@
                                             [(conj pts [e short-a v]) (conj upd short-a)])
                                           [(conj pts p) upd]))
                                       [[] #{}]
-                                      patterns)
+                                      assertion-patterns)
+          var-updates (set (filter symbol? update-attributes))
           ins-project (fn [data]
                         (let [cols (:cols (meta data))]
-                          (store-util/insert-project this assertion-patterns' cols data)))
+                          (if (seq var-updates)
+                            (throw (ex-info "Updating variable attributes not yet supported" {:vars var-updates}))
+                            ;; TODO: when insert-project is imported, modify to attach columns for update vars 
+                            (store-util/insert-project this assertion-patterns' #_var-updates cols data))))
           lookup-triple (fn [part-pattern]
                           (let [pattern (conj part-pattern '?v)
                                 values (gr/resolve-pattern graph pattern)]
-                            (map (partial conj part-pattern) values)))
+                            (sequence (comp (map first) (map (partial conj part-pattern))) values)))
           is-update? #(update-attributes (nth % 1))
-          additions (ins-project (query/join-patterns graph patterns nil))
-          removals (->> additions
+          addition-bindings (ins-project (query/join-patterns graph patterns nil))
+          removals (->> addition-bindings
                         (filter is-update?)
                         (map #(vec (take 2 %)))
-                        (mapcat lookup-triple))]
+                        (mapcat lookup-triple))
+          additions (if (seq var-updates) (map (partial take 3) addition-bindings) addition-bindings)]
       (->MemoryStore before-graph
                      (-> graph
                          (query/delete-from-graph removals)
