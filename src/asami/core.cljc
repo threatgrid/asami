@@ -7,7 +7,6 @@
               [asami.multi-graph :as multi]
               [asami.query :as query]
               [asami.intern :as intern]
-              [naga.storage.store-util :as store-util]
               [naga.store :as store :refer [Storage StorageType]]
               [naga.store-registry :as registry]
               #?(:clj  [schema.core :as s]
@@ -41,6 +40,19 @@
         (let [f (memoize #(gr/count-pattern graph %))]
           (reset! m {graph f})
           f)))))
+
+(defn shorten
+  "truncates a symbol or keyword to exclude a ' character"
+  [a]
+  (if (string? a)
+    a
+    (let [nns (namespace a)
+          n (name a)
+          cns (cond
+                (symbol? a) symbol
+                (keyword? a) keyword
+                :default (throw (ex-info "Invalid attribute type in rule head" {:attribute a :type (type a)})))]
+      (cns nns (subs n 0 (dec (count n)))))))
 
 (declare ->MemoryStore)
 
@@ -81,7 +93,7 @@
       (gr/count-pattern graph pattern)))
 
   (query [this output-pattern patterns]
-    (store-util/project this output-pattern (query/join-patterns graph patterns nil)))
+    (intern/project output-pattern (query/join-patterns graph patterns nil)))
 
   (assert-data [_ data]
     (->MemoryStore before-graph (query/add-to-graph graph data)))
@@ -92,13 +104,38 @@
   (assert-schema-opts [this _ _] this)
 
   (query-insert [this assertion-patterns patterns]
-    (letfn [(ins-project [data]
-              (let [cols (:cols (meta data))]
-                (store-util/insert-project this assertion-patterns cols data)))]
-      (->> (query/join-patterns graph patterns nil)
-           ins-project
-           (query/add-to-graph graph)
-           (->MemoryStore before-graph)))))
+    ;; convert projection patterns to output form
+    ;; remember which patterns were converted
+    (let [[assertion-patterns'
+           update-attributes] (reduce (fn [[pts upd] [e a v :as p]]
+                                        (if (or (str/ends-with? (name a) "'") (:update (meta p)))
+                                          (let [short-a (shorten a)]
+                                            [(conj pts [e short-a v]) (conj upd short-a)])
+                                          [(conj pts p) upd]))
+                                      [[] #{}]
+                                      assertion-patterns)
+          var-updates (set (filter symbol? update-attributes))
+          ins-project (fn [data]
+                        (let [cols (:cols (meta data))]
+                          (if (seq var-updates)
+                            (throw (ex-info "Updating variable attributes not yet supported" {:vars var-updates}))
+                            ;; TODO: when insert-project is imported, modify to attach columns for update vars 
+                            (intern/insert-project graph assertion-patterns' #_var-updates cols data))))
+          lookup-triple (fn [part-pattern]
+                          (let [pattern (conj part-pattern '?v)
+                                values (gr/resolve-pattern graph pattern)]
+                            (sequence (comp (map first) (map (partial conj part-pattern))) values)))
+          is-update? #(update-attributes (nth % 1))
+          addition-bindings (ins-project (query/join-patterns graph patterns nil))
+          removals (->> addition-bindings
+                        (filter is-update?)
+                        (map #(vec (take 2 %)))
+                        (mapcat lookup-triple))
+          additions (if (seq var-updates) (map (partial take 3) addition-bindings) addition-bindings)]
+      (->MemoryStore before-graph
+                     (-> graph
+                         (query/delete-from-graph removals)
+                         (query/add-to-graph additions))))))
 
 (def empty-store (->MemoryStore nil mem/empty-graph))
 
@@ -128,9 +165,4 @@
 
 (s/defn q
   [query & inputs]
-  (let [{:keys [find in with where]} (-> (query/query-map query)
-                                         query/query-validator)
-        [bindings default-store] (query/create-bindings in inputs)
-        store (or default-store empty-store)
-        graph (or (:graph store) mem/empty-graph)]
-    (store-util/project store find (query/join-patterns graph where bindings))))
+  (query/query-entry query empty-store mem/empty-graph inputs))

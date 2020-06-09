@@ -3,7 +3,8 @@
     asami.intern
   (:require [schema.core :as s :refer [=>]]
             [clojure.string :as string]
-            #?(:cljs [cljs.core :refer [Symbol]]))
+            #?(:cljs [cljs.core :refer [Symbol]])
+            [asami.graph :as gr])
   #?(:clj (:import [clojure.lang Symbol])))
 
 
@@ -148,6 +149,23 @@
   [offset-map :- {s/Num s/Num}]
   (seq (set (filter neg? (vals offset-map)))))
 
+(s/defn group-exists? :- [s/Any]
+  "Determines if a group is instantiating a new piece of data,
+   and if so checks if it already exists."
+  [graph
+   group :- [Axiom]]
+  (if-let [[entity _ val :as g] (some (fn [[_ a _ :as axiom]] (when (= a :db/ident) axiom)) group)]
+    (seq (gr/resolve-pattern graph ['?e :db/ident val]))))
+
+(s/defn adorn-entities :- [Axiom]
+  "Marks new entities as stored entities"
+  [triples :- [Axiom]]
+  (reduce (fn [acc [e a v :as triple]]
+            (let [r (conj acc triple)]
+              (if (= :db/ident a) (conj r [e :naga/entity true]) r)))
+          []
+          triples))
+
 (s/defn project :- Results
   "Converts each row from a result, into just the requested columns, as per the patterns arg.
    Any specified value in the patterns will be copied into that position in the projection.
@@ -167,4 +185,19 @@
       (map #(project-row full-pattern nodes pattern->data %) data)
       {:cols full-pattern})))
 
-
+(s/defn insert-project :- Results
+  "Similar to project, only the generated data will be in triples for insertion.
+   If triples describe entities with existing dc/ident fields, then they will be dropped."
+  [graph
+   patterns :- [[s/Any]]
+   #_vars-to-update ;; :- #{Var}  ;; These vars are being updated during projection. Bind them as extra droppable cols
+   columns :- [Symbol]
+   data :- Results]
+  (let [full-pattern (vec (apply concat patterns))
+        pattern->data (offset-mappings full-pattern columns data)
+        nodes (new-nodes pattern->data)]
+    (->> data
+         (map #(partition 3 (project-row full-pattern nodes pattern->data %)))
+         (remove (partial group-exists? graph))
+         (apply concat)
+         adorn-entities)))

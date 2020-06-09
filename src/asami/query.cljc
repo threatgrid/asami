@@ -1,13 +1,12 @@
-(ns ^{:doc "Implements a full query engine based on fully indexed data."
+(ns ^{:doc "Implements query operations based on data accessible through the Graph protocol."
       :author "Paula Gearon"}
     asami.query
-    (:require [naga.schema.store-structs :refer [EPVPattern Results Value
-                                                 FilterPattern Pattern
-                                                 EvalPattern eval-pattern?
-                                                 epv-pattern? filter-pattern?
-                                                 op-pattern?]]
-              [naga.store :refer [Storage StorageType]]
-              [asami.planner :as planner :refer [Bindings PatternOrBindings HasVars get-vars]]
+    (:require [asami.schema :refer [EPVPattern FilterPattern Pattern
+                                    Results Value Var
+                                    EvalPattern eval-pattern?
+                                    epv-pattern? filter-pattern?
+                                    op-pattern?]]
+              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.intern :as intern]
               [naga.util :refer [fn-for]]
@@ -16,6 +15,11 @@
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
+(def ^:dynamic *env* {})
+
+(def ^:dynamic *select-distinct* distinct)
+
+(def ^:const identity-binding (with-meta [[]] {:cols []}))
 
 (s/defn find-vars [f] (set (intern/vars f)))
 
@@ -30,8 +34,8 @@
 
 (declare operators)
 
-(extend-type #?(:clj Object :cljs object)
-  HasVars
+(extend-protocol HasVars
+  #?(:clj Object :cljs object)
   (get-vars
     [pattern]
     (cond
@@ -44,7 +48,9 @@
                               (op-error pattern))
       (eval-pattern? pattern) (let [[expr _] pattern]
                                 (filter intern/vartest? expr))
-      :default (pattern-error pattern))))
+      :default (pattern-error pattern)))
+  nil
+  (get-vars [pattern] nil))
 
 (s/defn without :- [s/Any]
   "Returns a sequence minus a specific element"
@@ -149,28 +155,47 @@
                      (into {}))
         arg-indexes (map-indexed #(var-map %2 (- %1)) args)
         callable-op (cond (fn? op) op
-                          (symbol? op) (fn-for op)
+                          (symbol? op) (or (get *env* op) (fn-for op))
                           (string? op) (fn-for (symbol op))
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
     (with-meta (filter filter-fn part) m)))
 
-;; the following is dead code. TODO: bring this back using the semantics in filter-join function calling
-(comment
 (s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
    Binds a new var to the result of the expression and adds it to the complete results."
   [graph
    part :- Results
-   [expr bnd-var] :- EvalPattern]
+   [[op & args :as expr] bnd-var] :- EvalPattern]
   (let [cols (vec (:cols (meta part)))
-        binding-fn (c-eval (list 'fn [cols] expr)) ;; do not use c-eval
-        new-cols (conj cols bnd-var)]
+        new-cols (conj cols bnd-var)
+        var-map (->> cols
+                     (map-indexed (fn [a b] [b a]))
+                     (into {}))
+        arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
+        expr (vec expr)
+        binding-fn (if (intern/vartest? op)
+                     (let [op-idx (var-map op)]
+                       (fn [row]
+                         (concat row
+                                 [(apply (nth row op-idx)
+                                         (map
+                                          #(if (neg? %) (nth expr (- %)) (nth row %))
+                                          arg-indexes))])))
+                     (let [callable-op (cond (fn? op) op
+                                             (symbol? op) (fn-for op)
+                                             (string? op) (fn-for (symbol op)))]
+                       (fn [row]
+                         (concat row
+                                 [(apply callable-op
+                                         (map
+                                          #(if (neg? %) (nth expr (- %)) (nth row %))
+                                          arg-indexes))]))))]
     (with-meta
-     (map (fn [row] (concat row [(c-eval row)])) part)  ;; do not use c-eval
-     {:cols new-cols})))
-)
+      (map binding-fn part)
+      {:cols new-cols})))
+
 
 (def ^:dynamic *plan-options* [:min])
 
@@ -223,17 +248,37 @@
       col-meta)))
 
 (s/defn disjunction
-  "NOTE: This is a placeholder implementation. There is no optimization."
+  "Implements an OR operation by repeating a join across each arm of the operation,
+   and concatenating the results"
+  [graph
+   part :- Results
+   [_ & patterns]]  ;; Discard the first element, since it is just the OR operator
+  (let [spread (map #(left-join % part graph) patterns)
+        cols (:cols (meta (first spread)))]
+    (doseq [s (rest spread)]
+      (when (not= (:cols (meta s)) cols)
+        (throw (ex-info
+                "Alternate sides of OR clauses may not contain different vars"
+                (zipmap patterns (map (comp :cols meta) spread))))))
+    (with-meta
+      ;; Does distinct create a scaling issue?
+      (*select-distinct* (apply concat (map #(left-join % part graph) patterns)))
+      {:cols (:cols (meta (first spread)))})))
+
+(s/defn conjunction
+  "Reorders arguments for left-join and drop the AND operator"
   [graph
    part :- Results
    [_ & patterns]]
-  (apply concat (map #(left-join % part graph) patterns)))
+  (left-join patterns part graph))
 
 (def operators
   {'not {:get-vars #(mapcat get-vars (rest %))
          :left-join minus}
    'or {:get-vars #(mapcat get-vars (rest %))
-        :left-join disjunction}})
+        :left-join disjunction}
+   'and {:get-vars #(mapcat get-vars (rest %))
+         :left-join conjunction}})
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
@@ -244,6 +289,7 @@
     (planner/bindings? pattern) (prebound-left-join results pattern)
     (epv-pattern? pattern) (pattern-left-join graph results pattern)
     (filter-pattern? pattern) (filter-join graph results pattern)
+    (eval-pattern? pattern) (binding-join graph results pattern)
     (op-pattern? pattern) (if-let [{:keys [left-join]} (operators (first pattern))]
                             (left-join graph results pattern)
                             (op-error pattern))
@@ -304,13 +350,14 @@
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
 (s/defn create-bindings :- [(s/one (s/maybe Bindings) "The bindings for other params")
-                            (s/one (s/maybe StorageType) "The default storage")]
+                            (s/one (s/maybe s/Any) "The default storage")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
-   values :- (s/cond-pre (s/protocol Storage) s/Any)]
+   values ;; :- (s/cond-pre (s/protocol Storage) s/Any)
+   ]
   (if-not (seq in)
     [empty-bindings (first values)]
-    (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
+    (let [[default :as defaults] (remove nil? (map (fn [n v] (when (= '$ n) v)) in values))]
       (when (< 1 (count defaults))
         (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
       (when-not (<= (count in) (count values))
@@ -336,18 +383,26 @@
 
 (s/defn run-simple-query
   [graph
-   [fpattern & patterns] :- [PatternOrBindings]]
+   [fpattern & patterns :as all-patterns] :- [PatternOrBindings]]
   ;; if provided with bindings, then join the entire path to them,
   ;; otherwise, start with the first item in the path, and join the remainder
-  (let [;; execute the plan by joining left-to-right
+  (let [ ;; execute the plan by joining left-to-right
         ;; left-join has back-to-front params for dispatch reasons
         ljoin #(left-join %2 %1 graph)
-        part-result (if (planner/bindings? fpattern)
-                      fpattern
-                      (with-meta
-                        (gr/resolve-pattern graph fpattern)
-                        {:cols (intern/vars fpattern)}))]
-    (reduce ljoin part-result patterns)))
+        ;; resolve the initial part of the query, and get the remaining patterns to join
+        [part-result proc-patterns] (cond
+                                      ;; the first element is already a partial result
+                                      (planner/bindings? fpattern) [fpattern patterns]
+                                      ;; the first element is a pattern lookup
+                                      (epv-pattern? fpattern) [(with-meta
+                                                                 (gr/resolve-pattern graph fpattern)
+                                                                 {:cols (intern/vars fpattern)})
+                                                               patterns]
+                                      ;; the first element is an operation,
+                                      ;; start with an empty result and process all the patterns
+                                      :default [identity-binding all-patterns])]
+    ;; process the remaining query
+    (reduce ljoin part-result proc-patterns)))
 
 (s/defn gate-fn
   "Returns a function that allows data through it or not,
@@ -377,14 +432,15 @@
     (if-not rpath
 
       ;; single path element - executed separately as an optimization
-      (if (planner/bindings? fpath)
-        fpath
-        (with-meta
-          (gr/resolve-pattern graph fpath)
-          {:cols (intern/vars fpath)}))
+      (cond
+        (planner/bindings? fpath) fpath
+        (epv-pattern? fpath) (with-meta
+                               (gr/resolve-pattern graph fpath)
+                               {:cols (intern/vars fpath)})
+        :default (run-simple-query graph [fpath]))
 
       ;; normal operation
-      (let [;; if the plan begins with a negation, then it's not bound to the rest of
+      (let [ ;; if the plan begins with a negation, then it's not bound to the rest of
             ;; the plan, and it creates a "gate" for the result
             result-gate (gate-fn graph (take-while planner/not-operation? path))
             path' (drop-while planner/not-operation? path)]
@@ -404,15 +460,28 @@
 (def query-keys #{:find :in :with :where})
 
 (s/defn query-map
+  "Parses a query into it's main components.
+   Queries can be a sequence, a map, or an EDN string. These are based on Datomic-style queries.
+   The return map contains:
+   :find - The elements to be projected from a query.
+   :all - true if duplicates are to be returned, false otherwise. Defaults to false.
+   :in - A list of data sources. Optional.
+   :with - list of variables for grouping.
+   :where - A sequence of constraints for the query."
   [query]
-  (cond
-    (map? query) query
-    (string? query) (query-map (edn/read-string query))
-    (sequential? query) (->> query
-                             (partition-by query-keys)
-                             (partition 2)
-                             (map (fn [[[k] v]] [k v]))
-                             (into {}))))
+  (let [{find :find :as qmap}
+        (cond
+          (map? query) query
+          (string? query) (query-map (edn/read-string query))
+          (sequential? query) (->> query
+                                   (partition-by query-keys)
+                                   (partition 2)
+                                   (map (fn [[[k] v]] [k v]))
+                                   (into {})))
+        [find' all] (if (= :all (first find))
+                      [(rest find) true]
+                      [(remove #{:distinct} find) false])]
+    (assoc qmap :find find' :all all)))
 
 (s/defn newl :- s/Str
   [s :- (s/maybe s/Str)
@@ -420,8 +489,9 @@
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
 (s/defn query-validator
-  [{:keys [find in with where] :as query} :- {s/Keyword [s/Any]}]
-  (let [unknown-keys (->> (keys query) (remove query-keys) seq) 
+  [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
+  (let [extended-query-keys (into query-keys [:all :distinct])
+        unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq) 
         non-seq-wheres (seq (remove sequential? where))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
@@ -431,3 +501,137 @@
     (if err-text
       (throw (ex-info err-text {:query query}))
       query)))
+
+(s/defn execute-query
+  [selection constraints bindings graph project-fn]
+  ;; joins must happen across a seq that is a conjunction
+  (let [top-conjunction (if (seq? constraints)  ;; is this a list?
+                          (let [[op & args] constraints]
+                            (cond
+                              (vector? op) constraints    ;; Starts with top level EPV. Already in the correct form
+                              (#{'and 'AND} op) args      ;; Starts with top level AND. Use the arguments
+                              (operators op) (list constraints) ;; top level form. Wrap as a conjunction
+                              (seq? op) constraints       ;; first form is an operation. Already in the correct form
+                              :default (throw (ex-info "Unknown constraint format" {:constraint constraints}))))
+                          (list constraints))             ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
+        select-distinct (fn [xs] (let [m (meta xs)] (with-meta (*select-distinct* xs) m)))]
+    (->> (join-patterns graph top-conjunction bindings)
+         (project-fn selection)
+         select-distinct)))
+
+(s/defn prepend
+  [element
+   pattern :- Pattern]
+  (let [[op & args] pattern]
+    (cond (vector? op) (cons element pattern))
+          (#{'and 'AND} op) (cons element args)
+          :default (list element pattern)))
+
+(s/defn context-execute-query
+  "For each line in a context, execute a query specified by the where clause"
+  [graph
+   context :- Results
+   [op & args :as where] :- Pattern]
+  (let [context-cols (meta context)
+        ljoin #(left-join %2 %1 graph)
+        where (if (#{'and 'AND} op) args (list where))
+        subquery (fn [row] (reduce ljoin (with-meta (list row) context-cols) where))]
+    (map subquery context)))
+
+(def aggregate-fns
+  "Map of aggregate symbols to functions that accept a seq of data to be aggregated"
+  {'sum (partial apply +)
+   'count count
+   'avg #(/ (apply + %) (count %))
+   'max (partial apply max)
+   'min (partial apply min)
+   'first first
+   'last last})
+
+(s/defn result-label :- s/Symbol
+  "Convert an element from a select/find clause into an appropriate label.
+   Note that duplicate columns are not considered"
+  [e]
+  (cond
+    (intern/vartest? e) e
+    (and (seq? e) (= 2 (count e))) (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))
+    :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
+
+(s/defn aggregate-over :- Results
+  "For each seq of results, aggregates individually, and then together"
+  [selection :- [s/Any]
+   partial-results :- [Results]]
+  (letfn [(var-index [columns]
+            (into {} (map-indexed (fn [n c] [c n]) columns)))
+          (get-selectors [idxs]
+            (map (fn [s]
+                   (if (intern/vartest? s)
+                     [first (idxs s)]
+                     [(aggregate-fns (first s)) (idxs (second s))]))
+                 selection))
+          (project-aggregate [result]
+            (let [idxs (var-index (:cols (meta result)))]
+              (for [[col-fn col-offset] (get-selectors idxs)]
+                (let [col-data (map #(nth % col-offset) result)]
+                  (col-fn col-data)))))]
+    (with-meta
+      (map project-aggregate partial-results)
+      {:cols (mapv result-label selection)})))
+
+(s/defn aggregate-query
+  [find bindings with where graph project-fn]
+  (binding [*select-distinct* distinct]
+    ;; flatten the query
+    (let [simplified (planner/simplify-algebra where)
+          ;; ensure that it is an (or ...) expression
+          normalized (planner/normalize-sum-of-products simplified)
+          ;; extract every element of the or into an outer/inner pair of queries.
+          ;; The inner/outer -wheres zip
+          [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
+          ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
+          ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
+
+          ;; for each outer/inner pair, get all of the vars needed to be projected from the outer query
+          ;; also need anything that joins the outer query to the inner query
+          ;; start with the requested vars
+          find-vars (filter intern/vartest? find)
+          ;; convert the requested vars into sets, for filtering
+          find-var-set (set find-vars)
+          with-set (set with)
+          ;; create a function that can find everything in the outer query that the inner query needs
+          ;; remove the columns which will already be projected from :find and :with
+          needed-vars (fn [outer-where inner-where]
+                        (let [inner-var-set (set (get-vars inner-where))]
+                          (sequence (comp
+                                     (remove find-var-set)
+                                     (remove with-set)
+                                     (remove agg-vars)
+                                     (filter inner-var-set))
+                                    (get-vars outer-where))))
+          ;; execute the outer query if it exists. If not then return an identity binding.
+          outer-results (map (fn [ow iw]
+                               (if (seq ow)
+                                 ;; outer query exists, so find the terms to be projected and execute
+                                 (let [outer-terms (concat find-vars with (needed-vars ow iw))]
+                                   (execute-query outer-terms ow bindings graph project-fn))
+                                 identity-binding))
+                             outer-wheres inner-wheres)
+          ;; execute the inner queries within the context provided by the outer queries
+          ;; remove the empty results. This means that empty values are not counted!
+          inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
+      ;; calculate the aggregates from the final results and project
+      (aggregate-over find inner-results))))
+
+(s/defn query-entry
+  "Main entry point of user queries"
+  [query empty-store empty-graph inputs]
+  (let [{:keys [find all in with where]} (-> (query-map query)
+                                             query-validator)
+        [bindings default-store] (create-bindings in inputs)
+        store (or default-store empty-store)
+        graph (or (:graph store) empty-graph)
+        project-fn intern/project]  ;; TODO REMOVE THIS ARG AND CALL DIRECTLY
+    (if (seq (filter planner/aggregate-form? find))
+      (aggregate-query find bindings with where graph project-fn)
+      (binding [*select-distinct* (if all identity distinct)]
+        (execute-query find where bindings graph project-fn)))))
