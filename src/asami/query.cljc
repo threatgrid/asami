@@ -8,7 +8,8 @@
                                     op-pattern?]]
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
-              [asami.intern :as intern]
+              [asami.internal :as internal]
+              [naga.storage.store-util :as projection]
               [naga.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -21,7 +22,7 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
-(s/defn find-vars [f] (set (intern/vars f)))
+(s/defn find-vars [f] (set (internal/vars f)))
 
 (defn op-error
   [pattern]
@@ -47,7 +48,7 @@
                               (get-vars pattern)
                               (op-error pattern))
       (eval-pattern? pattern) (let [[expr _] pattern]
-                                (filter intern/vartest? expr))
+                                (filter internal/vartest? expr))
       :default (pattern-error pattern)))
   nil
   (get-vars [pattern] nil))
@@ -86,11 +87,11 @@
    part :- Results
    pattern :- EPVPattern]
   (let [cols (:cols (meta part))
-        total-cols (->> (intern/vars pattern)
+        total-cols (->> (internal/vars pattern)
                         (remove (set cols))
                         (concat cols)
                         (into []))
-        pattern->left (intern/matching-vars pattern cols)]
+        pattern->left (projection/matching-vars pattern cols)]
     ;; iterate over part, lookup pattern
     (with-meta
       (for [lrow part
@@ -118,7 +119,7 @@
                         (remove (set lcols))
                         (concat lcols)
                         (into []))
-        left->binding (intern/matching-vars lcols rcols)]
+        left->binding (projection/matching-vars lcols rcols)]
     (with-meta
       (if (seq left->binding)
         (let [key-indices (sort (keys left->binding))
@@ -175,7 +176,7 @@
                      (into {}))
         arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
         expr (vec expr)
-        binding-fn (if (intern/vartest? op)
+        binding-fn (if (internal/vartest? op)
                      (let [op-idx (var-map op)]
                        (fn [row]
                          (concat row
@@ -215,7 +216,7 @@
        (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
          (let [cols (:cols col-meta)  ;; existing bound column names
                ;; map the first pattern's vars into the existing binding columns. Used for the first resolution.
-               pattern->left (intern/matching-vars fpattern cols)
+               pattern->left (projection/matching-vars fpattern cols)
                ;; find all bound vars that will be needed for the entire subquery
                vars (reduce #(into %1 (get-vars %2)) #{} patterns)
                ;; get the required bound column names, in order
@@ -223,7 +224,7 @@
                ;; the required bound column indexes
                pattern-val-idxs (set (keep-indexed (fn [n col] (when (vars col) n)) cols))
                ;; the columns about to get bound from the first pattern of the subquery
-               un-bound (keep-indexed #(when (and (intern/vartest? %2) (not (pattern->left %1))) %2) fpattern)
+               un-bound (keep-indexed #(when (and (internal/vartest? %2) (not (pattern->left %1))) %2) fpattern)
                ;; all the columns resulting from resolving the first pattern of the subquery
                first-cols {:cols (vec (concat pre-bound un-bound))}]
            (fn [part-line]
@@ -350,7 +351,7 @@
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
 (s/defn create-bindings :- [(s/one (s/maybe Bindings) "The bindings for other params")
-                            (s/one (s/maybe s/Any) "The default storage")]
+                            (s/one (s/maybe s/Any) "The default graph")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
    values ;; :- (s/cond-pre (s/protocol Storage) s/Any)
@@ -396,7 +397,7 @@
                                       ;; the first element is a pattern lookup
                                       (epv-pattern? fpattern) [(with-meta
                                                                  (gr/resolve-pattern graph fpattern)
-                                                                 {:cols (intern/vars fpattern)})
+                                                                 {:cols (internal/vars fpattern)})
                                                                patterns]
                                       ;; the first element is an operation,
                                       ;; start with an empty result and process all the patterns
@@ -436,7 +437,7 @@
         (planner/bindings? fpath) fpath
         (epv-pattern? fpath) (with-meta
                                (gr/resolve-pattern graph fpath)
-                               {:cols (intern/vars fpath)})
+                               {:cols (internal/vars fpath)})
         :default (run-simple-query graph [fpath]))
 
       ;; normal operation
@@ -553,7 +554,7 @@
    Note that duplicate columns are not considered"
   [e]
   (cond
-    (intern/vartest? e) e
+    (internal/vartest? e) e
     (and (seq? e) (= 2 (count e))) (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))
     :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
 
@@ -565,7 +566,7 @@
             (into {} (map-indexed (fn [n c] [c n]) columns)))
           (get-selectors [idxs]
             (map (fn [s]
-                   (if (intern/vartest? s)
+                   (if (internal/vartest? s)
                      [first (idxs s)]
                      [(aggregate-fns (first s)) (idxs (second s))]))
                  selection))
@@ -594,7 +595,7 @@
           ;; for each outer/inner pair, get all of the vars needed to be projected from the outer query
           ;; also need anything that joins the outer query to the inner query
           ;; start with the requested vars
-          find-vars (filter intern/vartest? find)
+          find-vars (filter internal/vartest? find)
           ;; convert the requested vars into sets, for filtering
           find-var-set (set find-vars)
           with-set (set with)
@@ -624,13 +625,13 @@
 
 (s/defn query-entry
   "Main entry point of user queries"
-  [query empty-store empty-graph inputs]
+  [query empty-graph inputs]
   (let [{:keys [find all in with where]} (-> (query-map query)
                                              query-validator)
-        [bindings default-store] (create-bindings in inputs)
-        store (or default-store empty-store)
-        graph (or (:graph store) empty-graph)
-        project-fn intern/project]  ;; TODO REMOVE THIS ARG AND CALL DIRECTLY
+        [bindings default-graph] (create-bindings in inputs)
+        graph (or default-graph empty-graph)
+        project-fn (partial projection/project {:new-node internal/new-node
+                                                :node-label internal/node-label})]
     (if (seq (filter planner/aggregate-form? find))
       (aggregate-query find bindings with where graph project-fn)
       (binding [*select-distinct* (if all identity distinct)]

@@ -1,8 +1,9 @@
 (ns asami.test-core-query
   "Tests the public query functionality"
-  (:require [naga.store :refer [new-node assert-data]]
-            [asami.core :refer [empty-store q]]
+  (:require [asami.core :refer [q assert-data]]
+            [asami.internal :refer [new-node]]
             [asami.query :refer [*env*]]
+            [asami.index :refer [empty-graph]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -10,7 +11,7 @@
                :cljs [schema.test :as st :refer-macros [deftest]]))
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
-(defn nn [] (new-node empty-store))
+(def nn new-node)
 
 (let [pmc (nn)
       gh (nn)
@@ -35,7 +36,7 @@
             [r5 :release/artists jl]
             [r5 :release/name "Imagine"]]
 
-      store (-> empty-store
+      store (-> empty-graph
                 (assert-data data))]
 
   (deftest test-simple-query
@@ -189,7 +190,7 @@
              [v5 :observable obs5]]]
 
   (deftest test-negation-query
-    (let [st (-> empty-store (assert-data idata))
+    (let [st (-> empty-graph (assert-data idata))
           observables (q '[:find ?type ?value
                            :where [?observable :type ?type]
                            [?observable :value ?value]
@@ -222,7 +223,7 @@
              disp-observables))))
 
   (deftest test-negation-binding-query
-    (let [st (-> empty-store (assert-data idata))
+    (let [st (-> empty-graph (assert-data idata))
           observables (q '[:find ?type ?value
                            :in $ ?observable-type
                            :where [?observable :type ?type]
@@ -258,7 +259,7 @@
              [other1 :id "other-1"]]]
 
   (deftest test-disjunctions
-    (let [st (-> empty-store (assert-data ddata))
+    (let [st (-> empty-graph (assert-data ddata))
           r1 (q '[:find ?related ?type ?value
                   :where [?observable :value ?value]
                   [?observable :type ?type]
@@ -312,7 +313,7 @@
             [b3 :profit 15.00]]]
 
   (deftest test-value-bindings
-    (let [st (-> empty-store (assert-data data))
+    (let [st (-> empty-graph (assert-data data))
           r1 (q '[:find ?title ?cost
                   :where [?book :title ?title]
                   [?book :price ?price]
@@ -357,7 +358,7 @@
              (set r4)))))
   
  (deftest test-filter-queries
-    (let [st (-> empty-store (assert-data data))
+    (let [st (-> empty-graph (assert-data data))
           r1 (q '[:find ?title ?profit
                   :where [?book :title ?title]
                   [?book :price ?price]
@@ -423,7 +424,7 @@
             [m :label "male"]]]
 
   (deftest test-aggregates
-    (let [st (-> empty-store (assert-data data))
+    (let [st (-> empty-graph (assert-data data))
           sq (fn [query] (q query st))
 
           r1 (sq '[:find (count ?person)
@@ -478,7 +479,7 @@
       ))
 
   (deftest test-ag
-    (let [st (-> empty-store (assert-data data))
+    (let [st (-> empty-graph (assert-data data))
           sq (fn [query] (q query st))
 
           r6 (sq '[:find (count ?child)

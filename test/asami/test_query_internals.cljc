@@ -6,8 +6,8 @@
                                        result-label aggregate-over aggregate-query]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
+            [asami.internal :as internal]
             [naga.util :as u]
-            [asami.core :refer [empty-store]]
             [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -129,9 +129,9 @@
 
 (deftest test-bindings
   (testing "scalar"
-    (let [[bds] (create-bindings '[$ ?a] [empty-store 5])
-          [bds2] (create-bindings '[$ ?a ?b] [empty-store 5 6])
-          [bds3] (create-bindings '[?a $] [5 empty-store])]
+    (let [[bds] (create-bindings '[$ ?a] [empty-graph 5])
+          [bds2] (create-bindings '[$ ?a ?b] [empty-graph 5 6])
+          [bds3] (create-bindings '[?a $] [5 empty-graph])]
       (is (= [[5]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 6]] bds2))
@@ -139,25 +139,25 @@
       (is (= [[5]] bds3))
       (is (= '[?a] (:cols (meta bds3))))))
   (testing "tuple"
-    (let [[bds] (create-bindings '[$ [?a ?b]] [empty-store [5 6]])
-          [bds2] (create-bindings '[[?a ?b] $] [[5 6] empty-store])
-          [bds3] (create-bindings '[$ [?a ?b] [?c ?d]] [empty-store [5 6] [7 8]])]
+    (let [[bds] (create-bindings '[$ [?a ?b]] [empty-graph [5 6]])
+          [bds2] (create-bindings '[[?a ?b] $] [[5 6] empty-graph])
+          [bds3] (create-bindings '[$ [?a ?b] [?c ?d]] [empty-graph [5 6] [7 8]])]
       (is (= [[5 6]] bds))
       (is (= '[?a ?b] (:cols (meta bds))))
       (is (= bds bds2))
       (is (= [[5 6 7 8]] bds3))
       (is (= '[?a ?b ?c ?d] (:cols (meta bds3))))
-      (is (thrown? ExceptionInfo (create-bindings '[$ [?a ?b] [?b ?c]] [empty-store [5 6] [7 8]])))))
+      (is (thrown? ExceptionInfo (create-bindings '[$ [?a ?b] [?b ?c]] [empty-graph [5 6] [7 8]])))))
   (testing "collection"
-    (let [[bds] (create-bindings '[$ [?a ...]] [empty-store [5 6]])
-          [bds2] (create-bindings '[$ [?a ...] [?b ...]] [empty-store [5 6] [7 8]])]
+    (let [[bds] (create-bindings '[$ [?a ...]] [empty-graph [5 6]])
+          [bds2] (create-bindings '[$ [?a ...] [?b ...]] [empty-graph [5 6] [7 8]])]
       (is (= [[5] [6]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 7] [5 8] [6 7] [6 8]] bds2))
       (is (= '[?a ?b] (:cols (meta bds2))))))
   (testing "relation"
-    (let [[bds] (create-bindings '[$ [[?a ?b]]] [empty-store [[5 6] [7 8]]])
-          [bds2] (create-bindings '[$ [[?a ?b]] [[?c ?d]]] [empty-store [[5 6] [7 8]] [[1 2]]])]
+    (let [[bds] (create-bindings '[$ [[?a ?b]]] [empty-graph [[5 6] [7 8]]])
+          [bds2] (create-bindings '[$ [[?a ?b]] [[?c ?d]]] [empty-graph [[5 6] [7 8]] [[1 2]]])]
       (is (= [[5 6] [7 8]] bds))
       (is (= '[?a ?b] (:cols (meta bds))))
       (is (= [[5 6 1 2] [7 8 1 2]] bds2))
@@ -295,7 +295,7 @@
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
           graph (add-to-graph empty-graph agg-data)
-          project-fn (partial project empty-store)
+          project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]
       (is (= '[?a ?b ?count-c] (:cols (meta r))))
@@ -306,7 +306,7 @@
           with []
           where '[[?a :p ?c]]
           graph (add-to-graph empty-graph agg-data)
-          project-fn (partial project empty-store)
+          project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]
       (is (= '[?count-c] (:cols (meta r))))
