@@ -14,6 +14,9 @@
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj [clojure.core.cache :as c])))
 
+(def empty-graph mem/empty-graph)
+(def empty-multi-graph multi/empty-multi-graph)
+
 (defn assert-data
   [graph data]
   (query/add-to-graph graph data))
