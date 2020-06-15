@@ -186,7 +186,7 @@
                                           #(if (neg? %) (nth expr (- %)) (nth row %))
                                           arg-indexes))])))
                      (let [callable-op (cond (fn? op) op
-                                             (symbol? op) (fn-for op)
+                                             (symbol? op) (or (get *env* op) (fn-for op))
                                              (string? op) (fn-for (symbol op)))]
                        (fn [row]
                          (concat row
