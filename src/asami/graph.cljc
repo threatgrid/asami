@@ -37,3 +37,7 @@
 
 (defn node-type? [n] (and (keyword? n) (= tg-ns (namespace n)) (string/starts-with? (name n) node-prefix)))
 
+(defn node-label
+  "Returns a keyword label for a node"
+  [n]
+  (keyword tg-ns (str "id-" (node-id n))))
