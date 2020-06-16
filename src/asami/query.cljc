@@ -9,7 +9,7 @@
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
-              [naga.storage.store-util :as projection]
+              [zuko.projection :as projection]
               [naga.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -630,8 +630,7 @@
                                              query-validator)
         [bindings default-graph] (create-bindings in inputs)
         graph (or default-graph empty-graph)
-        project-fn (partial projection/project {:new-node internal/new-node
-                                                :node-label internal/node-label})]
+        project-fn (partial projection/project internal/project-args)]
     (if (seq (filter planner/aggregate-form? find))
       (aggregate-query find bindings with where graph project-fn)
       (binding [*select-distinct* (if all identity distinct)]

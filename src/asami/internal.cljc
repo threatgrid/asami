@@ -8,38 +8,9 @@
   #?(:clj (:import [clojure.lang Symbol])))
 
 
-(def data-property :naga/first)
 
-(def container-property :naga/contains)
-
-(defn new-node
-  "Create a new node"
-  []
-  (->> "node-"
-       gensym
-       name
-       (keyword "mem")))
-
-(defn node-id
-  "Retrieve the unique ID of a node"
-  [n]
-  (subs (name n) 5))
-
-(defn node-type?
-  "Test if the presented object is an internal node"
-  [value]
-  (and (keyword? value)
-       (= "mem" (namespace value))
-       (string/starts-with? (name value) "node-")))
-
-(defn node-label
-  "Returns a keyword label for a node"
-  [n]
-  (keyword "naga" (str "id-" (node-id n))))
-
-
-(def project-args {:new-node new-node
-                   :node-label node-label})
+(def project-args {:new-node graph/new-node
+                   :node-label graph/node-label})
 
 (defn project-ins-args
   [graph]

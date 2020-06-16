@@ -1,7 +1,7 @@
 (ns asami.test-core-query
   "Tests the public query functionality"
   (:require [asami.core :refer [q assert-data]]
-            [asami.internal :refer [new-node]]
+            [asami.graph :refer [new-node]]
             [asami.query :refer [*env*]]
             [asami.index :refer [empty-graph]]
             [schema.core :as s]
