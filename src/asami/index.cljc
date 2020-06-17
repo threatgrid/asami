@@ -4,7 +4,7 @@
   (:require [asami.graph :as gr :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
-            [zuko.entity.graph-api :refer [SimpleGraphAPI]]
+            [zuko.node :refer [NodeAPI]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -92,7 +92,7 @@
       (count-transitive-from-index this trans-tag subj plain-pred obj)
       (common/count-from-index this subj pred obj)))
   
-  SimpleGraphAPI
+  NodeAPI
   (data-attribute [_ _] :tg/first)
   (container-attribute [_ _] :tg/contains)
   (new-node [_] (gr/new-node))

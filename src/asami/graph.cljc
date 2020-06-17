@@ -30,7 +30,7 @@
 (def node-prefix "node-")
 (def prefix-len (count node-prefix))
 
-;; common implementations of the SimpleGraphAPI functions
+;; common implementations of the NodeAPI functions
 (defn new-node [] (->> node-prefix gensym name (keyword tg-ns)))
 
 (defn node-id [n] (subs (name n) prefix-len))
