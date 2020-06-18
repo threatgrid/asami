@@ -3,7 +3,7 @@ and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
-            [asami.schema :as st]
+            [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
