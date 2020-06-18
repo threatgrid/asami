@@ -98,6 +98,6 @@
   (new-node [_] (gr/new-node))
   (node-id [_ n] (gr/node-id n))
   (node-type? [_ _ n] (gr/node-type? n))
-  (resolve-pattern [this [e a v]] (resolve-triple this e a v)))
+  (find-triple [this [e a v]] (resolve-triple this e a v)))
 
 (def empty-graph (->GraphIndexed {} {} {}))
