@@ -7,7 +7,6 @@
                  [org.clojure/clojurescript "1.10.764"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/naga-store "0.3.5"]
                  [org.clojars.quoll/zuko "0.1.0-SNAPSHOT"]]
   :plugins [[lein-cljsbuild "1.1.7"]
             [cider/cider-nrepl "0.24.0"]]
