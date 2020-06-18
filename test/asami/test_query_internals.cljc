@@ -7,7 +7,7 @@
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
             [asami.internal :as internal]
-            [naga.util :as u]
+            [zuko.util :as u]
             [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]

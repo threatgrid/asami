@@ -10,7 +10,7 @@
               [asami.graph :as gr]
               [asami.internal :as internal]
               [zuko.projection :as projection]
-              [naga.util :refer [fn-for]]
+              [zuko.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj  [clojure.edn :as edn]
