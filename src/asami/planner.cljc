@@ -6,7 +6,7 @@
               [clojure.string :as str]
               [zuko.schema :refer [EPVPattern Pattern EvalPattern Var vartest?
                                    epv-pattern? filter-pattern? eval-pattern? op-pattern?]]
-              [naga.util :as u]
+              [zuko.util :as u]
               [asami.graph :as gr]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
