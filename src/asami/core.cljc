@@ -8,7 +8,6 @@
               [asami.query :as query]
               [asami.internal :as internal]
               [naga.store :as store :refer [Storage StorageType]]
-              [naga.storage.store-util :as projection]
               [naga.store-registry :as registry]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
