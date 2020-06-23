@@ -472,7 +472,7 @@
   [query]
   (let [{find :find :as qmap}
         (cond
-          (map? query) query
+          (map? query) (update query :where seq)
           (string? query) (query-map (edn/read-string query))
           (sequential? query) (->> query
                                    (partition-by query-keys)
