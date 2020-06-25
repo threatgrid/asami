@@ -1,7 +1,8 @@
 (ns asami.test-query-internals
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
-            [asami.query :as q :refer [add-to-graph pattern-left-join outer-product
+            [asami.core :as core :refer [assert-data retract-data]]
+            [asami.query :as q :refer [pattern-left-join outer-product
                                        create-binding create-bindings minus left-join disjunction
                                        result-label aggregate-over aggregate-query]]
             [asami.graph :refer [Graph resolve-triple]]
@@ -37,7 +38,7 @@
    [:z :px :c]])
 
 (deftest test-join
-  (let [graph (add-to-graph empty-graph join-data)
+  (let [graph (assert-data empty-graph join-data)
         part-result (with-meta
                       [[:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
                       {:cols '[?p ?o]})
@@ -176,7 +177,7 @@
    [:z :px :c]])
 
 (deftest test-minus
-  (let [graph (add-to-graph empty-graph minus-data)
+  (let [graph (assert-data empty-graph minus-data)
         part-result (with-meta
                       [[:p1 :a] [:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
                       {:cols '[?p ?o]})
@@ -198,7 +199,7 @@
    [:d :pz :q]])
 
 (deftest test-or
-  (let [graph (add-to-graph empty-graph or-data)
+  (let [graph (assert-data empty-graph or-data)
         part-result (with-meta
                       [[:a] [:b] [:c] [:d]]
                       {:cols '[?e]})
@@ -294,7 +295,7 @@
           bindings q/empty-bindings
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
-          graph (add-to-graph empty-graph agg-data)
+          graph (assert-data empty-graph agg-data)
           project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]
@@ -305,7 +306,7 @@
           bindings q/empty-bindings
           with []
           where '[[?a :p ?c]]
-          graph (add-to-graph empty-graph agg-data)
+          graph (assert-data empty-graph agg-data)
           project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]

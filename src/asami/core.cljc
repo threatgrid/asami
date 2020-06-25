@@ -25,8 +25,11 @@
 (def empty-graph mem/empty-graph)
 (def empty-multi-graph multi/empty-multi-graph)
 
+;; simple type to represent the assertion or removal of data
+(deftype Datom [entity attribute value tx-id action])
+
 ;; graph is the wrapped graph
-;; history is a list of Database, excluding this one
+;; history is a seq of Databases, excluding this one
 ;; timestamp is the time the database was created
 ;; connection is a volatile value that refers to the creating connection
 (defrecord Database [graph history timestamp connection])
@@ -90,17 +93,54 @@
   [graph data]
   (query/delete-from-graph graph data))
 
+(defn vec-rest
+  [s]
+  #?(:clj (subvec (vec s) 1)
+     :cljs (vec (rest s))))
+
+(defn temp-id?
+  [i]
+  (and (number? i) (neg? i)))
+
 (defn build-triples
+  "Converts a set of transaction data into triples.
+  Returns a tuple containing [triples removal-triples tempids]"
   [db data]
-  ;; generate triples
-  )
+  (let [[retractions new-data] (divide' #(= :db/retract (first %)) data)
+        add-triples (fn [[acc ids] obj]
+                      (if (map? obj)
+                        (let [id (:db/id obj)
+                              [obj ids] (if (or (temp-id? id) (nil? id))
+                                          (let [new-id (or (ids id) (new-node))]
+                                            [(assoc obj :db/id new-id) (assoc ids (or id new-id) new-id)])
+                                          [obj ids])
+                              triples (ident-map->triples graph obj)]
+                          [(into acc triples) ids])
+                        (if (and (seqable? obj)
+                                 (= 4 (count obj))
+                                 (= :db/add (first obj)))
+                          (if (= (nth obj 2) :db/id)
+                            (let [id (nth obj 3)]
+                              (if (temp-id? id)
+                                (let [new-id (or (ids id) (new-node))]
+                                  [(conj acc (assoc (vec-rest obj) 2 new-id)) (assoc ids (or id new-id) new-id)])
+                                [(conj acc (vec-rest obj)) ids]))
+                            [(conj acc (vec-rest obj)) ids])
+                          (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
+        [triples id-map] (reduce add-triples [[] {}] new-data)]
+    [triples retractions id-map]))
 
 (defn transact
-  [connection tx-data]
+  [connection
+   {tx-data :tx-data}]
   (future
-    (let [{:keys [graph history] :as db-before} (db connection)
-          [tx-data tempids] (build-triples db-before tx-data)
-          next-graph (assert-data graph tx-data)
+    (let [tx-id (count (:history connection))
+          as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
+          {:keys [graph history] :as db-before} (db connection)
+          [triples removals tempids] (build-triples db-before tx-data)
+          next-graph (-> graph
+                         (assert-data triples)
+                         (retract-data removals))
           db-after (->Database
                        next-graph
                        (conj history db-before)
@@ -112,7 +152,9 @@
        :db-after (-> db-before
                      (assoc :graph next-graph)
                      (update :history conj next-graph))
-       :tx-data tx-data
+       :tx-data (concat
+                 (as-datoms true triples)
+                 (as-datoms false removals))
        :tempids tempids})))
 
 (s/defn q
