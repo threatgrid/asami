@@ -8,7 +8,8 @@
               [asami.query :as query]
               [asami.internal :as internal]
               [naga.store :as store :refer [Storage StorageType]]
-              [naga.store-registry :as registry]
+              [zuko.util :as util]
+              [zuko.entity.writer :as writer]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj [clojure.core.cache :as c]))
@@ -37,13 +38,13 @@
 ;; name is the name of the database
 ;; db is the latest DB
 ;; history is a list of tuples of Database, including db
-(defrecord Connection [name db history])
+(defrecord Connection [name state])
 
 (defn new-empty-connection
   [name empty-gr]
-  (let [db (->Database empty-gr [] (now) (volatile! nil))
-        conn (->Connection name db [db])]
-    (vswap! (:connection db) conn)
+  (let [conn (->Connection name (atom nil))
+        db (->Database empty-gr [] (now) conn)]
+    (swap! (:state conn) {:db db :history [db]})
     conn))
 
 (defn parse-uri
@@ -83,7 +84,7 @@
 (defn db
   "Retrieves a value of the database for reading."
   [connection]
-  (:db connection))
+  (:db @(:state connection)))
 
 (defn assert-data
   [graph data]
@@ -106,55 +107,48 @@
   "Converts a set of transaction data into triples.
   Returns a tuple containing [triples removal-triples tempids]"
   [db data]
-  (let [[retractions new-data] (divide' #(= :db/retract (first %)) data)
+  (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
         add-triples (fn [[acc ids] obj]
                       (if (map? obj)
-                        (let [id (:db/id obj)
-                              [obj ids] (if (or (temp-id? id) (nil? id))
-                                          (let [new-id (or (ids id) (new-node))]
-                                            [(assoc obj :db/id new-id) (assoc ids (or id new-id) new-id)])
-                                          [obj ids])
-                              triples (ident-map->triples graph obj)]
-                          [(into acc triples) ids])
+                        (let [[triples new-ids] (writer/ident-map->triples (:graph db) obj)]
+                          [(into acc triples) new-ids])
                         (if (and (seqable? obj)
                                  (= 4 (count obj))
                                  (= :db/add (first obj)))
-                          (if (= (nth obj 2) :db/id)
-                            (let [id (nth obj 3)]
-                              (if (temp-id? id)
-                                (let [new-id (or (ids id) (new-node))]
-                                  [(conj acc (assoc (vec-rest obj) 2 new-id)) (assoc ids (or id new-id) new-id)])
-                                [(conj acc (vec-rest obj)) ids]))
-                            [(conj acc (vec-rest obj)) ids])
+                          (or
+                           (if (= (nth obj 2) :db/id)
+                             (let [id (nth obj 3)]
+                               (if (temp-id? id)
+                                 (let [new-id (or (ids id) (gr/new-node))]
+                                   [(conj acc (assoc (vec-rest obj) 2 new-id)) (assoc ids (or id new-id) new-id)]))))
+                           [(conj acc (vec-rest obj)) ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
         [triples id-map] (reduce add-triples [[] {}] new-data)]
     [triples retractions id-map]))
 
 (defn transact
-  [connection
+  [{:keys [name state] :as connection}
    {tx-data :tx-data}]
   (future
-    (let [tx-id (count (:history connection))
+    (let [tx-id (count (:history @state))
           as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
-          {:keys [graph history] :as db-before} (db connection)
+          {:keys [graph history] :as db-before} (:db @state)
           [triples removals tempids] (build-triples db-before tx-data)
           next-graph (-> graph
                          (assert-data triples)
                          (retract-data removals))
+          next-connection (->Connection name (atom nil))
           db-after (->Database
                        next-graph
                        (conj history db-before)
                        (now)
-                       (volatile! nil))
-          next-connection (->Connection (:name connection) db-after (conj (:history db-after) db-after))]
-      (vswap! (:connection db-after) next-connection)
+                       (atom next-connection))]
+      (swap! (:state connection) {:db db-after :history (conj (:history db-after) db-after)})
       {:db-before db-before
-       :db-after (-> db-before
-                     (assoc :graph next-graph)
-                     (update :history conj next-graph))
+       :db-after db-after
        :tx-data (concat
-                 (as-datoms true triples)
-                 (as-datoms false removals))
+                 (map (partial as-datom true) triples)
+                 (map (partial as-datom false) removals))
        :tempids tempids})))
 
 (s/defn q
