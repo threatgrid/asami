@@ -27,25 +27,25 @@
 (def empty-multi-graph multi/empty-multi-graph)
 
 ;; simple type to represent the assertion or removal of data
-(deftype Datom [entity attribute value tx-id action])
+(deftype Datom [entity attribute value tx-id action]
+  Object
+  (toString [this] (str "#datom " entity " " attribute " " value " " tx-id " " (if action :db/add :db/retract))))
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
 ;; timestamp is the time the database was created
-;; connection is a volatile value that refers to the creating connection
-(defrecord Database [graph history timestamp connection])
+(defrecord Database [graph history timestamp])
 
 ;; name is the name of the database
-;; db is the latest DB
-;; history is a list of tuples of Database, including db
+;; state is an atom containing:
+;; :db is the latest DB
+;; :history is a list of tuples of Database, including db
 (defrecord Connection [name state])
 
 (defn new-empty-connection
   [name empty-gr]
-  (let [conn (->Connection name (atom nil))
-        db (->Database empty-gr [] (now) conn)]
-    (swap! (:state conn) {:db db :history [db]})
-    conn))
+  (let [db (->Database empty-gr [] (now))]
+    (->Connection name (atom {:db db :history [db]}))))
 
 (defn parse-uri
   [uri]
@@ -133,18 +133,16 @@
     (let [tx-id (count (:history @state))
           as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
           {:keys [graph history] :as db-before} (:db @state)
-          tx-data (or tx-data tx-info)  ;; capture the old usage which didn't have an arg map
+          tx-data (or tx-data tx-info) ;; capture the old usage which didn't have an arg map
           [triples removals tempids] (build-triples db-before tx-data)
           next-graph (-> graph
                          (assert-data triples)
                          (retract-data removals))
-          next-connection (->Connection name (atom nil))
           db-after (->Database
-                       next-graph
-                       (conj history db-before)
-                       (now)
-                       (atom next-connection))]
-      (swap! (:state connection) {:db db-after :history (conj (:history db-after) db-after)})
+                    next-graph
+                    (conj history db-before)
+                    (now))]
+      (reset! (:state connection) {:db db-after :history (conj (:history db-after) db-after)})
       {:db-before db-before
        :db-after db-after
        :tx-data (concat
