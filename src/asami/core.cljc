@@ -128,11 +128,12 @@
 
 (defn transact
   [{:keys [name state] :as connection}
-   {tx-data :tx-data}]
+   {tx-data :tx-data :as tx-info}]
   (future
     (let [tx-id (count (:history @state))
           as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
           {:keys [graph history] :as db-before} (:db @state)
+          tx-data (or tx-data tx-info)  ;; capture the old usage which didn't have an arg map
           [triples removals tempids] (build-triples db-before tx-data)
           next-graph (-> graph
                          (assert-data triples)
