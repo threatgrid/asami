@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q connect db transact]]
+  (:require [asami.core :refer [q connect db transact ->Datom]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [schema.core :as s]
@@ -12,6 +12,7 @@
 
 
 (deftest test-connect
+  #_(create-)
   (let [c (connect "asami:mem://apple")
         cm (connect "asami:multi://banana")]
     (is (instance? asami.index.GraphIndexed (:graph (:db @(:state c)))))
@@ -27,6 +28,25 @@
                                  {:db/id "aliceid"
                                   :person/name "Alice"
                                   :person/spouse "bobid"}]})]
+    (prn @r)
+    )
+  (let [c (connect "asami:mem://test")
+        r (transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
+                                 [:db/add :mem/node-2 :property "other"]]})]
+    (prn @r)
+    )
+  (let [c (connect "asami:mem://test")
+        maksim {:db/id -1
+                :name  "Maksim"
+                :age   45
+                :wife {:db/id -2}
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :name  "Anna"
+                :age   31
+                :husband {:db/id -1}
+                :aka   ["Anitzka"]}
+        r (transact c [maksim anna])]
     (prn @r)
     )
   )

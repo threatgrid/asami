@@ -12,7 +12,7 @@
               [zuko.entity.writer :as writer]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
-              #?(:clj [clojure.core.cache :as c]))
+              #?(:cljs [cljs.reader :as reader]))
     #?(:clj (:import [java.util Date])))
 
 (defn now
@@ -29,7 +29,19 @@
 ;; simple type to represent the assertion or removal of data
 (deftype Datom [entity attribute value tx-id action]
   Object
-  (toString [this] (str "#datom " entity " " attribute " " value " " tx-id " " (if action :db/add :db/retract))))
+  (toString [this]
+    (let [data (prn-str [entity attribute value tx-id (if action :db/add :db/retract)])]
+      (str "#asami/datom " data))))
+
+(defn datom-reader
+  [[e a v t action]]
+  (->Datom e a v t (= action :db/add)))
+
+#?(:clj
+   (alter-var-root #'clojure.core/default-data-readers merge {'asami/datom #'asami.core/datom-reader})
+
+   :cljs
+   (reader/register-tag-parser! 'asami/datom #'asami.core/datom-reader))
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
