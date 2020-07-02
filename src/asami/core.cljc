@@ -7,6 +7,7 @@
               [asami.multi-graph :as multi]
               [asami.query :as query]
               [asami.internal :as internal]
+              [asami.datom :as datom :refer [->Datom]]
               [naga.store :as store :refer [Storage StorageType]]
               [zuko.util :as util]
               [zuko.entity.writer :as writer]
@@ -25,23 +26,6 @@
 
 (def empty-graph mem/empty-graph)
 (def empty-multi-graph multi/empty-multi-graph)
-
-;; simple type to represent the assertion or removal of data
-(deftype Datom [entity attribute value tx-id action]
-  Object
-  (toString [this]
-    (let [data (prn-str [entity attribute value tx-id (if action :db/add :db/retract)])]
-      (str "#asami/datom " data))))
-
-(defn datom-reader
-  [[e a v t action]]
-  (->Datom e a v t (= action :db/add)))
-
-#?(:clj
-   (alter-var-root #'clojure.core/default-data-readers merge {'asami/datom #'asami.core/datom-reader})
-
-   :cljs
-   (reader/register-tag-parser! 'asami/datom #'asami.core/datom-reader))
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
