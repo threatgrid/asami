@@ -122,6 +122,12 @@
         [triples id-map] (reduce add-triples [[] {}] new-data)]
     [triples retractions id-map]))
 
+#?(:cljs
+   (defmacro future
+     "Simulates a future by using a delay and immediately forcing it"
+     [& body]
+     `(force (delay (fn [] ~@body)))))
+
 (defn transact
   [{:keys [name state] :as connection}
    {tx-data :tx-data :as tx-info}]
