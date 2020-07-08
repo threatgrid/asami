@@ -22,6 +22,26 @@
   #?(:clj (Date.)
      :cljs (js/Date.)))
 
+(defn instant?
+  "Tests if a value is a timestamp"
+  [t]
+  (= #?(:clj Date :cljs js/Date) (type t)))
+
+(defn find-index
+  ([a v]
+   (find-index a v compare))
+  ([a v cmp]
+     (loop [low 0 high (count a)]
+       (if (= (inc low) high)
+         low
+         (let [mid (int (/ (+ low high) 2))
+               mv (nth a mid)
+               c (cmp mv v)]
+           (cond
+             (zero? c) mid
+             (> 0 c) (recur mid high)
+             (< 0 c) (recur low mid)))))))
+
 (defonce databases (atom {}))
 
 (def empty-graph mem/empty-graph)
@@ -81,6 +101,12 @@
   "Retrieves a value of the database for reading."
   [connection]
   (:db @(:state connection)))
+
+(defn as-of
+  [{:keys [graph history timestamp] :as db} t]
+  (cond
+    (instant? t) (if (>= t timestamp) db (find-index history t #(compare (:timestamp %1) %2)))
+    (int? t) (min (max t 0) (count history))))
 
 (defn assert-data
   [graph data]
