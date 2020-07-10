@@ -105,18 +105,31 @@
 (defn as-of
   [{:keys [graph history timestamp] :as db} t]
   (cond
-    (instant? t) (if (>= t timestamp) db (find-index history t #(compare (:timestamp %1) %2)))
-    (int? t) (min (max t 0) (count history))))
+    (instant? t) (if (>= t timestamp)
+                   db
+                   (nth history
+                        (find-index history t #(compare (:timestamp %1) %2))))
+    (int? t) (if (= t (count history))
+               db
+               (nth history (min (max t 0) (dec (count history)))))))
+
+(defn as-of-t
+  "Returns the as-of point, or nil if none"
+  [{history :history :as db}]
+  (and history (count history)))
 
 (defn assert-data
+  "Adds triples to a graph"
   [graph data]
   (query/add-to-graph graph data))
 
 (defn retract-data
+  "Removes triples from a graph"
   [graph data]
   (query/delete-from-graph graph data))
 
 (defn vec-rest
+  "Takes a vector and returns a vector of all but the first element. Same as (vec (rest s))"
   [s]
   #?(:clj (subvec (vec s) 1)
      :cljs (vec (rest s))))
