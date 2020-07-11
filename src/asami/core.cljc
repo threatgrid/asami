@@ -118,6 +118,28 @@
   [{history :history :as db}]
   (and history (count history)))
 
+(defn since
+  "Returns the value of the database since some point t, exclusive
+   t can be a transaction number, or Date."
+  [{:keys [graph history timestamp] :as db} t]
+  (cond
+    (instant? t) (if (> t timestamp)
+                   nil
+                   (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
+                     (if (= tx (count history))
+                       db
+                       (nth history tx))))
+    (int? t) (if (>= t (count history))
+               nil
+               (nth history (min (max (inc t) 0) (count history))))))
+
+(defn since-t
+  "Returns the since point, or nil if none"
+  [{history :history :as db}]
+  (if-not (seq history)
+    0
+    (count history)))
+
 (defn assert-data
   "Adds triples to a graph"
   [graph data]
@@ -145,7 +167,7 @@
   (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
         add-triples (fn [[acc ids] obj]
                       (if (map? obj)
-                        (let [[triples new-ids] (writer/ident-map->triples (:graph db) obj)]
+                        (let [[triples new-ids] (writer/ident-map->triples (:graph db) obj ids)]
                           [(into acc triples) new-ids])
                         (if (and (seqable? obj)
                                  (= 4 (count obj))

@@ -5,7 +5,7 @@
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:cljs [cljs.reader :as reader]))
-    #?(:clj (:import [clojure.lang Associative Indexed]
+    #?(:clj (:import [clojure.lang Associative Indexed Seqable]
                      [java.io Writer])))
 
 (defprotocol Vectorizable
@@ -34,6 +34,8 @@
      Indexed
      (nth [this n] (nth (as-vec this) n))
      (nth [this n not-found] (if (and (int? n) (<= 0 n) (< n 5)) (nth (as-vec this) n) not-found))
+     Seqable
+     (seq [this] (seq (as-vec this)))
      
      Object
      (toString [this]

@@ -59,7 +59,27 @@
                 :age   31
                 :husband {:db/id -1}
                 :aka   ["Anitzka"]}
-        r (transact c [maksim anna])]
-    ;(prn @r)
-    )
-  )
+        {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
+        one (tempids -1)
+        two (tempids -2)]
+    (is (= 19 (count tx-data)))
+    (is (= #{[one :db/ident one]
+             [one :tg/entity true]
+             [one :name "Maksim"]
+             [one :age 45]
+             [one :wife two]}
+           (->> tx-data
+                (filter #(= one (first %)))
+                (remove #(= :aka (second %)))
+                (map (partial take 3))
+                set)))
+    (is (= #{[two :db/ident two]
+             [two :tg/entity true]
+             [two :name "Anna"]
+             [two :age 31]
+             [two :husband one]}
+           (->> tx-data
+                (filter #(= two (first %)))
+                (remove #(= :aka (second %)))
+                (map (partial take 3))
+                set)))))
