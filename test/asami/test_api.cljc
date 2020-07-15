@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q create-database connect db transact]]
+  (:require [asami.core :refer [q create-database connect db transact entity]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [schema.core :as s]
@@ -40,7 +40,9 @@
                                  {:db/id "aliceid"
                                   :person/name "Alice"
                                   :person/spouse "bobid"}]})]
-    (prn (:tx-data @r)))
+    (prn (filter #(= :db/ident (second %)) (:tx-data @r)))
+
+    (prn @r))
 
   (let [c (connect "asami:mem://test2")
         r (transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
@@ -83,3 +85,36 @@
                 (remove #(= :aka (second %)))
                 (map (partial take 3))
                 set)))))
+
+(deftest test-entity
+  (let [c (connect "asami:mem://test2")
+        maksim {:db/id -1
+                :db/ident :maksim
+                :name  "Maksim"
+                :age   45
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :db/ident :anna
+                :name  "Anna"
+                :age   31
+                :husband {:db/id -1}
+                :aka   ["Anitzka"]}
+        {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
+        one (tempids -1)
+        two (tempids -2)
+        d (db c)]
+    (is (= {:name  "Maksim"
+            :age   45
+            :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+           (entity d one)))
+    (is (= {:name  "Maksim"
+            :age   45
+            :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+           (entity d :maksim)))
+    (is (= {:name  "Anna"
+            :age   31
+            :husband {:name  "Maksim"
+                      :age   45
+                      :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+            :aka   ["Anitzka"]}
+           (entity d :anna)))))

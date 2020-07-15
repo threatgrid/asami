@@ -11,6 +11,7 @@
               [naga.store :as store :refer [Storage StorageType]]
               [zuko.util :as util]
               [zuko.entity.writer :as writer]
+              [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:cljs [cljs.reader :as reader]))
@@ -212,6 +213,15 @@
                  (map (partial as-datom true) triples)
                  (map (partial as-datom false) removals))
        :tempids tempids})))
+
+(s/defn entity
+  "Returns an entity based on an identifier. This eagerly retrieves the entity. No Loops!"
+  ;; TODO create an Entity type that lazily loads, and references the database it came from
+  [{graph :graph :as db} id]
+  (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                   (ffirst (gr/resolve-triple graph '?e :db/id id))
+                   (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
+    (reader/ref->entity graph ref)))
 
 (s/defn q
   [query & inputs]
