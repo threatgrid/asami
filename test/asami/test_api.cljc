@@ -102,8 +102,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids "maksim")
         two (tempids "anna")]
-    (prn r)
-    (is (= 19 (count tx-data)))
+    (is (= 17 (count tx-data)))
     (is (= #{[one :db/ident "maksim"]
              [one :name "Maksim"]
              [one :age 45]
