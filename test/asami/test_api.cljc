@@ -34,15 +34,17 @@
 
 (deftest load-data
   (let [c (connect "asami:mem://test1")
-        r (transact c {:tx-data [{:db/id "bobid"
+        r (transact c {:tx-data [{:db/ident "bobid"
                                   :person/name "Bob"
                                   :person/spouse "aliceid"}
-                                 {:db/id "aliceid"
+                                 {:db/ident "aliceid"
                                   :person/name "Alice"
                                   :person/spouse "bobid"}]})]
-    (prn (filter #(= :db/ident (second %)) (:tx-data @r)))
-
-    (prn @r))
+    (= (->> (:tx-data @r)
+            (filter #(= :db/ident (second %)))
+            (map #(nth % 2))
+            set)
+       #{"bobid" "aliceid"}))
 
   (let [c (connect "asami:mem://test2")
         r (transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
@@ -77,6 +79,41 @@
                 set)))
     (is (= #{[two :db/ident two]
              [two :tg/entity true]
+             [two :name "Anna"]
+             [two :age 31]
+             [two :husband one]}
+           (->> tx-data
+                (filter #(= two (first %)))
+                (remove #(= :aka (second %)))
+                (map (partial take 3))
+                set))))
+
+  (let [c (connect "asami:mem://test3")
+        maksim {:db/ident "maksim"
+                :name  "Maksim"
+                :age   45
+                :wife {:db/ident "anna"}
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/ident "anna"
+                :name  "Anna"
+                :age   31
+                :husband {:db/ident "maksim"}
+                :aka   ["Anitzka"]}
+        {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
+        one (tempids "maksim")
+        two (tempids "anna")]
+    (prn r)
+    (is (= 19 (count tx-data)))
+    (is (= #{[one :db/ident "maksim"]
+             [one :name "Maksim"]
+             [one :age 45]
+             [one :wife two]}
+           (->> tx-data
+                (filter #(= one (first %)))
+                (remove #(= :aka (second %)))
+                (map (partial take 3))
+                set)))
+    (is (= #{[two :db/ident "anna"]
              [two :name "Anna"]
              [two :age 31]
              [two :husband one]}
