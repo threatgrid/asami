@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q create-database connect db transact entity]]
+  (:require [asami.core :refer [q create-database connect db transact entity now as-of since]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [schema.core :as s]
@@ -154,3 +154,74 @@
                       :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
             :aka   ["Anitzka"]}
            (entity d :anna)))))
+
+(defn sleep [msec]
+  #?(:clj
+     (Thread/sleep msec)
+     :cljs
+     (let [deadline (+ msec (.getTime (js/Date.)))]
+       (while (> deadline (.getTime (js/Date.)))))))
+
+(deftest test-as
+  (let [t0 (now)
+        c (connect "asami:mem://test3")
+        _ (sleep 10)
+        t1 (now)
+        maksim {:db/id -1
+                :db/ident :maksim
+                :name  "Maksim"
+                :age   45
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :db/ident :anna
+                :name  "Anna"
+                :age   31
+                :husband {:db/ident :maksim}
+                :aka   ["Anitzka"]}
+        _ (sleep 10)
+        _ @(transact c [maksim])
+        _ (sleep 10)
+        t2 (now)
+        _ (sleep 10)
+        _ @(transact c [anna])
+        _ (sleep 10)
+        t3 (now)
+        latest-db (db c)
+        db0 (as-of latest-db t0)  ;; before
+        db1 (as-of latest-db t1)  ;; empty
+        db2 (as-of latest-db t2)  ;; after first tx
+        db3 (as-of latest-db t3)  ;; after second tx
+        db0' (as-of latest-db 0)  ;; empty
+        db1' (as-of latest-db 1)  ;; after first tx
+        db2' (as-of latest-db 2)  ;; after second tx
+        db3' (as-of latest-db 3)  ;; still after second tx
+        db0* (since latest-db t0)  ;; before
+        db1* (since latest-db t1)  ;; after first tx
+        db2* (since latest-db t2)  ;; after second tx
+        db3* (since latest-db t3)  ;; well after second tx
+        db0*' (since latest-db 0)  ;; after first tx
+        db1*' (since latest-db 1)  ;; after second tx 
+        db2*' (since latest-db 2)  ;; still after second tx
+        db3*' (since latest-db 3)] ;; still after second tx
+    (is (= db0 db0'))
+    (is (= db0 db1))
+    (is (= db2 db1'))
+    (is (= db3 db2'))
+    (is (= db2' db3'))
+    (is (= db0 db0*))
+    (is (= db2 db1*))
+    (is (= db3 db2*))
+    (is (= db3 db3*))
+    (is (= db2 db0*'))
+    (is (= db3 db1*'))
+    (is (= db3 db2*'))
+    (is (= db3 db3*'))
+    (is (= db3 latest-db))
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db0))
+           #{}))
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db1))
+           #{}))
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db2))
+           #{["Maksim"]}))
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db3))
+           #{["Maksim"] ["Anna"]}))))

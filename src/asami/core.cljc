@@ -106,7 +106,7 @@
 (defn as-of
   [{:keys [graph history timestamp] :as db} t]
   (cond
-    (instant? t) (if (>= t timestamp)
+    (instant? t) (if (>= (compare t timestamp) 0)
                    db
                    (nth history
                         (find-index history t #(compare (:timestamp %1) %2))))
@@ -124,7 +124,7 @@
    t can be a transaction number, or Date."
   [{:keys [graph history timestamp] :as db} t]
   (cond
-    (instant? t) (if (> t timestamp)
+    (instant? t) (if (> (compare t timestamp) 0)
                    nil
                    (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
                      (if (= tx (count history))
@@ -132,7 +132,7 @@
                        (nth history tx))))
     (int? t) (if (>= t (count history))
                nil
-               (nth history (min (max (inc t) 0) (count history))))))
+               (nth history (min (max (inc t) 0) (dec (count history)))))))
 
 (defn since-t
   "Returns the since point, or nil if none"
@@ -223,6 +223,10 @@
                    (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
     (reader/ref->entity graph ref)))
 
+(defn graphs-of
+  [inputs]
+  (map #(if (instance? Database %) (:graph %) %) inputs))
+
 (s/defn q
   [query & inputs]
-  (query/query-entry query mem/empty-graph inputs))
+  (query/query-entry query mem/empty-graph (graphs-of inputs)))
