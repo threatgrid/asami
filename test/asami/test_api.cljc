@@ -123,7 +123,7 @@
                 set)))))
 
 (deftest test-entity
-  (let [c (connect "asami:mem://test2")
+  (let [c (connect "asami:mem://test4")
         maksim {:db/id -1
                 :db/ident :maksim
                 :name  "Maksim"
@@ -164,8 +164,9 @@
 
 (deftest test-as
   (let [t0 (now)
-        c (connect "asami:mem://test3")
-        _ (sleep 10)
+        _ (sleep 100)
+        c (connect "asami:mem://test5")
+        _ (sleep 100)
         t1 (now)
         maksim {:db/id -1
                 :db/ident :maksim
@@ -178,13 +179,13 @@
                 :age   31
                 :husband {:db/ident :maksim}
                 :aka   ["Anitzka"]}
-        _ (sleep 10)
+        _ (sleep 100)
         _ @(transact c [maksim])
-        _ (sleep 10)
+        _ (sleep 100)
         t2 (now)
-        _ (sleep 10)
+        _ (sleep 100)
         _ @(transact c [anna])
-        _ (sleep 10)
+        _ (sleep 100)
         t3 (now)
         latest-db (db c)
         db0 (as-of latest-db t0)  ;; before
@@ -195,6 +196,7 @@
         db1' (as-of latest-db 1)  ;; after first tx
         db2' (as-of latest-db 2)  ;; after second tx
         db3' (as-of latest-db 3)  ;; still after second tx
+
         db0* (since latest-db t0)  ;; before
         db1* (since latest-db t1)  ;; after first tx
         db2* (since latest-db t2)  ;; after second tx
@@ -211,11 +213,11 @@
     (is (= db0 db0*))
     (is (= db2 db1*))
     (is (= db3 db2*))
-    (is (= db3 db3*))
+    (is (= nil db3*))
     (is (= db2 db0*'))
     (is (= db3 db1*'))
-    (is (= db3 db2*'))
-    (is (= db3 db3*'))
+    (is (= nil db2*'))
+    (is (= nil db3*'))
     (is (= db3 latest-db))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db0))
            #{}))

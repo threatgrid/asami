@@ -110,7 +110,7 @@
                    db
                    (nth history
                         (find-index history t #(compare (:timestamp %1) %2))))
-    (int? t) (if (= t (count history))
+    (int? t) (if (>= t (count history))
                db
                (nth history (min (max t 0) (dec (count history)))))))
 
@@ -124,15 +124,16 @@
    t can be a transaction number, or Date."
   [{:keys [graph history timestamp] :as db} t]
   (cond
-    (instant? t) (if (> (compare t timestamp) 0)
-                   nil
-                   (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
-                     (if (= tx (count history))
-                       db
-                       (nth history tx))))
-    (int? t) (if (>= t (count history))
-               nil
-               (nth history (min (max (inc t) 0) (dec (count history)))))))
+    (instant? t) (cond
+                   (> (compare t timestamp) 0) nil
+                   (< (compare t (:timestamp (first history))) 0) (first history)
+                   :default (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
+                              (if (= tx (count history))
+                                db
+                                (nth history tx))))
+    (int? t) (cond (>= t (count history)) nil
+                   (= (count history) (inc t)) db
+                   :default (nth history (min (max (inc t) 0) (dec (count history)))))))
 
 (defn since-t
   "Returns the since point, or nil if none"
