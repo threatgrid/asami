@@ -170,12 +170,6 @@
   (or (some update-attribute? (keys obj))
       (some #(and (map? %) (contains-update? %)) (vals obj))))
 
-(s/defn removal-triples
-  "Returns all the triples required to recursively remove a node."
-  [graph :- GraphType
-   node-ref]
-  []) ;; TODO
-
 (s/defn entity-triples :- [(s/one [Triple] "New triples")
                            (s/one [Triple] "Retractions")
                            (s/one {s/Any s/Any} "New list of ID mappings")]
@@ -195,23 +189,12 @@
                                                             (filter update-attribute?)
                                                             (map (fn [a] [a (normalize-attribute a)]))
                                                             (into {}))
-                                     recursion-attributes (set
-                                                           (keep
-                                                            (fn [[a ua]] (let [v (obj a)] (if (or (sequential? v) (map? v)) ua)))
-                                                            update-attributes))
                                      clean-obj (->> obj
                                                     (map (fn [[k v :as e]] (if-let [nk (update-attributes k)] [nk v] e)))
                                                     (into {}))
                                      removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
                                                         (filter (comp update-attributes first)))
-                                     top-removals (->> removal-pairs
-                                                       (map (partial cons node-ref))
-                                                       (map vec))
-                                     removals (reduce (fn [rms [a v]]
-                                                        (when (recursion-attributes a)
-                                                          (into rms (removal-triples graph v))))
-                                                      top-removals
-                                                      removal-pairs)]
+                                     removals (mapcat (partial existing-triples graph node-ref) removal-pairs)]
                                  [clean-obj removals]))
                              [obj nil])]
     (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
