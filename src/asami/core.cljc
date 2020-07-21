@@ -10,7 +10,8 @@
               [asami.datom :as datom :refer [->Datom]]
               [naga.store :as store :refer [Storage StorageType]]
               [zuko.util :as util]
-              [zuko.entity.writer :as writer]
+              [zuko.entity.general :as entity :refer [EntityMap GraphType]]
+              [zuko.entity.writer :as writer :refer [Triple]]
               [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -152,6 +153,70 @@
   [graph data]
   (query/delete-from-graph graph data))
 
+(defn update-attribute?
+  "Checks if an attribute indicates that it should be updated"
+  [a]
+  (and (keyword a) (= \' (last (name a)))))
+
+(defn normalize-attribute
+  "Converts an updating attribute to its normalized form"
+  [a]
+  (let [n (name a)]
+    (keyword (namespace a) (subs n 0 (dec (count n))))))
+
+(defn contains-update?
+  "Checks if any part of the object is to be updated"
+  [obj]
+  (or (some update-attribute? (keys obj))
+      (some #(and (map? %) (contains-update? %)) (vals obj))))
+
+(s/defn removal-triples
+  "Returns all the triples required to recursively remove a node."
+  [graph :- GraphType
+   node-ref]
+  []) ;; TODO
+
+(s/defn entity-triples :- [(s/one [Triple] "New triples")
+                           (s/one [Triple] "Retractions")
+                           (s/one {s/Any s/Any} "New list of ID mappings")]
+  [graph :- GraphType
+   {id :db/id ident :db/ident :as obj} :- EntityMap
+   exiting-ids :- {s/Any s/Any}]
+  (let [[new-obj removals] (if (contains-updates? obj)
+                             (do
+                               (when-not (or id ident)
+                                 (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident")))
+                               (let [node-ref (ffirst (if id
+                                                        (gr/resolve-triple graph '?r :db/id id)
+                                                        (gr/resolve-triple graph '?r :db/idend ident)))
+                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node")))
+                                     update-attributes (->> obj
+                                                            keys
+                                                            (filter update-attribute?)
+                                                            (map (fn [a] [a (normalize-attribute a)]))
+                                                            (into {}))
+                                     recursion-attributes (set
+                                                           (keep
+                                                            (fn [[a ua]] (let [v (obj a)] (if (or (sequential? v) (map? v)) ua)))
+                                                            update-attributes))
+                                     clean-obj (->> obj
+                                                    (map (fn [[k v :as e]] (if-let [nk (update-attributes k)] [nk v] e)))
+                                                    (into {}))
+                                     removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
+                                                        (filter (comp update-attributes first)))
+                                     top-removals (->> removal-pairs
+                                                       (map (partial cons node-ref))
+                                                       (map vec))
+                                     removals (reduce (fn [rms [a v]]
+                                                        (when (recursion-attributes a)
+                                                          (into rms (removal-triples graph v))))
+                                                      top-removals
+                                                      removal-pairs)]
+                                 [clean-obj removals]))
+                             [obj nil])]
+    (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
+      [triples removals ids])))
+
 (defn vec-rest
   "Takes a vector and returns a vector of all but the first element. Same as (vec (rest s))"
   [s]
@@ -165,11 +230,11 @@
 (defn build-triples
   "Converts a set of transaction data into triples.
   Returns a tuple containing [triples removal-triples tempids]"
-  [db data]
+  [{graph :graph :as db} data]
   (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
         add-triples (fn [[acc ids] obj]
                       (if (map? obj)
-                        (let [[triples new-ids] (writer/ident-map->triples (:graph db) obj ids)]
+                        (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
                           [(into acc triples) new-ids])
                         (if (and (seqable? obj)
                                  (= 4 (count obj))
