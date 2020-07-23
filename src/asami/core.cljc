@@ -164,26 +164,26 @@
   (let [n (name a)]
     (keyword (namespace a) (subs n 0 (dec (count n))))))
 
-(defn contains-update?
+(defn contains-updates?
   "Checks if any part of the object is to be updated"
   [obj]
   (or (some update-attribute? (keys obj))
-      (some #(and (map? %) (contains-update? %)) (vals obj))))
+      (some #(and (map? %) (contains-updates? %)) (vals obj))))
 
 (s/defn entity-triples :- [(s/one [Triple] "New triples")
                            (s/one [Triple] "Retractions")
                            (s/one {s/Any s/Any} "New list of ID mappings")]
   [graph :- GraphType
    {id :db/id ident :db/ident :as obj} :- EntityMap
-   exiting-ids :- {s/Any s/Any}]
+   existing-ids :- {s/Any s/Any}]
   (let [[new-obj removals] (if (contains-updates? obj)
                              (do
                                (when-not (or id ident)
                                  (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident")))
                                (let [node-ref (ffirst (if id
                                                         (gr/resolve-triple graph '?r :db/id id)
-                                                        (gr/resolve-triple graph '?r :db/idend ident)))
-                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node")))
+                                                        (gr/resolve-triple graph '?r :db/ident ident)))
+                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys [:db/id :db/ident]))))
                                      update-attributes (->> obj
                                                             keys
                                                             (filter update-attribute?)
@@ -194,7 +194,7 @@
                                                     (into {}))
                                      removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
                                                         (filter (comp update-attributes first)))
-                                     removals (mapcat (partial existing-triples graph node-ref) removal-pairs)]
+                                     removals (mapcat (partial writer/existing-triples graph node-ref) removal-pairs)]
                                  [clean-obj removals]))
                              [obj nil])]
     (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
