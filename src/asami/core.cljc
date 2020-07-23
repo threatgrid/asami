@@ -173,6 +173,11 @@
 (s/defn entity-triples :- [(s/one [Triple] "New triples")
                            (s/one [Triple] "Retractions")
                            (s/one {s/Any s/Any} "New list of ID mappings")]
+  "Creates the triples to be added and removed for a new entity.
+   graph: the graph the entity is to be added to
+   obj: The entity to generate triples for
+   existing-ids: When IDs are provided by the user, then they get mapped to the internal ID that is actually used.
+                 This map contains a mapping of user IDs to the ID allocated for the entity"
   [graph :- GraphType
    {id :db/id ident :db/ident :as obj} :- EntityMap
    existing-ids :- {s/Any s/Any}]
@@ -189,11 +194,12 @@
                                                             (filter update-attribute?)
                                                             (map (fn [a] [a (normalize-attribute a)]))
                                                             (into {}))
+                                     update-attrs (set (vals update-attributes))
                                      clean-obj (->> obj
                                                     (map (fn [[k v :as e]] (if-let [nk (update-attributes k)] [nk v] e)))
                                                     (into {}))
                                      removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
-                                                        (filter (comp update-attributes first)))
+                                                        (filter (comp update-attrs first)))
                                      removals (mapcat (partial writer/existing-triples graph node-ref) removal-pairs)]
                                  [clean-obj removals]))
                              [obj nil])]
@@ -207,6 +213,7 @@
      :cljs (vec (rest s))))
 
 (defn temp-id?
+  "Tests if an entity ID is a temporary ID"
   [i]
   (and (number? i) (neg? i)))
 
@@ -215,10 +222,10 @@
   Returns a tuple containing [triples removal-triples tempids]"
   [{graph :graph :as db} data]
   (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
-        add-triples (fn [[acc ids] obj]
+        add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
-                          [(into acc triples) new-ids])
+                          [(into acc triples) (into racc rtriples) new-ids])
                         (if (and (seqable? obj)
                                  (= 4 (count obj))
                                  (= :db/add (first obj)))
@@ -227,11 +234,11 @@
                              (let [id (nth obj 3)]
                                (if (temp-id? id)
                                  (let [new-id (or (ids id) (gr/new-node))]
-                                   [(conj acc (assoc (vec-rest obj) 2 new-id)) (assoc ids (or id new-id) new-id)]))))
-                           [(conj acc (vec-rest obj)) ids])
+                                   [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
+                           [(conj acc (vec-rest obj)) racc ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
-        [triples id-map] (reduce add-triples [[] {}] new-data)]
-    [triples retractions id-map]))
+        [triples rtriples id-map] (reduce add-triples [[] (vec retractions) {}] new-data)]
+    [triples rtriples id-map]))
 
 #?(:cljs
    (defmacro future
@@ -240,6 +247,26 @@
      `(force (delay (fn [] ~@body)))))
 
 (defn transact
+  "Updates a database. This is currently synchronous, but returns a future or delay for compatibility with Datomic.
+   connection: The connection to the database to be updated.
+   tx-info: This is either a seq of items to be transacted, or a map containing a :tx-data value with such a seq.
+            Each item to be transacted is one of:
+            - vector of the form: [:db/assert entity attribute value] - creates a datom
+            - vector of the form: [:db/retract entity attribute value] - removes a datom
+            - map: an entity to be inserted/updated.
+  Entities and assertions may have attrubutes that are keywords with a trailing ' character.
+  When these appear an existing attribute without that character will be replaced. This only occurs for the top level
+  entity, and is not applied to attributes appearing in nested structures.
+  Entities can be assigned a :db/id value. If this is a negative number, then it is considered a temporary value and
+  will be mapped to a system-allocated ID. Other entities can reference such an entity using that ID.
+  Entities can be provided a :db/ident value of any type. This will be considered unique, and can be used to identify
+  entities for updates in subsequent transactions, though not in the current one.
+
+  Returns a future/delay object that will hold a map containing the following:
+  :db-before    database value before the transaction
+  :db-after     database value after the transaction
+  :tx-data      sequence of datoms produced by the transaction
+  :tempids      mapping of the temporary IDs in entities to the allocated nodes"
   [{:keys [name state] :as connection}
    {tx-data :tx-data :as tx-info}]
   (future
@@ -273,9 +300,13 @@
     (reader/ref->entity graph ref)))
 
 (defn graphs-of
+  "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
   [inputs]
   (map #(if (instance? Database %) (:graph %) %) inputs))
 
 (s/defn q
+  "Execute a query against the provided inputs.
+   The query can be a map, a seq, or a string.
+   See the (upcoming) documentation for a full description of queries."
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs)))

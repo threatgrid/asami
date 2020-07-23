@@ -239,7 +239,7 @@
                 :db/ident :anna
                 :name  "Anna"
                 :age   31
-                :husband {:db/ident :maksim}
+                :husband {:db/id -1}
                 :aka   ["Anitzka"]}
         {db1 :db-after} @(transact c [maksim anna])
         anne   {:db/ident :anna
