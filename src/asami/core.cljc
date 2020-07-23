@@ -183,7 +183,7 @@
                                (let [node-ref (ffirst (if id
                                                         (gr/resolve-triple graph '?r :db/id id)
                                                         (gr/resolve-triple graph '?r :db/ident ident)))
-                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys [:db/id :db/ident]))))
+                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
                                      update-attributes (->> obj
                                                             keys
                                                             (filter update-attribute?)
