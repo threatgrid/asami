@@ -261,3 +261,5 @@
            #{["Anne"]}))
     (is (= (set (q '[:find ?aka :where [?e :name "Maksim"] [?e :aka ?a] [?a :tg/contains ?aka]] db3))
            #{["Maks Otto von Stirlitz"]}))))
+
+#?(:cljs (run-tests))

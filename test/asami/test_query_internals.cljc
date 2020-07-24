@@ -1,7 +1,7 @@
 (ns asami.test-query-internals
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
-            [asami.core :as core :refer [assert-data retract-data]]
+            [asami.core :as core]
             [asami.query :as q :refer [pattern-left-join outer-product
                                        create-binding create-bindings minus left-join disjunction
                                        result-label aggregate-over aggregate-query]]
@@ -18,6 +18,8 @@
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
 (use-fixtures :once st/validate-schemas)
+
+(def assert-data "Access to private function" #'asami.core/assert-data)
 
 (deftest var-mapping
   (let [m1 (matching-vars `[?a :rel ?c] `[?a ?b ?c] )

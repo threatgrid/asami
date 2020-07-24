@@ -94,6 +94,7 @@
      (-conj [coll o] 
        (conj (as-vec coll) o))))
 
+(def DatomType (s/pred (partial instance? Datom)))
 
 (defn datom-reader
   [[e a v tx added]]

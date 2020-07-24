@@ -1,6 +1,6 @@
 (ns asami.test-core-query
   "Tests the public query functionality"
-  (:require [asami.core :refer [q assert-data]]
+  (:require [asami.core :refer [q]]
             [asami.graph :refer [new-node]]
             [asami.query :refer [*env*]]
             [asami.index :refer [empty-graph]]
@@ -10,6 +10,8 @@
             #?(:clj  [schema.test :as st :refer [deftest]]
                :cljs [schema.test :as st :refer-macros [deftest]]))
   #?(:clj (:import [clojure.lang ExceptionInfo])))
+
+(def assert-data "Access to private function" #'asami.core/assert-data)
 
 (def nn new-node)
 
