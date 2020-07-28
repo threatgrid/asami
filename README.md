@@ -223,7 +223,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 ## License
 
-Copyright © 2018-2020 Cisco
+Copyright © 2016-2020 Cisco
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
