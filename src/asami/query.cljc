@@ -198,7 +198,7 @@
                                           #(if (neg? %) (nth expr (- %)) (nth row %))
                                           arg-indexes))])))
                      (let [callable-op (cond (fn? op) op
-                                             (symbol? op) (fn-for op)
+                                             (symbol? op) (or (get *env* op) (fn-for op))
                                              (string? op) (fn-for (symbol op)))]
                        (fn [row]
                          (concat row
@@ -485,7 +485,7 @@
   [query]
   (let [{find :find :as qmap}
         (cond
-          (map? query) query
+          (map? query) (update query :where seq)
           (string? query) (query-map (edn/read-string query))
           (sequential? query) (->> query
                                    (partition-by query-keys)
