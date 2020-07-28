@@ -96,9 +96,9 @@ The _Open World Assumption_ allows each attribute to be multi-arity. In a _Close
 ```clojure
 => (def toy-story (d/q '[:find ?ts . :where [?ts :movie/title "Toy Story"]] db))
 => (d/transact conn [{:db/id toy-story :movie/genre' "animation/adventure/comedy"}])
-=> (d/entity db toy-story)
+=> (d/entity (d/db conn) toy-story)
 #:movie{:title "Toy Story",
-        :movie/genre "animation/adventure/comedy",
+        :genre "animation/adventure/comedy",
         :release-year 1995}
 ```
 Addressing nodes by their internal ID can be cumbersome. They can also be addressed by a `:db/ident` field if one is provided.
