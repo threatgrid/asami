@@ -528,7 +528,9 @@
                               (seq? op) constraints       ;; first form is an operation. Already in the correct form
                               :default (throw (ex-info "Unknown constraint format" {:constraint constraints}))))
                           (list constraints))             ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
-        select-distinct (fn [xs] (let [m (meta xs)] (with-meta (*select-distinct* xs) m)))]
+        select-distinct (fn [xs] (if (and (coll? xs) (not (vector? xs)))
+                                   (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
+                                   xs))]
     (->> (join-patterns graph top-conjunction bindings)
          (project-fn selection)
          select-distinct)))
