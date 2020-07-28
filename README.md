@@ -55,10 +55,10 @@ With the data loaded, a database value can be retrieved from the database and th
 ```
 This returns the a sequence of results, with each result being a sequence of the selected vars in the `:find` clause (just `?movie-title` in this case):
 ```
-(("Explorers")
- ("Demolition Man")
- ("Johnny Mnemonic")
- ("Toy Story"))
+(["Explorers"]
+ ["Demolition Man"]
+ ["Johnny Mnemonic"]
+ ["Toy Story"])
 ```
 A more complex query could be to get the title, year and genre for all movies after 1990:
 ```clojure
