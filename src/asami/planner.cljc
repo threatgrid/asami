@@ -4,10 +4,9 @@
     #?(:clj (:refer-clojure :exclude [eval]))
     (:require [clojure.set :as set]
               [clojure.string :as str]
-              [naga.schema.store-structs :as st
-                                         :refer [EPVPattern Pattern EvalPattern Var vartest?
-                                                 epv-pattern? filter-pattern? eval-pattern? op-pattern?]]
-              [naga.util :as u]
+              [zuko.schema :refer [EPVPattern Pattern EvalPattern Var vartest?
+                                   epv-pattern? filter-pattern? eval-pattern? op-pattern?]]
+              [zuko.util :as u]
               [asami.graph :as gr]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
@@ -398,8 +397,11 @@
    options]
   (let [{:keys [prebounds epv-patterns filter-patterns
                 eval-patterns not-patterns op-patterns unknown] :as p} (extract-patterns-by-type patterns)
-        _ (when (seq unknown) (throw (ex-info (str "Unknown form in query: " (str/join "," unknown))
-                                              {:unknown unknown :query patterns})))
+        _ (when (seq unknown)
+            (println "METAS: " (map meta patterns))
+            (println "PATTERNS: " patterns)
+            (throw (ex-info (str "Unknown form in query: " (str/join "," (doall unknown)))
+                            {:unknown unknown :query patterns})))
 
         count-map (merge
                    (u/mapmap (partial gr/count-pattern graph) epv-patterns)

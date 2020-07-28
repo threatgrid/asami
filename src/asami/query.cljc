@@ -1,17 +1,16 @@
 (ns ^{:doc "Implements query operations based on data accessible through the Graph protocol."
       :author "Paula Gearon"}
     asami.query
-    (:require [naga.schema.store-structs :as st
-                                         :refer [EPVPattern FilterPattern Pattern
-                                                 Results Value Var
-                                                 EvalPattern eval-pattern?
-                                                 epv-pattern? filter-pattern?
-                                                 op-pattern? vartest?]]
-              [naga.store :refer [Storage StorageType]]
-              [naga.storage.store-util :as store-util]
+    (:require [zuko.schema :refer [EPVPattern FilterPattern Pattern
+                                   Results Value Var
+                                   EvalPattern eval-pattern?
+                                   epv-pattern? filter-pattern?
+                                   op-pattern? vars vartest?]]
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
-              [naga.util :refer [fn-for]]
+              [asami.internal :as internal]
+              [zuko.projection :as projection]
+              [zuko.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])
               #?(:clj  [clojure.edn :as edn]
@@ -23,7 +22,7 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
-(s/defn find-vars [f] (set (filter st/vartest? f)))
+(s/defn find-vars [f] (set (vars f)))
 
 (defn op-error
   [pattern]
@@ -43,7 +42,7 @@
     (cond
       ;; bindings will pass the epv-pattern? test, so must check for this first
       (planner/bindings? pattern) (set (:cols (meta pattern)))
-      (epv-pattern? pattern) (set (st/vars pattern))
+      (epv-pattern? pattern) (find-vars pattern)
       (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
       (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
                               (get-vars pattern)
@@ -88,11 +87,11 @@
    part :- Results
    pattern :- EPVPattern]
   (let [cols (:cols (meta part))
-        total-cols (->> (st/vars pattern)
+        total-cols (->> (vars pattern)
                         (remove (set cols))
                         (concat cols)
                         (into []))
-        pattern->left (store-util/matching-vars pattern cols)]
+        pattern->left (projection/matching-vars pattern cols)]
     ;; iterate over part, lookup pattern
     (with-meta
       (for [lrow part
@@ -120,7 +119,7 @@
                         (remove (set lcols))
                         (concat lcols)
                         (into []))
-        left->binding (store-util/matching-vars lcols rcols)]
+        left->binding (projection/matching-vars lcols rcols)]
     (with-meta
       (if (seq left->binding)
         (let [key-indices (sort (keys left->binding))
@@ -145,6 +144,14 @@
           (concat row-l row-r)))
       {:cols total-cols})))
 
+(s/defn missing :- (s/maybe Var)
+  "Returns a value when it is a var that does not appear in the varmap."
+  [varmap :- {Var s/Num}
+   arg :- s/Any]
+  (when (and (vartest? arg)
+             (not (get varmap arg)))
+    arg))
+
 (s/defn filter-join
   "Uses row bindings in a partial result as arguments to a function whose parameters are defined by those names.
    Those rows whose bindings return true/truthy are kept and the remainder are removed."
@@ -162,7 +169,12 @@
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
-    (with-meta (filter filter-fn part) m)))
+    (try
+      (with-meta (filter filter-fn part) m)
+      (catch #?(:clj Throwable :cljs :default) e
+        (throw (if-let [ev (some (partial missing var-map) args)]
+                 (ex-info (str "Unknown variable in filter: " (name ev)) {:vars (keys var-map) :filter-var ev})
+                 (ex-info (str "Error executing filter: " e) {:error e})))))))
 
 (s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
@@ -217,7 +229,7 @@
        (if (epv-pattern? fpattern)  ;; this test is an optimization, to avoid matching-vars in a tight loop
          (let [cols (:cols col-meta)  ;; existing bound column names
                ;; map the first pattern's vars into the existing binding columns. Used for the first resolution.
-               pattern->left (store-util/matching-vars fpattern cols)
+               pattern->left (projection/matching-vars fpattern cols)
                ;; find all bound vars that will be needed for the entire subquery
                vars (reduce #(into %1 (get-vars %2)) #{} patterns)
                ;; get the required bound column names, in order
@@ -313,7 +325,7 @@
     (with-meta
       (for [row-l leftb row-r rightb]
         (concat row-l row-r))
-      {:cols (concat namesl namesr)})))
+      {:cols (into namesl namesr)})))
 
 (s/defn symb?
   "Similar to symbol? but excludes the special ... form"
@@ -334,17 +346,17 @@
       (cond
         (and (sequential? a) (nil? r) (every? symb? a)) ; relation
         (if (every? #(= (count a) (count %)) values)
-          (with-meta values {:cols a})
+          (with-meta values {:cols (vec a)})
           (throw (ex-info "Data does not match relation binding form" {:form nm :data values})))
 
         (and (symb? a) (= '... (first r)) (= 2 (count nm))) ; collection
-        (if (sequential? values)
+        (if (coll? values)
           (with-meta (map vector values) {:cols [a]})
           (throw (ex-info "Tuples data does not match collection binding form" {:form nm :data values})))
 
         (and (every? symb? nm)) ; tuple
         (if (and (sequential? values) (= (count nm) (count values)))
-          (with-meta [values] {:cols nm})
+          (with-meta [values] {:cols (vec nm)})
           (throw (ex-info "Tuples data does not match tuple binding form" {:form nm :data values})))
 
         :default (throw (ex-info "Unrecognized binding form" {:form nm}))))
@@ -352,13 +364,14 @@
     :default (ex-info "Illegal scalar binding form" {:form nm})))
 
 (s/defn create-bindings :- [(s/one (s/maybe Bindings) "The bindings for other params")
-                            (s/one (s/maybe StorageType) "The default storage")]
+                            (s/one (s/maybe s/Any) "The default graph")]
   "Converts user provided data for a query into bindings"
   [in :- [InSpec]
-   values :- (s/cond-pre (s/protocol Storage) s/Any)]
+   values ;; :- (s/cond-pre (s/protocol Storage) s/Any)
+   ]
   (if-not (seq in)
     [empty-bindings (first values)]
-    (let [[default :as defaults] (filter identity (map (fn [n v] (when (= '$ n) v)) in values))]
+    (let [[default :as defaults] (remove nil? (map (fn [n v] (when (= '$ n) v)) in values))]
       (when (< 1 (count defaults))
         (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
       (when-not (<= (count in) (count values))
@@ -376,12 +389,11 @@
 
 (s/defn select-planner
   "Selects a query planner function, based on user-selected options"
-  [options]
-  (let [opt (set options)]
-    (case (get opt :planner)
-      :user planner/user-plan
-      :min planner/plan-path  ; TODO: switch to minimal-first-planner
-      planner/plan-path)))
+  [{:keys [planner] :as options}]
+  (case planner
+    :user planner/user-plan
+    :min planner/plan-path  ; TODO: switch to minimal-first-planner
+    planner/plan-path))
 
 (s/defn run-simple-query
   [graph
@@ -398,7 +410,7 @@
                                       ;; the first element is a pattern lookup
                                       (epv-pattern? fpattern) [(with-meta
                                                                  (gr/resolve-pattern graph fpattern)
-                                                                 {:cols (st/vars fpattern)})
+                                                                 {:cols (vec (vars fpattern))})
                                                                patterns]
                                       ;; the first element is an operation,
                                       ;; start with an empty result and process all the patterns
@@ -428,6 +440,7 @@
    bindings :- (s/maybe Bindings)
    & options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
+        options (apply (fn [& {:as o}] o) options)
         path-planner (select-planner options)
         [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
@@ -437,7 +450,7 @@
         (planner/bindings? fpath) fpath
         (epv-pattern? fpath) (with-meta
                                (gr/resolve-pattern graph fpath)
-                               {:cols (st/vars fpath)})
+                               {:cols (vec (vars fpath))})
         :default (run-simple-query graph [fpath]))
 
       ;; normal operation
@@ -515,7 +528,9 @@
                               (seq? op) constraints       ;; first form is an operation. Already in the correct form
                               :default (throw (ex-info "Unknown constraint format" {:constraint constraints}))))
                           (list constraints))             ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
-        select-distinct (fn [xs] (let [m (meta xs)] (with-meta (*select-distinct* xs) m)))]
+        select-distinct (fn [xs] (if (and (coll? xs) (not (vector? xs)))
+                                   (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
+                                   xs))]
     (->> (join-patterns graph top-conjunction bindings)
          (project-fn selection)
          select-distinct)))
@@ -625,13 +640,12 @@
 
 (s/defn query-entry
   "Main entry point of user queries"
-  [query empty-store empty-graph inputs]
+  [query empty-graph inputs]
   (let [{:keys [find all in with where]} (-> (query-map query)
                                              query-validator)
-        [bindings default-store] (create-bindings in inputs)
-        store (or default-store empty-store)
-        graph (or (:graph store) empty-graph)
-        project-fn (partial store-util/project store)]
+        [bindings default-graph] (create-bindings in inputs)
+        graph (or default-graph empty-graph)
+        project-fn (partial projection/project internal/project-args)]
     (if (seq (filter planner/aggregate-form? find))
       (aggregate-query find bindings with where graph project-fn)
       (binding [*select-distinct* (if all identity distinct)]

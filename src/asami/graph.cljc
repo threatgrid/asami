@@ -2,7 +2,8 @@
       :author "Paula Gearon"}
     asami.graph
   (:require #?(:clj  [schema.core :as s]
-               :cljs [schema.core :as s :include-macros true])))
+               :cljs [schema.core :as s :include-macros true])
+            [clojure.string :as string]))
 
 
 (defprotocol Graph
@@ -25,3 +26,18 @@
   [graph [s p o :as pattern]]
   (count-triple graph s p o))
 
+(def tg-ns "tg")
+(def node-prefix "node-")
+(def prefix-len (count node-prefix))
+
+;; common implementations of the NodeAPI functions
+(defn new-node [] (->> node-prefix gensym name (keyword tg-ns)))
+
+(defn node-id [n] (subs (name n) prefix-len))
+
+(defn node-type? [n] (and (keyword? n) (= tg-ns (namespace n)) (string/starts-with? (name n) node-prefix)))
+
+(defn node-label
+  "Returns a keyword label for a node"
+  [n]
+  (keyword tg-ns (str "id-" (node-id n))))

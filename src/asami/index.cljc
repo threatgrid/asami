@@ -1,9 +1,10 @@
 (ns ^{:doc "An in-memory graph implementation with full indexing."
       :author "Paula Gearon"}
     asami.index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :as gr :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
             [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
+            [zuko.node :refer [NodeAPI]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -89,6 +90,14 @@
   (count-triple [this subj pred obj]
     (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
       (count-transitive-from-index this trans-tag subj plain-pred obj)
-      (common/count-from-index this subj pred obj))))
+      (common/count-from-index this subj pred obj)))
+  
+  NodeAPI
+  (data-attribute [_ _] :tg/first)
+  (container-attribute [_ _] :tg/contains)
+  (new-node [_] (gr/new-node))
+  (node-id [_ n] (gr/node-id n))
+  (node-type? [_ _ n] (gr/node-type? n))
+  (find-triple [this [e a v]] (resolve-triple this e a v)))
 
 (def empty-graph (->GraphIndexed {} {} {}))

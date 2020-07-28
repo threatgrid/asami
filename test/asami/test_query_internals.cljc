@@ -1,13 +1,14 @@
 (ns asami.test-query-internals
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
-            [asami.query :as q :refer [add-to-graph pattern-left-join outer-product
+            [asami.core :as core]
+            [asami.query :as q :refer [pattern-left-join outer-product
                                        create-binding create-bindings minus left-join disjunction
                                        result-label aggregate-over aggregate-query]]
             [asami.graph :refer [Graph resolve-triple]]
             [asami.index :refer [empty-graph]]
-            [naga.util :as u]
-            [asami.core :refer [empty-store]]
+            [asami.internal :as internal]
+            [zuko.util :as u]
             [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -17,6 +18,8 @@
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
 (use-fixtures :once st/validate-schemas)
+
+(def assert-data "Access to private function" #'asami.core/assert-data)
 
 (deftest var-mapping
   (let [m1 (matching-vars `[?a :rel ?c] `[?a ?b ?c] )
@@ -37,7 +40,7 @@
    [:z :px :c]])
 
 (deftest test-join
-  (let [graph (add-to-graph empty-graph join-data)
+  (let [graph (assert-data empty-graph join-data)
         part-result (with-meta
                       [[:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
                       {:cols '[?p ?o]})
@@ -129,9 +132,9 @@
 
 (deftest test-bindings
   (testing "scalar"
-    (let [[bds] (create-bindings '[$ ?a] [empty-store 5])
-          [bds2] (create-bindings '[$ ?a ?b] [empty-store 5 6])
-          [bds3] (create-bindings '[?a $] [5 empty-store])]
+    (let [[bds] (create-bindings '[$ ?a] [empty-graph 5])
+          [bds2] (create-bindings '[$ ?a ?b] [empty-graph 5 6])
+          [bds3] (create-bindings '[?a $] [5 empty-graph])]
       (is (= [[5]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 6]] bds2))
@@ -139,25 +142,25 @@
       (is (= [[5]] bds3))
       (is (= '[?a] (:cols (meta bds3))))))
   (testing "tuple"
-    (let [[bds] (create-bindings '[$ [?a ?b]] [empty-store [5 6]])
-          [bds2] (create-bindings '[[?a ?b] $] [[5 6] empty-store])
-          [bds3] (create-bindings '[$ [?a ?b] [?c ?d]] [empty-store [5 6] [7 8]])]
+    (let [[bds] (create-bindings '[$ [?a ?b]] [empty-graph [5 6]])
+          [bds2] (create-bindings '[[?a ?b] $] [[5 6] empty-graph])
+          [bds3] (create-bindings '[$ [?a ?b] [?c ?d]] [empty-graph [5 6] [7 8]])]
       (is (= [[5 6]] bds))
       (is (= '[?a ?b] (:cols (meta bds))))
       (is (= bds bds2))
       (is (= [[5 6 7 8]] bds3))
       (is (= '[?a ?b ?c ?d] (:cols (meta bds3))))
-      (is (thrown? ExceptionInfo (create-bindings '[$ [?a ?b] [?b ?c]] [empty-store [5 6] [7 8]])))))
+      (is (thrown? ExceptionInfo (create-bindings '[$ [?a ?b] [?b ?c]] [empty-graph [5 6] [7 8]])))))
   (testing "collection"
-    (let [[bds] (create-bindings '[$ [?a ...]] [empty-store [5 6]])
-          [bds2] (create-bindings '[$ [?a ...] [?b ...]] [empty-store [5 6] [7 8]])]
+    (let [[bds] (create-bindings '[$ [?a ...]] [empty-graph [5 6]])
+          [bds2] (create-bindings '[$ [?a ...] [?b ...]] [empty-graph [5 6] [7 8]])]
       (is (= [[5] [6]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 7] [5 8] [6 7] [6 8]] bds2))
       (is (= '[?a ?b] (:cols (meta bds2))))))
   (testing "relation"
-    (let [[bds] (create-bindings '[$ [[?a ?b]]] [empty-store [[5 6] [7 8]]])
-          [bds2] (create-bindings '[$ [[?a ?b]] [[?c ?d]]] [empty-store [[5 6] [7 8]] [[1 2]]])]
+    (let [[bds] (create-bindings '[$ [[?a ?b]]] [empty-graph [[5 6] [7 8]]])
+          [bds2] (create-bindings '[$ [[?a ?b]] [[?c ?d]]] [empty-graph [[5 6] [7 8]] [[1 2]]])]
       (is (= [[5 6] [7 8]] bds))
       (is (= '[?a ?b] (:cols (meta bds))))
       (is (= [[5 6 1 2] [7 8 1 2]] bds2))
@@ -176,7 +179,7 @@
    [:z :px :c]])
 
 (deftest test-minus
-  (let [graph (add-to-graph empty-graph minus-data)
+  (let [graph (assert-data empty-graph minus-data)
         part-result (with-meta
                       [[:p1 :a] [:p1 :b] [:p2 :z] [:p3 :x] [:p3 :t]]
                       {:cols '[?p ?o]})
@@ -198,7 +201,7 @@
    [:d :pz :q]])
 
 (deftest test-or
-  (let [graph (add-to-graph empty-graph or-data)
+  (let [graph (assert-data empty-graph or-data)
         part-result (with-meta
                       [[:a] [:b] [:c] [:d]]
                       {:cols '[?e]})
@@ -294,8 +297,8 @@
           bindings q/empty-bindings
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
-          graph (add-to-graph empty-graph agg-data)
-          project-fn (partial project empty-store)
+          graph (assert-data empty-graph agg-data)
+          project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]
       (is (= '[?a ?b ?count-c] (:cols (meta r))))
@@ -305,8 +308,8 @@
           bindings q/empty-bindings
           with []
           where '[[?a :p ?c]]
-          graph (add-to-graph empty-graph agg-data)
-          project-fn (partial project empty-store)
+          graph (assert-data empty-graph agg-data)
+          project-fn (partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn)]
       (is (= '[?count-c] (:cols (meta r))))

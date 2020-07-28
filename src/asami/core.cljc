@@ -6,168 +6,354 @@
               [asami.index :as mem]
               [asami.multi-graph :as multi]
               [asami.query :as query]
-              [naga.storage.store-util :as store-util]
+              [asami.internal :as internal]
+              [asami.datom :as datom :refer [->Datom]]
               [naga.store :as store :refer [Storage StorageType]]
-              [naga.store-registry :as registry]
+              [zuko.util :as util]
+              [zuko.entity.general :as entity :refer [EntityMap GraphType]]
+              [zuko.entity.writer :as writer :refer [Triple]]
+              [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])
-              #?(:clj [clojure.core.cache :as c])))
+                 :cljs [schema.core :as s :include-macros true]))
+    #?(:clj (:import [java.util Date])))
 
+(defn now
+  "Creates an object to represent the current time"
+  []
+  #?(:clj (Date.)
+     :cljs (js/Date.)))
 
-#?(:clj
-  ;; Using a cache of 1 is currently redundant to an atom
-  (let [m (atom (c/lru-cache-factory {} :threshold 1))]
-    (defn get-count-fn
-      "Returns a memoized counting function for the current graph.
-       These functions only last as long as the current graph."
-      [graph]
-      (if-let [f (c/lookup @m graph)]
-        (do
-          (swap! m c/hit graph)
-          f)
-        (let [f (memoize #(gr/count-pattern graph %))]
-          (swap! m c/miss graph f)
-          f))))
+(defn instant?
+  "Tests if a value is a timestamp"
+  [t]
+  (= #?(:clj Date :cljs js/Date) (type t)))
 
-  :cljs
-  (let [m (atom {})]
-    (defn get-count-fn
-      "Returns a memoized counting function for the current graph.
-       These functions only last as long as the current graph."
-      [graph]
-      (if-let [f (get @m graph)]
-        f
-        (let [f (memoize #(gr/count-pattern graph %))]
-          (reset! m {graph f})
-          f)))))
+(defn ^:private find-index
+  "Performs a binary search through a sorted vector, returning the index of a provided value
+   that is in the vector, or the next lower index if the value is not present.
+   a: The vector to be searched
+   v: The value being searched for
+   cmp: A 2 argument comparator function (Optional).
+        Defaults to clojure.core/compare
+        Must return -1 when the first arg < the second arg.
+                    +1 when the first arg > the second arg.
+                    0 when the args are equal."
+  ([a v]
+   (find-index a v compare))
+  ([a v cmp]
+     (loop [low 0 high (count a)]
+       (if (= (inc low) high)
+         low
+         (let [mid (int (/ (+ low high) 2))
+               mv (nth a mid)
+               c (cmp mv v)]
+           (cond
+             (zero? c) mid
+             (> 0 c) (recur mid high)
+             (< 0 c) (recur low mid)))))))
 
-(defn shorten
-  "truncates a symbol or keyword to exclude a ' character"
+(defonce databases (atom {}))
+
+(def empty-graph mem/empty-graph)
+(def empty-multi-graph multi/empty-multi-graph)
+
+;; graph is the wrapped graph
+;; history is a seq of Databases, excluding this one
+;; timestamp is the time the database was created
+(defrecord Database [graph history timestamp])
+
+(def DatabaseType (s/pred (partial instance? Database)))
+
+;; name is the name of the database
+;; state is an atom containing:
+;; :db is the latest DB
+;; :history is a list of tuples of Database, including db
+(defrecord Connection [name state])
+
+(def ConnectionType (s/pred (partial instance? Connection)))
+
+(defn- new-empty-connection
+  [name empty-gr]
+  (let [db (->Database empty-gr [] (now))]
+    (->Connection name (atom {:db db :history [db]}))))
+
+(s/defn ^:private parse-uri :- {:type s/Str
+                                :name s/Str}
+  "Splits up a database URI string into structured parts"
+  [uri :- s/Str]
+  (if (map? uri)
+    uri
+    (if-let [[_ db-type db-name] (re-find #"asami:([^:]+)://(.+)" uri)]
+      {:type db-type
+       :name db-name})))
+
+(s/defn create-database :- s/Bool
+  "Creates database specified by uri. Returns true if the
+   database was created, false if it already exists."
+  [uri :- s/Str]
+  (boolean
+   (if-not (@databases uri)
+     (let [{:keys [type name]} (parse-uri uri)]
+       (case type
+         "mem" (swap! databases assoc uri (new-empty-connection name empty-graph)) 
+         "multi" (swap! databases assoc uri (new-empty-connection name empty-multi-graph)) 
+         "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
+         (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))))
+
+(s/defn connect :- ConnectionType
+  "Connects to the specified database, returning a Connection.
+  In-memory databases get created if they do not exist already.
+  Memory graphs:
+  asami:mem://dbname    A standard graph
+  asami:multi://dbname  A multigraph"
+  [uri :- s/Str]
+  (if-let [conn (@databases uri)]
+    conn
+    (do
+      (create-database uri)
+      (@databases uri))))
+
+(s/defn db :- DatabaseType
+  "Retrieves the most recent value of the database for reading."
+  [connection :- ConnectionType]
+  (:db @(:state connection)))
+
+(s/defn as-of :- DatabaseType
+  "Retrieves the database as of a given moment, inclusive.
+   The t value may be an instant, or a transaction ID.
+   The database returned will be whatever database was the latest at the specified time or transaction."
+  [{:keys [graph history timestamp] :as db} :- DatabaseType
+   t :- (s/cond-pre s/Int (s/pred instant?))]
+  (cond
+    (instant? t) (if (>= (compare t timestamp) 0)
+                   db
+                   (nth history
+                        (find-index history t #(compare (:timestamp %1) %2))))
+    (int? t) (if (>= t (count history))
+               db
+               (nth history (min (max t 0) (dec (count history)))))))
+
+(s/defn as-of-t :- s/Int
+  "Returns the as-of point for a database, or nil if none"
+  [{history :history :as db} :- DatabaseType]
+  (and history (count history)))
+
+(s/defn since :- (s/maybe DatabaseType)
+  "Returns the value of the database since some point t, exclusive.
+   t can be a transaction number, or instant."
+  [{:keys [graph history timestamp] :as db} :- DatabaseType
+   t :- (s/cond-pre s/Int (s/pred instant?))]
+  (cond
+    (instant? t) (cond
+                   (> (compare t timestamp) 0) nil
+                   (< (compare t (:timestamp (first history))) 0) (first history)
+                   :default (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
+                              (if (= tx (count history))
+                                db
+                                (nth history tx))))
+    (int? t) (cond (>= t (count history)) nil
+                   (= (count history) (inc t)) db
+                   :default (nth history (min (max (inc t) 0) (dec (count history)))))))
+
+(s/defn since-t :- s/Int
+  "Returns the since point of a database, or nil if none"
+  [{history :history :as db} :- DatabaseType]
+  (if-not (seq history)
+    0
+    (count history)))
+
+(s/defn graph :- GraphType
+  "Returns the Graph object associated with a Database"
+  [database :- DatabaseType]
+  (:graph database))
+
+(s/defn as-database :- DatabaseType
+  "Creates a Database around an existing Graph.
+   graph: The graph to build a database around.
+   uri: Optional. The uri of the database. If this is provided then a connection will be available."
+  ([graph :- GraphType]
+   (->Database graph [] (now)))
+  ([graph :- GraphType
+    uri :- s/Str]
+   (let [{:keys [name]} (parse-uri uri)
+         new-conn (new-empty-connection name graph)]
+     (swap! databases assoc uri new-conn)
+     (db new-conn))))
+
+(s/defn ^:private assert-data :- GraphType
+  "Adds triples to a graph"
+  [graph :- GraphType
+   data :- [[s/Any]]]
+  (query/add-to-graph graph data))
+
+(s/defn ^:private retract-data :- GraphType
+  "Removes triples from a graph"
+  [graph :- GraphType
+   data :- [[s/Any]]]
+  (query/delete-from-graph graph data))
+
+(s/defn ^:private update-attribute? :- s/Bool
+  "Checks if an attribute indicates that it should be updated"
+  [a :- s/Any]  ;; usually a keyword, but attributes can be other things
+  (and (keyword a) (= \' (last (name a)))))
+
+(defn- normalize-attribute
+  "Converts an updating attribute to its normalized form"
   [a]
-  (if (string? a)
+  (if-not (keyword? a)
     a
-    (let [nns (namespace a)
-          n (name a)
-          cns (cond
-                (symbol? a) symbol
-                (keyword? a) keyword
-                :default (throw (ex-info "Invalid attribute type in rule head" {:attribute a :type (type a)})))]
-      (cns nns (subs n 0 (dec (count n)))))))
+    (let [n (name a)]
+      (keyword (namespace a) (subs n 0 (dec (count n)))))))
 
-(declare ->MemoryStore)
+(s/defn ^:private contains-updates?
+  "Checks if any part of the object is to be updated"
+  [obj :- {s/Any s/Any}]
+  (or (some update-attribute? (keys obj))
+      (some #(and (map? %) (contains-updates? %)) (vals obj))))
 
-(defrecord MemoryStore [before-graph graph]
-  Storage
-  (start-tx [this] (->MemoryStore graph graph))
+(s/defn ^:private entity-triples :- [(s/one [Triple] "New triples")
+                                     (s/one [Triple] "Retractions")
+                                     (s/one {s/Any s/Any} "New list of ID mappings")]
+  "Creates the triples to be added and removed for a new entity.
+   graph: the graph the entity is to be added to
+   obj: The entity to generate triples for
+   existing-ids: When IDs are provided by the user, then they get mapped to the internal ID that is actually used.
+                 This map contains a mapping of user IDs to the ID allocated for the entity"
+  [graph :- GraphType
+   {id :db/id ident :db/ident :as obj} :- EntityMap
+   existing-ids :- {s/Any s/Any}]
+  (let [[new-obj removals] (if (contains-updates? obj)
+                             (do
+                               (when-not (or id ident)
+                                 (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident" obj)))
+                               (let [node-ref (if id
+                                                (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                                                (ffirst (gr/resolve-triple graph '?r :db/ident ident)))
+                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
+                                     update-attributes (->> obj
+                                                            keys
+                                                            (filter update-attribute?)
+                                                            (map (fn [a] [a (normalize-attribute a)]))
+                                                            (into {}))
+                                     update-attrs (set (vals update-attributes))
+                                     clean-obj (->> obj
+                                                    (map (fn [[k v :as e]] (if-let [nk (update-attributes k)] [nk v] e)))
+                                                    (into {}))
+                                     removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
+                                                        (filter (comp update-attrs first)))
+                                     removals (mapcat (partial writer/existing-triples graph node-ref) removal-pairs)]
+                                 [clean-obj removals]))
+                             [obj nil])]
+    (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
+      [triples removals ids])))
 
-  (commit-tx [this] this)
+(defn- vec-rest
+  "Takes a vector and returns a vector of all but the first element. Same as (vec (rest s))"
+  [s]
+  #?(:clj (subvec (vec s) 1)
+     :cljs (vec (rest s))))
 
-  (deltas [this]
-    ;; sort responses by the number in the node ID, since these are known to be ordered
-    (when-let [previous-graph (or (:data (meta this)) before-graph)]
-      (->> (gr/graph-diff graph previous-graph)
-           (filter (fn [s] (seq (gr/resolve-pattern graph [s :naga/entity '?]))))
-           (sort-by #(subs (name %) 5)))))
+(defn- temp-id?
+  "Tests if an entity ID is a temporary ID"
+  [i]
+  (and (number? i) (neg? i)))
 
-  (new-node [this]
-    (->> "node-"
-         gensym
-         name
-         (keyword "mem")))
+(s/defn ^:private build-triples :- [(s/one [Triple] "Data to be asserted")
+                                    (s/one [Triple] "Data to be retracted")
+                                    (s/one {s/Any s/Any} "ID map of created objects")]
+  "Converts a set of transaction data into triples.
+  Returns a tuple containing [triples removal-triples tempids]"
+  [{graph :graph :as db} :- DatabaseType
+   data :- [s/Any]]
+  (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
+        add-triples (fn [[acc racc ids] obj]
+                      (if (map? obj)
+                        (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
+                          [(into acc triples) (into racc rtriples) new-ids])
+                        (if (and (seqable? obj)
+                                 (= 4 (count obj))
+                                 (= :db/add (first obj)))
+                          (or
+                           (if (= (nth obj 2) :db/id)
+                             (let [id (nth obj 3)]
+                               (if (temp-id? id)
+                                 (let [new-id (or (ids id) (gr/new-node))]
+                                   [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
+                           [(conj acc (mapv #(ids % %) (rest obj))) racc ids])
+                          (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
+        [triples rtriples id-map] (reduce add-triples [[] (vec retractions) {}] new-data)]
+    [triples rtriples id-map]))
 
-  (node-id [this n]
-    (subs (name n) 5))
+(s/defn transact
+  ;; returns a deref'able object that derefs to:
+  ;; {:db-before DatabaseType
+  ;;  :db-after DatabaseType
+  ;;  :tx-data [datom/DatomType]
+  ;;  :tempids {s/Any s/Any}}
+  "Updates a database. This is currently synchronous, but returns a future or delay for compatibility with Datomic.
+   connection: The connection to the database to be updated.
+   tx-info: This is either a seq of items to be transacted, or a map containing a :tx-data value with such a seq.
+            Each item to be transacted is one of:
+            - vector of the form: [:db/assert entity attribute value] - creates a datom
+            - vector of the form: [:db/retract entity attribute value] - removes a datom
+            - map: an entity to be inserted/updated.
+  Entities and assertions may have attrubutes that are keywords with a trailing ' character.
+  When these appear an existing attribute without that character will be replaced. This only occurs for the top level
+  entity, and is not applied to attributes appearing in nested structures.
+  Entities can be assigned a :db/id value. If this is a negative number, then it is considered a temporary value and
+  will be mapped to a system-allocated ID. Other entities can reference such an entity using that ID.
+  Entities can be provided a :db/ident value of any type. This will be considered unique, and can be used to identify
+  entities for updates in subsequent transactions, though not in the current one.
 
-  (node-type? [this prop value]
-    (and (keyword? value)
-         (= "mem" (namespace value))
-         (str/starts-with? (name value) "node-")))
+  Returns a future/delay object that will hold a map containing the following:
+  :db-before    database value before the transaction
+  :db-after     database value after the transaction
+  :tx-data      sequence of datoms produced by the transaction
+  :tempids      mapping of the temporary IDs in entities to the allocated nodes"
+  [{:keys [name state] :as connection} :- ConnectionType
+   {tx-data :tx-data :as tx-info} :- (s/if map? {:tx-data [s/Any]} [s/Any])]
+  (let [op (fn []
+             (let [tx-id (count (:history @state))
+                   as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
+                   {:keys [graph history] :as db-before} (:db @state)
+                   tx-data (or tx-data tx-info) ;; capture the old usage which didn't have an arg map
+                   [triples removals tempids] (build-triples db-before tx-data)
+                   next-graph (-> graph
+                                  (assert-data triples)
+                                  (retract-data removals))
+                   db-after (->Database
+                             next-graph
+                             (conj history db-before)
+                             (now))]
+               (reset! (:state connection) {:db db-after :history (conj (:history db-after) db-after)})
+               {:db-before db-before
+                :db-after db-after
+                :tx-data (concat
+                          (map (partial as-datom true) triples)
+                          (map (partial as-datom false) removals))
+                :tempids tempids}))]
+    #?(:clj (future (op))
+       :cljs (let [d (delay (op))]
+               (force d)
+               d))))
 
-  (data-property [_ data]
-    :naga/first)
+(s/defn entity :- {s/Any s/Any}
+  "Returns an entity based on an identifier. This eagerly retrieves the entity. No Loops!"
+  ;; TODO create an Entity type that lazily loads, and references the database it came from
+  [{graph :graph :as db} id]
+  (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                   (ffirst (gr/resolve-triple graph '?e :db/id id))
+                   (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
+    (reader/ref->entity graph ref)))
 
-  (container-property [_ data]
-    :naga/contains)
+(defn- graphs-of
+  "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
+  [inputs]
+  (map #(if (instance? Database %) (:graph %) %) inputs))
 
-  (resolve-pattern [_ pattern]
-    (gr/resolve-pattern graph pattern))
-
-  (count-pattern [_ pattern]
-    (if-let [count-fn (get-count-fn graph)]
-      (count-fn pattern)
-      (gr/count-pattern graph pattern)))
-
-  (query [this output-pattern patterns]
-    (store-util/project this output-pattern (query/join-patterns graph patterns nil)))
-
-  (assert-data [_ data]
-    (->MemoryStore before-graph (query/add-to-graph graph data)))
-
-  (retract-data [_ data]
-    (->MemoryStore before-graph (query/delete-from-graph graph data)))
-
-  (assert-schema-opts [this _ _] this)
-
-  (query-insert [this assertion-patterns patterns]
-    ;; convert projection patterns to output form
-    ;; remember which patterns were converted
-    (let [[assertion-patterns'
-           update-attributes] (reduce (fn [[pts upd] [e a v :as p]]
-                                        (if (or (str/ends-with? (name a) "'") (:update (meta p)))
-                                          (let [short-a (shorten a)]
-                                            [(conj pts [e short-a v]) (conj upd short-a)])
-                                          [(conj pts p) upd]))
-                                      [[] #{}]
-                                      assertion-patterns)
-          var-updates (set (filter symbol? update-attributes))
-          ins-project (fn [data]
-                        (let [cols (:cols (meta data))]
-                          (if (seq var-updates)
-                            (throw (ex-info "Updating variable attributes not yet supported" {:vars var-updates}))
-                            ;; TODO: when insert-project is imported, modify to attach columns for update vars 
-                            (store-util/insert-project this assertion-patterns' #_var-updates cols data))))
-          lookup-triple (fn [part-pattern]
-                          (let [pattern (conj part-pattern '?v)
-                                values (gr/resolve-pattern graph pattern)]
-                            (sequence (comp (map first) (map (partial conj part-pattern))) values)))
-          is-update? #(update-attributes (nth % 1))
-          addition-bindings (ins-project (query/join-patterns graph patterns nil))
-          removals (->> addition-bindings
-                        (filter is-update?)
-                        (map #(vec (take 2 %)))
-                        (mapcat lookup-triple))
-          additions (if (seq var-updates) (map (partial take 3) addition-bindings) addition-bindings)]
-      (->MemoryStore before-graph
-                     (-> graph
-                         (query/delete-from-graph removals)
-                         (query/add-to-graph additions))))))
-
-(def empty-store (->MemoryStore nil mem/empty-graph))
-
-(def empty-multi-store (->MemoryStore nil multi/empty-multi-graph))
-
-(defn update-store
-  [{:keys [before-graph graph]} f & args]
-  (->MemoryStore before-graph (apply f graph args)))
-
-(s/defn create-store :- StorageType
-  "Factory function to create a store"
-  [config]
-  empty-store)
-
-(s/defn create-multi-store :- StorageType
-  "Factory function to create a multi-graph-store"
-  [config]
-  empty-multi-store)
-
-(registry/register-storage! :memory create-store)
-(registry/register-storage! :memory-multi create-multi-store)
-
-(s/defn graph->store :- StorageType
-  "Wraps a graph in the Storage record"
-  [graph :- gr/GraphType]
-  (->MemoryStore nil graph))
-
-(s/defn q
+(defn q
+  "Execute a query against the provided inputs.
+   The query can be a map, a seq, or a string.
+   See the (upcoming) documentation for a full description of queries."
   [query & inputs]
-  (query/query-entry query empty-store mem/empty-graph inputs))
+  (query/query-entry query mem/empty-graph (graphs-of inputs)))

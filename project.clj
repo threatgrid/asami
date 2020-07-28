@@ -1,13 +1,13 @@
-(defproject org.clojars.quoll/asami "0.4.12"
+(defproject org.clojars.quoll/asami "1.0.0-SNAPSHOT"
   :description "An in-memory implementation of a graph store, implementing the naga-store protocol"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/clojurescript "1.10.597"]
+                 [org.clojure/clojurescript "1.10.773"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/naga-store "0.3.4"]]
+                 [org.clojars.quoll/zuko "0.1.2"]]
   :plugins [[lein-cljsbuild "1.1.7"]
             [cider/cider-nrepl "0.24.0"]]
   :cljsbuild {
