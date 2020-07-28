@@ -38,12 +38,12 @@ Data can be loaded into a database either as objects, or "add" statements:
                     :movie/genre "cyber-punk/action"
                     :movie/release-year 1995}
                    {:movie/title "Toy Story"
-                    :movie/genre "animation/adventure/comedy"
+                    :movie/genre "animation/adventure"
                     :movie/release-year 1995}])
 
 (d/transact conn {:tx-data first-movies})
 ```
-This returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
+The `transact` operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
 
 With the data loaded, a database value can be retrieved from the database and then queried:
 
@@ -70,25 +70,62 @@ A more complex query could be to get the title, year and genre for all movies af
 ```
 Entities found in a query can be extracted back out as objects using the `entity` function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
 ```clojure
-;; find the entity IDs
-=> (d/q '[:find ?m :where [?m :movie/release-year 1995]] db)
-((:tg/node-10327) (:tg/node-10326))
+;; find the entity IDs. The :find clause asks for a list of just the ?m variable
+=> (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db)
+(:tg/node-10327 :tg/node-10326)
 
 ;; get a single entity
 => (d/entity db :tg/node-10327)
 #:movie{:title "Toy Story",
-        :genre "animation/adventure/comedy",
+        :genre "animation/adventure",
         :release-year 1995}
 
 ;; get all the entities from the query
-=> (map #(d/entity db (first %))
-        (d/q '[:find ?m :where [?m :movie/release-year 1995]] db))
+=> (map #(d/entity db %)
+        (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db))
 (#:movie{:title "Toy Story",
-         :genre "animation/adventure/comedy",
+         :genre "animation/adventure",
          :release-year 1995}
  #:movie{:title "Johnny Mnemonic",
          :genre "cyber-punk/action",
          :release-year 1995})
+```
+
+### Updates
+The _Open World Assumption_ allows each attribute to be multi-arity. In a _Closed World_ database an object may be loaded to replace those attributes that can only appear once. To do the same thing with Asami, annotate the attributes to be replaced with a quote character at the end of the attribute name. 
+```clojure
+=> (def toy-story (d/q '[:find ?ts . :where [?ts :movie/title "Toy Story"]] db))
+=> (d/transact conn [{:db/id toy-story :movie/genre' "animation/adventure/comedy"}])
+=> (d/entity db toy-story)
+#:movie{:title "Toy Story",
+        :movie/genre "animation/adventure/comedy",
+        :release-year 1995}
+```
+Addressing nodes by their internal ID can be cumbersome. They can also be addressed by a `:db/ident` field if one is provided.
+```clojure
+(def tx (d/transact conn [{:db/ident "sense"
+                           :movie/title "Sense and Sensibility"
+                           :movie/genre "drama/romance"
+                           :movie/release-year 1996}]))
+
+;; ask the transaction for the node ID, instead of querying
+(def sense (get (:tempids @tx) "sense"))
+(d/entity (d/db conn) sense)
+```
+This returns the new movie. However, the `:db/ident` attribute is hidden in the entity:
+```clojure
+#:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1996}
+```
+However, all of the attributes are still present in the graph:
+```clojure
+=> (d/q '[:find ?a ?v :in $ ?s :where [?s ?a ?v]] (d/db conn) sense)
+([:db/ident "sense"] [:movie/title "Sense and Sensibility"] [:movie/genre "drama/romance"] [:movie/release-year 1996])
+```
+The release year of this movie is incorrectly set to the release in the USA, and not the initial release. That can be updated using the `:db/ident` field:
+```clojure
+=> (d/transact conn [{:db/ident "sense" :movie/release-year' 1995}])
+=> (d/entity (d/db conn) sense)
+#:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1995}
 ```
 
 ## Analytics
@@ -127,7 +164,7 @@ Fred, Wilma, Pebbles, and Dino are all connected in a subgraph. Barney, Betty an
 Let's find the subgraph from Fred:
 ```clojure
 (def db (d/db conn))
-(def fred (ffirst (d/q '[:find ?e :where [?e :name "Fred"]] db)))
+(def fred (d/q '[:find ?e . :where [?e :name "Fred"]] db))
 
 (aa/subgraph-from-node (d/graph db) fred)
 ```
@@ -137,20 +174,21 @@ This returns the nodes in the graph, but not the scalar values. For instance:
 ```
 These can be used as the input to a query to get their names:
 ```clojure
-=> (d/q '[:find ?name :in $ [?n ...] :where [?n :name ?name]]
+=> (d/q '[:find [?name ...] :in $ [?n ...] :where [?n :name ?name]]
         db
         (aa/subgraph-from-node (d/graph db) fred))
-(("Wilma") ("Fred") ("Pebbles") ("Dino"))
+("Fred" "Pebbles" "Dino" "Wilma")
 ```
 
 We can also get all the subgraphs:
 ```clojure
-=> (count (aa/subgraphs db))
+=> (count (aa/subgraphs (d/graph db)))
 2
 
 ;; map a query across each subgraph
-=> (map (fn [gr] (d/q '[:find ?name :where [?e :name ?name]] gr))
-        (aa/subgraphs db))
+=> (map (partial d/q '[:find [?name ...] :where [?e :name ?name]])
+        (aa/subgraphs (d/graph db)))
+(("Fred" "Wilma" "Pebbles" "Dino") ("Barney" "Betty" "Bamm-Bamm"))
 ```
 
 ### Loom
@@ -169,10 +207,10 @@ If functions are provided to Loom, then they can be used to provide labels for c
 (require '[loom.io])
 
 (defn edge-label [g s d]
-  (str (ffirst (d/q '[:find ?edge :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d))))
+  (str (d/q '[:find ?edge . :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d)))
   
 (defn node-label [g n]
-  (or (ffirst (d/q '[:find ?name :where [?n :name ?name]] g n)) "-"))
+  (or (d/q '[:find ?name . :where [?n :name ?name]] g n) "-"))
 
 ;; create a PDF of the graph
 (loom-io/view (graph db) :fmt :pdg :alg :sfpd :edge-label edge-label :node-label node-label)
@@ -180,7 +218,8 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 
 ## TODO
-Using the API needs to be expanded upon. The `asami.core/q` function has significantly more functionality now, and roughly follows the Datomic function of the same name. Also, the `asami.analytics` namespace has been created to offer some graph analytics. For now, this just covers subgraph identification and isolation.
+- Currently implementing durable storage.
+- More analytics to come!
 
 ## License
 
