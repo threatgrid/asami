@@ -226,9 +226,9 @@
                              (do
                                (when-not (or id ident)
                                  (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident" obj)))
-                               (let [node-ref (ffirst (if id
-                                                        (gr/resolve-triple graph '?r :db/id id)
-                                                        (gr/resolve-triple graph '?r :db/ident ident)))
+                               (let [node-ref (if id
+                                                (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                                                (ffirst (gr/resolve-triple graph '?r :db/ident ident)))
                                      _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
                                      update-attributes (->> obj
                                                             keys
