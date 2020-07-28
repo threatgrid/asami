@@ -162,6 +162,24 @@
     0
     (count history)))
 
+(s/defn graph :- GraphType
+  "Returns the Graph object associated with a Database"
+  [database :- DatabaseType]
+  (:graph database))
+
+(s/defn as-database :- DatabaseType
+  "Creates a Database around an existing Graph.
+   graph: The graph to build a database around.
+   uri: Optional. The uri of the database. If this is provided then a connection will be available."
+  ([graph :- GraphType]
+   (->Database graph [] (now)))
+  ([graph :- GraphType
+    uri :- s/Str]
+   (let [{:keys [name]} (parse-uri uri)
+         new-conn (new-empty-connection name graph)]
+     (swap! databases assoc uri new-conn)
+     (db new-conn))))
+
 (s/defn ^:private assert-data :- GraphType
   "Adds triples to a graph"
   [graph :- GraphType
@@ -261,7 +279,7 @@
                                (if (temp-id? id)
                                  (let [new-id (or (ids id) (gr/new-node))]
                                    [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
-                           [(conj acc (vec-rest obj)) racc ids])
+                           [(conj acc (mapv #(ids % %) (rest obj))) racc ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
         [triples rtriples id-map] (reduce add-triples [[] (vec retractions) {}] new-data)]
     [triples rtriples id-map]))

@@ -144,6 +144,14 @@
           (concat row-l row-r)))
       {:cols total-cols})))
 
+(s/defn missing :- (s/maybe Var)
+  "Returns a value when it is a var that does not appear in the varmap."
+  [varmap :- {Var s/Num}
+   arg :- s/Any]
+  (when (and (vartest? arg)
+             (not (get varmap arg)))
+    arg))
+
 (s/defn filter-join
   "Uses row bindings in a partial result as arguments to a function whose parameters are defined by those names.
    Those rows whose bindings return true/truthy are kept and the remainder are removed."
@@ -161,7 +169,12 @@
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]
                     (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
-    (with-meta (filter filter-fn part) m)))
+    (try
+      (with-meta (filter filter-fn part) m)
+      (catch #?(:clj Throwable :cljs :default) e
+        (throw (if-let [ev (some (partial missing var-map) args)]
+                 (ex-info (str "Unknown variable in filter: " (name ev)) {:vars (keys var-map) :filter-var ev})
+                 (ex-info (str "Error executing filter: " e) {:error e})))))))
 
 (s/defn binding-join
   "Uses row bindings as arguments for an expression that uses the names in that binding.
@@ -312,7 +325,7 @@
     (with-meta
       (for [row-l leftb row-r rightb]
         (concat row-l row-r))
-      {:cols (concat namesl namesr)})))
+      {:cols (into namesl namesr)})))
 
 (s/defn symb?
   "Similar to symbol? but excludes the special ... form"
@@ -333,17 +346,17 @@
       (cond
         (and (sequential? a) (nil? r) (every? symb? a)) ; relation
         (if (every? #(= (count a) (count %)) values)
-          (with-meta values {:cols a})
+          (with-meta values {:cols (vec a)})
           (throw (ex-info "Data does not match relation binding form" {:form nm :data values})))
 
         (and (symb? a) (= '... (first r)) (= 2 (count nm))) ; collection
-        (if (sequential? values)
+        (if (coll? values)
           (with-meta (map vector values) {:cols [a]})
           (throw (ex-info "Tuples data does not match collection binding form" {:form nm :data values})))
 
         (and (every? symb? nm)) ; tuple
         (if (and (sequential? values) (= (count nm) (count values)))
-          (with-meta [values] {:cols nm})
+          (with-meta [values] {:cols (vec nm)})
           (throw (ex-info "Tuples data does not match tuple binding form" {:form nm :data values})))
 
         :default (throw (ex-info "Unrecognized binding form" {:form nm}))))
@@ -397,7 +410,7 @@
                                       ;; the first element is a pattern lookup
                                       (epv-pattern? fpattern) [(with-meta
                                                                  (gr/resolve-pattern graph fpattern)
-                                                                 {:cols (vars fpattern)})
+                                                                 {:cols (vec (vars fpattern))})
                                                                patterns]
                                       ;; the first element is an operation,
                                       ;; start with an empty result and process all the patterns
@@ -437,7 +450,7 @@
         (planner/bindings? fpath) fpath
         (epv-pattern? fpath) (with-meta
                                (gr/resolve-pattern graph fpath)
-                               {:cols (vars fpath)})
+                               {:cols (vec (vars fpath))})
         :default (run-simple-query graph [fpath]))
 
       ;; normal operation
