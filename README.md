@@ -207,7 +207,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 (require '[loom.io])
 
 (defn edge-label [g s d]
-  (str (d/q '[:find ?edge . :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d)))
+  (str (d/q '[:find ?e . :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d)))
   
 (defn node-label [g n]
   (or (d/q '[:find ?name . :where [?n :name ?name]] g n) "-"))
