@@ -164,30 +164,31 @@ Fred, Wilma, Pebbles, and Dino are all connected in a subgraph. Barney, Betty an
 Let's find the subgraph from Fred:
 ```clojure
 (def db (d/db conn))
+(def graph (d/graph db))
 (def fred (d/q '[:find ?e . :where [?e :name "Fred"]] db))
 
-(aa/subgraph-from-node (d/graph db) fred)
+(aa/subgraph-from-node graph fred)
 ```
-This returns the nodes in the graph, but not the scalar values. For instance:
+This returns the _nodes_ in the graph, but not the scalar values. For instance:
 ```clojure
 #{:tg/node-10330 :tg/node-10329 :tg/node-10331 :tg/node-10332}
 ```
-These can be used as the input to a query to get their names:
+These nodes can be used as the input to a query to get their names:
 ```clojure
 => (d/q '[:find [?name ...] :in $ [?n ...] :where [?n :name ?name]]
         db
-        (aa/subgraph-from-node (d/graph db) fred))
+        (aa/subgraph-from-node graph fred))
 ("Fred" "Pebbles" "Dino" "Wilma")
 ```
 
 We can also get all the subgraphs:
 ```clojure
-=> (count (aa/subgraphs (d/graph db)))
+=> (count (aa/subgraphs graph))
 2
 
-;; map a query across each subgraph
+;; execute the same query for each subgraph
 => (map (partial d/q '[:find [?name ...] :where [?e :name ?name]])
-        (aa/subgraphs (d/graph db)))
+        (aa/subgraphs graph))
 (("Fred" "Wilma" "Pebbles" "Dino") ("Barney" "Betty" "Bamm-Bamm"))
 ```
 
