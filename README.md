@@ -44,6 +44,8 @@ The following can be copy/pasted into a repl.:
 ```
 The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
 
+For more information about loading data and executing `transact` see the [Transactions documentation](https://github.com/threatgrid/asami/wiki/Transactions).
+
 With the data loaded, a database value can be retrieved from the database and then queried:
 
 ```clojure
