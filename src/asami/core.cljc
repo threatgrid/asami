@@ -297,13 +297,13 @@
             - vector of the form: [:db/assert entity attribute value] - creates a datom
             - vector of the form: [:db/retract entity attribute value] - removes a datom
             - map: an entity to be inserted/updated.
-  Entities and assertions may have attrubutes that are keywords with a trailing ' character.
+  Entities and assertions may have attributes that are keywords with a trailing ' character.
   When these appear an existing attribute without that character will be replaced. This only occurs for the top level
   entity, and is not applied to attributes appearing in nested structures.
   Entities can be assigned a :db/id value. If this is a negative number, then it is considered a temporary value and
   will be mapped to a system-allocated ID. Other entities can reference such an entity using that ID.
   Entities can be provided a :db/ident value of any type. This will be considered unique, and can be used to identify
-  entities for updates in subsequent transactions, though not in the current one.
+  entities for updates in subsequent transactions.
 
   Returns a future/delay object that will hold a map containing the following:
   :db-before    database value before the transaction
@@ -319,8 +319,8 @@
                    tx-data (or tx-data tx-info) ;; capture the old usage which didn't have an arg map
                    [triples removals tempids] (build-triples db-before tx-data)
                    next-graph (-> graph
-                                  (assert-data triples)
-                                  (retract-data removals))
+                                  (retract-data removals)
+                                  (assert-data triples))
                    db-after (->Database
                              next-graph
                              (conj history db-before)
@@ -329,8 +329,8 @@
                {:db-before db-before
                 :db-after db-after
                 :tx-data (concat
-                          (map (partial as-datom true) triples)
-                          (map (partial as-datom false) removals))
+                          (map (partial as-datom false) removals)
+                          (map (partial as-datom true) triples))
                 :tempids tempids}))]
     #?(:clj (future (op))
        :cljs (let [d (delay (op))]
@@ -338,11 +338,11 @@
                d))))
 
 (s/defn entity :- {s/Any s/Any}
-  "Returns an entity based on an identifier. This eagerly retrieves the entity. No Loops!"
+  "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
+   Objects may be nested, but references to top level objects will be nil in order to avoid loops."
   ;; TODO create an Entity type that lazily loads, and references the database it came from
   [{graph :graph :as db} id]
   (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
-                   (ffirst (gr/resolve-triple graph '?e :db/id id))
                    (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
     (reader/ref->entity graph ref)))
 
@@ -354,6 +354,7 @@
 (defn q
   "Execute a query against the provided inputs.
    The query can be a map, a seq, or a string.
-   See the (upcoming) documentation for a full description of queries."
+   See the documentation at https://github.com/threatgrid/asami/wiki/Querying
+   for a full description of queries."
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs)))

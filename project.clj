@@ -1,5 +1,5 @@
-(defproject org.clojars.quoll/asami "1.0.0-SNAPSHOT"
-  :description "An in-memory implementation of a graph store, implementing the naga-store protocol"
+(defproject org.clojars.quoll/asami "1.0.1"
+  :description "An in memory graph store for Clojure and ClojureScript"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
