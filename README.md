@@ -12,7 +12,9 @@ Asami has a query API that looks very similar to a simplified Datomic. More deta
 
 ## Usage
 
-Create and connect to a database:
+The [Asami API](https://github.com/threatgrid/asami/wiki/Asami-API) tries to look a little like Datomic.
+
+The following can be copy/pasted into a repl.:
 
 ```clojure
 (require '[asami.core :as d])
@@ -23,11 +25,8 @@ Create and connect to a database:
 
 ;; Create a connection to the database
 (def conn (d/connect db-uri))
-```
 
-Data can be loaded into a database either as objects, or "add" statements:
-
-```clojure
+;; Data can be loaded into a database either as objects, or "add" statements:
 (def first-movies [{:movie/title "Explorers"
                     :movie/genre "adventure/comedy/family"
                     :movie/release-year 1985}
@@ -43,7 +42,7 @@ Data can be loaded into a database either as objects, or "add" statements:
 
 (d/transact conn {:tx-data first-movies})
 ```
-The `transact` operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
+The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
 
 With the data loaded, a database value can be retrieved from the database and then queried:
 
@@ -68,7 +67,7 @@ A more complex query could be to get the title, year and genre for all movies af
               [?m :movie/genre ?genre]
               [(> ?year 1990)]] db)
 ```
-Entities found in a query can be extracted back out as objects using the `entity` function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
+Entities found in a query can be extracted back out as objects using the [`entity`](https://github.com/threatgrid/asami/wiki/Asami-API#entity) function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
 ```clojure
 ;; find the entity IDs. The :find clause asks for a list of just the ?m variable
 => (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db)
@@ -90,6 +89,7 @@ Entities found in a query can be extracted back out as objects using the `entity
          :genre "cyber-punk/action",
          :release-year 1995})
 ```
+See the [Query Documentation](https://github.com/threatgrid/asami/wiki/Querying) for more information on querying.
 
 ### Updates
 The _Open World Assumption_ allows each attribute to be multi-arity. In a _Closed World_ database an object may be loaded to replace those attributes that can only appear once. To do the same thing with Asami, annotate the attributes to be replaced with a quote character at the end of the attribute name. 
