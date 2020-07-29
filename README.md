@@ -69,7 +69,7 @@ A more complex query could be to get the title, year and genre for all movies af
 ```
 Entities found in a query can be extracted back out as objects using the [`entity`](https://github.com/threatgrid/asami/wiki/Asami-API#entity) function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
 ```clojure
-;; find the entity IDs. The :find clause asks for a list of just the ?m variable
+;; find the entity IDs. This variation in the :find clause asks for a list of just the ?m variable
 => (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db)
 (:tg/node-10327 :tg/node-10326)
 
