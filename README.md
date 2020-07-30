@@ -11,11 +11,29 @@ Asami also follows an _Open World Assumption_ model, in the same way that [RDF](
 Asami has a query API that looks very similar to a simplified Datomic. More details are available in the [Query documentation](https://github.com/threatgrid/asami/wiki/Querying).
 
 ## Usage
+### Installing
+Using Asami requires [Clojure](https://clojure.org/guides/getting_started) or [ClojureScript](https://clojurescript.org/guides/quick-start).
 
+Asami can be made available to clojure by adding the following to a `deps.edn` file:
+```clojure
+{
+  :deps {
+    org.clojars.quoll/asami {:mvn/version "1.0.2"}
+  }
+}
+```
+
+This makes Asami available to a repl that is launched with the `clj` or `clojure` commands.
+
+Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
+```clojure
+[org.clojars.quoll/asami "1.0.2"]
+```
+
+### Running
 The [Asami API](https://github.com/threatgrid/asami/wiki/Asami-API) tries to look a little like Datomic.
 
-The following can be copy/pasted into a repl.:
-
+Once a repl has been configured for Asami, the following can be copy/pasted to test the API:
 ```clojure
 (require '[asami.core :as d])
 
