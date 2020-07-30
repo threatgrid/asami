@@ -114,7 +114,7 @@ Addressing nodes by their internal ID can be cumbersome. They can also be addres
 (def sense (get (:tempids @tx) "sense"))
 (d/entity (d/db conn) sense)
 ```
-This returns the new movie. However, the `:db/ident` attribute is hidden in the entity:
+This returns the new movie. The `:db/ident` attribute does not appeaer in the entity:
 ```clojure
 #:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1996}
 ```
@@ -129,6 +129,7 @@ The release year of this movie is incorrectly set to the release in the USA, and
 => (d/entity (d/db conn) sense)
 #:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1995}
 ```
+More details are provided in [Entity Updates](https://github.com/threatgrid/asami/wiki/Transactions#entity-updates).
 
 ## Analytics
 Asami also has some support for graph analytics. These all operate on the _graph_ part of a database value, which can be retrieved with the `asami.core/graph` function.
