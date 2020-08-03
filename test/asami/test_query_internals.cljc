@@ -9,6 +9,7 @@
             [asami.index :refer [empty-graph]]
             [asami.internal :as internal]
             [zuko.util :as u]
+            [zuko.schema :refer [vartest?]]
             [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -328,8 +329,8 @@
   (testing "wildcards are replaced with fresh variables"
     (let [query (q/parse '{:find [?v], :where [[_ _ ?v]]})
           [[e a v]] (get query :where)]
-      (is (and (simple-symbol? e) (re-matches #"\?__.*" (name e))))
-      (is (and (simple-symbol? a) (re-matches #"\?__.*" (name e))))
+      (is (vartest? e))
+      (is (vartest? a))
       (is (= '?v v)))))
 
 #?(:cljs (run-tests))
