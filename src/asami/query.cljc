@@ -641,18 +641,17 @@
 (s/defn rewrite-wildcards
   "In the :where sequence of query replace all occurrences of _ with
   unique variables."
-  [query]
-  (let [old-where (get query :where)
-        new-where (map (fn [clause]
-                         (if (epv-pattern? clause)
-                           (mapv (fn [x]
-                                   (case x
-                                     _ (gensym "?__")
-                                     x))
-                                 clause)
-                           clause))
-                       old-where)]
-    (assoc query :where new-where)))
+  [{:keys [where] :as query}]
+  (assoc query
+         :where (map (fn [clause]
+                       (if (epv-pattern? clause)
+                         (mapv (fn [x]
+                                 (if (= x '_)
+                                   (gensym "?__")
+                                   x))
+                               clause)
+                         clause))
+                     where)))
 
 (s/defn parse
   [x]
