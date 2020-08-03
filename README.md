@@ -11,9 +11,29 @@ Asami also follows an _Open World Assumption_ model, in the same way that [RDF](
 Asami has a query API that looks very similar to a simplified Datomic. More details are available in the [Query documentation](https://github.com/threatgrid/asami/wiki/Querying).
 
 ## Usage
+### Installing
+Using Asami requires [Clojure](https://clojure.org/guides/getting_started) or [ClojureScript](https://clojurescript.org/guides/quick-start).
 
-Create and connect to a database:
+Asami can be made available to clojure by adding the following to a `deps.edn` file:
+```clojure
+{
+  :deps {
+    org.clojars.quoll/asami {:mvn/version "1.0.2"}
+  }
+}
+```
 
+This makes Asami available to a repl that is launched with the `clj` or `clojure` commands.
+
+Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
+```clojure
+[org.clojars.quoll/asami "1.0.2"]
+```
+
+### Running
+The [Asami API](https://github.com/threatgrid/asami/wiki/Asami-API) tries to look a little like Datomic.
+
+Once a repl has been configured for Asami, the following can be copy/pasted to test the API:
 ```clojure
 (require '[asami.core :as d])
 
@@ -23,11 +43,8 @@ Create and connect to a database:
 
 ;; Create a connection to the database
 (def conn (d/connect db-uri))
-```
 
-Data can be loaded into a database either as objects, or "add" statements:
-
-```clojure
+;; Data can be loaded into a database either as objects, or "add" statements:
 (def first-movies [{:movie/title "Explorers"
                     :movie/genre "adventure/comedy/family"
                     :movie/release-year 1985}
@@ -43,7 +60,9 @@ Data can be loaded into a database either as objects, or "add" statements:
 
 (d/transact conn {:tx-data first-movies})
 ```
-The `transact` operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
+The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
+
+For more information about loading data and executing `transact` see the [Transactions documentation](https://github.com/threatgrid/asami/wiki/Transactions).
 
 With the data loaded, a database value can be retrieved from the database and then queried:
 
@@ -55,10 +74,10 @@ With the data loaded, a database value can be retrieved from the database and th
 ```
 This returns the a sequence of results, with each result being a sequence of the selected vars in the `:find` clause (just `?movie-title` in this case):
 ```
-(("Explorers")
- ("Demolition Man")
- ("Johnny Mnemonic")
- ("Toy Story"))
+(["Explorers"]
+ ["Demolition Man"]
+ ["Johnny Mnemonic"]
+ ["Toy Story"])
 ```
 A more complex query could be to get the title, year and genre for all movies after 1990:
 ```clojure
@@ -68,9 +87,9 @@ A more complex query could be to get the title, year and genre for all movies af
               [?m :movie/genre ?genre]
               [(> ?year 1990)]] db)
 ```
-Entities found in a query can be extracted back out as objects using the `entity` function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
+Entities found in a query can be extracted back out as objects using the [`entity`](https://github.com/threatgrid/asami/wiki/Asami-API#entity) function. For instance, the following is a repl session that looks up the movies released in 1995, and then gets the associated entities:
 ```clojure
-;; find the entity IDs. The :find clause asks for a list of just the ?m variable
+;; find the entity IDs. This variation in the :find clause asks for a list of just the ?m variable
 => (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db)
 (:tg/node-10327 :tg/node-10326)
 
@@ -90,15 +109,18 @@ Entities found in a query can be extracted back out as objects using the `entity
          :genre "cyber-punk/action",
          :release-year 1995})
 ```
+See the [Query Documentation](https://github.com/threatgrid/asami/wiki/Querying) for more information on querying.
+
+Refer to the [Entity Structure documentation](https://github.com/threatgrid/asami/wiki/Entity-Structure) to understand how entities are stored and how to construct queries for them.
 
 ### Updates
 The _Open World Assumption_ allows each attribute to be multi-arity. In a _Closed World_ database an object may be loaded to replace those attributes that can only appear once. To do the same thing with Asami, annotate the attributes to be replaced with a quote character at the end of the attribute name. 
 ```clojure
 => (def toy-story (d/q '[:find ?ts . :where [?ts :movie/title "Toy Story"]] db))
 => (d/transact conn [{:db/id toy-story :movie/genre' "animation/adventure/comedy"}])
-=> (d/entity db toy-story)
+=> (d/entity (d/db conn) toy-story)
 #:movie{:title "Toy Story",
-        :movie/genre "animation/adventure/comedy",
+        :genre "animation/adventure/comedy",
         :release-year 1995}
 ```
 Addressing nodes by their internal ID can be cumbersome. They can also be addressed by a `:db/ident` field if one is provided.
@@ -112,7 +134,7 @@ Addressing nodes by their internal ID can be cumbersome. They can also be addres
 (def sense (get (:tempids @tx) "sense"))
 (d/entity (d/db conn) sense)
 ```
-This returns the new movie. However, the `:db/ident` attribute is hidden in the entity:
+This returns the new movie. The `:db/ident` attribute does not appeaer in the entity:
 ```clojure
 #:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1996}
 ```
@@ -127,6 +149,7 @@ The release year of this movie is incorrectly set to the release in the USA, and
 => (d/entity (d/db conn) sense)
 #:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1995}
 ```
+More details are provided in [Entity Updates](https://github.com/threatgrid/asami/wiki/Transactions#entity-updates).
 
 ## Analytics
 Asami also has some support for graph analytics. These all operate on the _graph_ part of a database value, which can be retrieved with the `asami.core/graph` function.
@@ -164,30 +187,31 @@ Fred, Wilma, Pebbles, and Dino are all connected in a subgraph. Barney, Betty an
 Let's find the subgraph from Fred:
 ```clojure
 (def db (d/db conn))
+(def graph (d/graph db))
 (def fred (d/q '[:find ?e . :where [?e :name "Fred"]] db))
 
-(aa/subgraph-from-node (d/graph db) fred)
+(aa/subgraph-from-node graph fred)
 ```
-This returns the nodes in the graph, but not the scalar values. For instance:
+This returns the _nodes_ in the graph, but not the scalar values. For instance:
 ```clojure
 #{:tg/node-10330 :tg/node-10329 :tg/node-10331 :tg/node-10332}
 ```
-These can be used as the input to a query to get their names:
+These nodes can be used as the input to a query to get their names:
 ```clojure
 => (d/q '[:find [?name ...] :in $ [?n ...] :where [?n :name ?name]]
         db
-        (aa/subgraph-from-node (d/graph db) fred))
+        (aa/subgraph-from-node graph fred))
 ("Fred" "Pebbles" "Dino" "Wilma")
 ```
 
 We can also get all the subgraphs:
 ```clojure
-=> (count (aa/subgraphs (d/graph db)))
+=> (count (aa/subgraphs graph))
 2
 
-;; map a query across each subgraph
+;; execute the same query for each subgraph
 => (map (partial d/q '[:find [?name ...] :where [?e :name ?name]])
-        (aa/subgraphs (d/graph db)))
+        (aa/subgraphs graph))
 (("Fred" "Wilma" "Pebbles" "Dino") ("Barney" "Betty" "Bamm-Bamm"))
 ```
 
@@ -207,7 +231,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 (require '[loom.io])
 
 (defn edge-label [g s d]
-  (str (d/q '[:find ?edge . :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d)))
+  (str (d/q '[:find ?e . :in $ ?a ?b :where (or [?a ?e ?b] [?b ?e ?a])] g s d)))
   
 (defn node-label [g n]
   (or (d/q '[:find ?name . :where [?n :name ?name]] g n) "-"))
