@@ -644,7 +644,7 @@
   [query]
   (let [old-where (get query :where)
         new-where (map (fn [clause]
-                         (if (vector? clause)
+                         (if (epv-pattern? clause)
                            (mapv (fn [x]
                                    (case x
                                      _ (gensym "?__")
