@@ -28,9 +28,7 @@
         m4 (matching-vars `[?x :rel ?f ?x :r2 ?e] `[?a ?b ?c ?d ?e ?f])]
     (is (= m1 {0 0, 2 2}))
     (is (= m2 {0 1, 2 5}))
-    (is (= m3 {0 1, 2 5, 3 1, 5 4}))
-    (is (= m4 {2 5, 5 4}))))
-
+    (is (= m3 {0 1, 2 5, 3 1, 5 4})) (is (= m4 {2 5, 5 4}))))
 (def join-data
   [[:b :px :c]
    [:b :px :d]
@@ -323,5 +321,12 @@
 (deftest test-fn-for
   (is ((u/fn-for '=) 5 5))
   (is (= ((u/fn-for 'str) "a" 5) "a5")))
+
+(deftest gh-49
+  (let [query (q/parse '{:find [?v], :where [[_ _ ?v]]})
+        [[e a v]] (get query :where)]
+    (is (and (simple-symbol? e) (re-matches #"\?__.*" (name e))))
+    (is (and (simple-symbol? a) (re-matches #"\?__.*" (name e))))
+    (is (= '?v v))))
 
 #?(:cljs (run-tests))

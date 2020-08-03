@@ -638,11 +638,31 @@
       ;; calculate the aggregates from the final results and project
       (aggregate-over find inner-results))))
 
+(s/defn rewrite-wildcards
+  "In the :where sequence of query replace all occurrences of _ with
+  unique variables."
+  [query]
+  (let [old-where (get query :where)
+        new-where (map (fn [clause]
+                         (mapv (fn [x]
+                                 (case x
+                                   _ (gensym "?__")
+                                   x))
+                               clause))
+                       old-where)]
+    (assoc query :where new-where)))
+
+(s/defn parse
+  [x]
+  (-> x
+      query-map
+      query-validator
+      rewrite-wildcards))
+
 (s/defn query-entry
   "Main entry point of user queries"
   [query empty-graph inputs]
-  (let [{:keys [find all in with where]} (-> (query-map query)
-                                             query-validator)
+  (let [{:keys [find all in with where]} (parse query)
         [bindings default-graph] (create-bindings in inputs)
         graph (or default-graph empty-graph)
         project-fn (partial projection/project internal/project-args)]
