@@ -324,11 +324,12 @@
   (is ((u/fn-for '=) 5 5))
   (is (= ((u/fn-for 'str) "a" 5) "a5")))
 
-(deftest gh-49
-  (let [query (q/parse '{:find [?v], :where [[_ _ ?v]]})
-        [[e a v]] (get query :where)]
-    (is (and (simple-symbol? e) (re-matches #"\?__.*" (name e))))
-    (is (and (simple-symbol? a) (re-matches #"\?__.*" (name e))))
-    (is (= '?v v))))
+(deftest test-query-parsing
+  (testing "wildcards are replaced with fresh variables"
+    (let [query (q/parse '{:find [?v], :where [[_ _ ?v]]})
+          [[e a v]] (get query :where)]
+      (is (and (simple-symbol? e) (re-matches #"\?__.*" (name e))))
+      (is (and (simple-symbol? a) (re-matches #"\?__.*" (name e))))
+      (is (= '?v v)))))
 
 #?(:cljs (run-tests))
