@@ -644,11 +644,13 @@
   [query]
   (let [old-where (get query :where)
         new-where (map (fn [clause]
-                         (mapv (fn [x]
-                                 (case x
-                                   _ (gensym "?__")
-                                   x))
-                               clause))
+                         (if (vector? clause)
+                           (mapv (fn [x]
+                                   (case x
+                                     _ (gensym "?__")
+                                     x))
+                                 clause)
+                           clause))
                        old-where)]
     (assoc query :where new-where)))
 
