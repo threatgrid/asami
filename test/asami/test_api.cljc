@@ -102,8 +102,9 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids "maksim")
         two (tempids "anna")]
-    (is (= 17 (count tx-data)))
+    (is (= 19 (count tx-data)))
     (is (= #{[one :db/ident "maksim"]
+             [one :tg/entity true]
              [one :name "Maksim"]
              [one :age 45]
              [one :wife two]}
@@ -113,6 +114,7 @@
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident "anna"]
+             [two :tg/entity true]
              [two :name "Anna"]
              [two :age 31]
              [two :husband one]}
@@ -149,9 +151,7 @@
            (entity d :maksim)))
     (is (= {:name  "Anna"
             :age   31
-            :husband {:name  "Maksim"
-                      :age   45
-                      :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+            :husband {:db/ident :maksim}
             :aka   ["Anitzka"]}
            (entity d :anna)))))
 
