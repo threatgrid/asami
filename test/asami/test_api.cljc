@@ -137,9 +137,16 @@
                 :age   31
                 :husband {:db/id -1}
                 :aka   ["Anitzka"]}
-        {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
+        pete   {:db/id -3
+                :db/ident "pete"
+                :name  #{"Peter" "Pete" "Petrov"}
+                :age   25
+                :aka ["Peter the Great" #{"Petey" "Petie"}]
+                }
+        {:keys [tempids tx-data] :as r} @(transact c [maksim anna pete])
         one (tempids -1)
         two (tempids -2)
+        three (tempids -3)
         d (db c)]
     (is (= {:name  "Maksim"
             :age   45
@@ -153,7 +160,12 @@
             :age   31
             :husband {:db/ident :maksim}
             :aka   ["Anitzka"]}
-           (entity d :anna)))))
+           (entity d :anna)))
+    (is (= {:name  #{"Peter" "Pete" "Petrov"}
+            :age   25
+            :aka ["Peter the Great" ["Petey" "Petie"]]}
+           (entity d three)))
+    ))
 
 (defn sleep [msec]
   #?(:clj
