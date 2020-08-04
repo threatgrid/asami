@@ -9,6 +9,7 @@
             [asami.index :refer [empty-graph]]
             [asami.internal :as internal]
             [zuko.util :as u]
+            [zuko.schema :refer [vartest?]]
             [naga.storage.store-util :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -323,5 +324,13 @@
 (deftest test-fn-for
   (is ((u/fn-for '=) 5 5))
   (is (= ((u/fn-for 'str) "a" 5) "a5")))
+
+(deftest test-query-parsing
+  (testing "wildcards are replaced with fresh variables"
+    (let [query (q/parse '{:find [?v], :where [[_ _ ?v]]})
+          [[e a v]] (get query :where)]
+      (is (vartest? e))
+      (is (vartest? a))
+      (is (= '?v v)))))
 
 #?(:cljs (run-tests))
