@@ -274,4 +274,39 @@
     (is (= (set (q '[:find ?aka :where [?e :name "Maksim"] [?e :aka ?a] [?a :tg/contains ?aka]] db3))
            #{["Maks Otto von Stirlitz"]}))))
 
+(deftest test-append
+  (let [c (connect "asami:mem://test7")
+        maksim {:db/id -1
+                :db/ident :maksim
+                :name  "Maksim"
+                :age   45
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :db/ident :anna
+                :name  "Anna"
+                :age   31
+                :husband {:db/id -1}
+                :aka   ["Anitzka" "Annie"]}
+        {db1 :db-after :as tx1} @(transact c [maksim anna])
+        anne   {:db/ident :anna
+                :aka+ "Anne"
+                :age   32
+                :friend+ "Peter"}
+        {db2 :db-after :as tx2} @(transact c [anne])]
+    (is (= (set (q '[:find ?aka :where [?e :name "Anna"] [?e :aka ?a] [?a :tg/contains ?aka]] db1))
+           #{["Anitzka"] ["Annie"]}))
+    (is (= (set (q '[:find ?age :where [?e :db/ident :anna] [?e :age ?age]] db1))
+           #{[31]}))
+    (is (= {:name "Anna" :age 31 :aka ["Anitzka" "Annie"] :husband {:db/ident :maksim}}
+           (entity db1 :anna)))
+
+    (is (= (set (q '[:find ?aka :where [?e :name "Anna"] [?e :aka ?a] [?a :tg/contains ?aka]] db2))
+           #{["Anitzka"] ["Annie"] ["Anne"]}))
+    (is (= (set (q '[:find ?age :where [?e :db/ident :anna] [?e :age ?age]] db2))
+           #{[31] [32]}))
+    (is (= (set (q '[:find ?friend :where [?e :name "Anna"] [?e :friend ?f] [?f :tg/contains ?friend]] db2))
+           #{["Peter"]}))
+    (is (= {:name "Anna" :age #{31 32} :aka ["Anitzka" "Annie" "Anne"] :friend ["Peter"] :husband {:db/ident :maksim}}
+           (entity db2 :anna)))))
+
 #?(:cljs (run-tests))

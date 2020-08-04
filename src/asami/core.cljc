@@ -192,10 +192,18 @@
    data :- [[s/Any]]]
   (query/delete-from-graph graph data))
 
-(s/defn ^:private update-attribute? :- s/Bool
+(defn ^:private annotated-attribute?
+  "Checks if an attribute has been annotated with a character"
+  [c a]  ;; usually a keyword, but attributes can be other things
+  (and (keyword a) (= c (last (name a)))))
+
+(def ^:private update-attribute?
   "Checks if an attribute indicates that it should be updated"
-  [a :- s/Any]  ;; usually a keyword, but attributes can be other things
-  (and (keyword a) (= \' (last (name a)))))
+  (partial annotated-attribute? \'))
+
+(def ^:private append-attribute?
+  "Checks if an attribute indicates that the data is an array that should be appended to"
+  (partial annotated-attribute? \+))
 
 (defn- normalize-attribute
   "Converts an updating attribute to its normalized form"
@@ -208,8 +216,10 @@
 (s/defn ^:private contains-updates?
   "Checks if any part of the object is to be updated"
   [obj :- {s/Any s/Any}]
-  (or (some update-attribute? (keys obj))
-      (some #(and (map? %) (contains-updates? %)) (vals obj))))
+  (let [obj-keys (keys obj)]
+    (or (some update-attribute? obj-keys)
+        (some append-attribute? obj-keys)
+        (some #(and (map? %) (contains-updates? %)) (vals obj)))))
 
 (s/defn ^:private entity-triples :- [(s/one [Triple] "New triples")
                                      (s/one [Triple] "Retractions")
@@ -222,30 +232,59 @@
   [graph :- GraphType
    {id :db/id ident :db/ident :as obj} :- EntityMap
    existing-ids :- {s/Any s/Any}]
-  (let [[new-obj removals] (if (contains-updates? obj)
-                             (do
-                               (when-not (or id ident)
-                                 (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident" obj)))
-                               (let [node-ref (if id
-                                                (and (seq (gr/resolve-triple graph id '?a '?v)) id)
-                                                (ffirst (gr/resolve-triple graph '?r :db/ident ident)))
-                                     _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
-                                     update-attributes (->> obj
-                                                            keys
-                                                            (filter update-attribute?)
-                                                            (map (fn [a] [a (normalize-attribute a)]))
-                                                            (into {}))
-                                     update-attrs (set (vals update-attributes))
-                                     clean-obj (->> obj
-                                                    (map (fn [[k v :as e]] (if-let [nk (update-attributes k)] [nk v] e)))
-                                                    (into {}))
-                                     removal-pairs (->> (gr/resolve-triple graph node-ref '?a '?v)
-                                                        (filter (comp update-attrs first)))
-                                     removals (mapcat (partial writer/existing-triples graph node-ref) removal-pairs)]
-                                 [clean-obj removals]))
-                             [obj nil])]
+  (let [[new-obj removals additions]
+        (if (contains-updates? obj)
+          (do
+            (when-not (or id ident)
+              (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident" obj)))
+            (let [node-ref (if id
+                             (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                             (ffirst (gr/resolve-triple graph '?r :db/ident ident)))
+                  _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
+                  ;; find the annotated attributes
+                  obj-keys (keys obj)
+                  update-attributes (set (filter update-attribute? obj-keys))
+                  append-attributes (filter append-attribute? obj-keys)
+                  ;; map annotated attributes to the unannotated form
+                  attribute-map (->> (concat update-attributes append-attributes)
+                                     (map (fn [a] [a (normalize-attribute a)]))
+                                     (into {}))
+                  ;; update attributes get converted, append attributes get removed
+                  clean-obj (->> obj
+                                 (keep (fn [[k v :as e]] (if-let [nk (attribute-map k)] (when (update-attributes k) [nk v]) e)))
+                                 (into {}))
+                  ;; find existing attribute/values that match the updates
+                  entity-av-pairs (gr/resolve-triple graph node-ref '?a '?v)
+                  update-attrs (set (map attribute-map update-attributes))
+                  ;; determine what needs to be removed
+                  removal-pairs (filter (comp update-attrs first) entity-av-pairs)
+                  removals (mapcat (partial writer/existing-triples graph node-ref) removal-pairs)
+
+                  ;; find the lists that the appending attributes refer to
+                  append-attrs (set (map attribute-map append-attributes))
+                  ;; find what should be the heads of lists, removing any that aren't list heads
+                  attr-heads (->> entity-av-pairs
+                                  (filter (comp append-attrs first))
+                                  (filter #(seq (gr/resolve-triple graph (second %) :tg/first '?v))))
+                  ;; find any appending attributes that are not in use. These are new arrays
+                  remaining-attrs (reduce (fn [attrs [k v]] (disj attrs k)) append-attrs attr-heads)
+                  ;; reassociate the object with any attributes that are for new arrays, making it a singleton array
+                  append->annotate (into {} (map (fn [a] [(attribute-map a) a]) append-attributes))
+                  new-obj (reduce (fn [o a] (assoc o a [(obj (append->annotate a))])) clean-obj remaining-attrs)
+                  ;; find tails function
+                  find-tail (fn [node]
+                              (if-let [n (ffirst (gr/resolve-triple graph node :tg/rest '?r))]
+                                (recur n)
+                                node))
+                  ;; create appending triples
+                  append-triples (mapcat (fn [[attr head]]
+                                           (let [v (obj (append->annotate attr))
+                                                 new-node (gr/new-node)]
+                                             [[(find-tail head) :tg/rest new-node] [new-node :tg/first v] [head :tg/contains v]])) attr-heads)]
+              [new-obj removals append-triples]))
+          [obj nil nil])]
     (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
-      [triples removals ids])))
+      [(concat triples additions) removals ids])))
 
 (defn- vec-rest
   "Takes a vector and returns a vector of all but the first element. Same as (vec (rest s))"
