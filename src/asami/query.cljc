@@ -639,7 +639,7 @@
       (aggregate-over find inner-results))))
 
 
-(defn fresh []
+(defn ^:private fresh []
   (gensym "?__"))
 
 (defn ^:private map-epv
