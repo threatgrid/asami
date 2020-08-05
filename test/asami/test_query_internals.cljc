@@ -331,6 +331,34 @@
           [[e a v]] (get query :where)]
       (is (vartest? e))
       (is (vartest? a))
-      (is (= '?v v)))))
+      (is (= '?v v))))
+
+  (testing "Shortened pattern constraints are filled in"
+    (let [query (q/parse '{:find [?e ?v]
+                           :where [[?e]
+                                   [?e :p]
+                                   [?e :p ?v]]})
+          [[e1 a1 v1]
+           [e2 a2 v2]
+           [e3 a3 v3]] (get query :where)]
+      (is (= '?e e1))
+      (is (vartest? a1))
+      (is (vartest? v1))
+
+      (is (= '?e e2))
+      (is (= :p a2))
+      (is (vartest? v2))
+
+      (is (= '?e e3))
+      (is (= :p a3))
+      (is (= '?v v3)))
+
+    (let [query (q/parse '{:find [?e]
+                           :where [(not [?e])]})
+          [[op [e p v]]] (get query :where)]
+      (is (= 'not op))
+      (is (= '?e e))
+      (is (vartest? p))
+      (is (vartest? v)))))
 
 #?(:cljs (run-tests))

@@ -638,27 +638,52 @@
       ;; calculate the aggregates from the final results and project
       (aggregate-over find inner-results))))
 
+
+(defn ^:private fresh []
+  (gensym "?__"))
+
+(defn ^:private map-epv
+  "In the :where sequence of query apply f to each EPV pattern."
+  [f {:keys [where] :as query}]
+  (assoc query
+         :where (map (fn [clause]
+                       (cond
+                         (epv-pattern? clause)
+                         (f clause)
+
+                         (op-pattern? clause)
+                         (cons (first clause) (map f (rest clause)))
+
+                         :else
+                         clause))
+                     where)))
+
 (s/defn rewrite-wildcards
   "In the :where sequence of query replace all occurrences of _ with
   unique variables."
   [{:keys [where] :as query}]
-  (assoc query
-         :where (map (fn [clause]
-                       (if (epv-pattern? clause)
-                         (mapv (fn [x]
-                                 (if (= x '_)
-                                   (gensym "?__")
-                                   x))
-                               clause)
-                         clause))
-                     where)))
+  (map-epv (fn [epv]
+             (mapv (fn [x]
+                     (if (= x '_) (fresh) x))
+                   epv))
+           query))
+
+(s/defn expand-shortened-pattern-constraints
+  "In the :where sequence of query expand EPV patterns of the form [E]
+  and [E P] to [E ?P ?V] and [E ?P ?V] respectively where ?P and ?V
+  are fresh variables."
+  [{:keys [where] :as query}]
+  (map-epv (fn [epv]
+             (into epv (repeatedly (- 3 (count epv)) fresh)))
+           query))
 
 (s/defn parse
   [x]
   (-> x
       query-map
       query-validator
-      rewrite-wildcards))
+      rewrite-wildcards
+      expand-shortened-pattern-constraints))
 
 (s/defn query-entry
   "Main entry point of user queries"
