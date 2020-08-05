@@ -283,7 +283,11 @@
                                              [[(find-tail head) :tg/rest new-node] [new-node :tg/first v] [head :tg/contains v]])) attr-heads)]
               [new-obj removals append-triples]))
           [obj nil nil])]
-    (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)]
+    (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)
+          ;; if updates occurred new new entity statements are redundant
+          triples (if (or (seq removals) (seq additions) (not (identical? obj new-obj)))
+                    (remove #(= :tg/entity (second %)) triples)
+                    triples)]
       [(concat triples additions) removals ids])))
 
 (defn- vec-rest

@@ -646,16 +646,16 @@
   "In the :where sequence of query apply f to each EPV pattern."
   [f {:keys [where] :as query}]
   (assoc query
-         :where (map (fn [clause]
+         :where (map (fn [constraint]
                        (cond
-                         (epv-pattern? clause)
-                         (f clause)
+                         (epv-pattern? constraint)
+                         (f constraint)
 
-                         (op-pattern? clause)
-                         (cons (first clause) (map f (rest clause)))
+                         (op-pattern? constraint)
+                         (cons (first constraint) (map f (rest constraint)))
 
                          :else
-                         clause))
+                         constraint))
                      where)))
 
 (s/defn rewrite-wildcards
