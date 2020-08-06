@@ -18,15 +18,15 @@
 ### Fixed
 - Entity arrays are now returned as vectors and not lists.
 
-## [1.0.0] - 2020-07-29
+## 1.0.0 - 2020-07-29
 ### Added
 - New Datomic-style API
 - Implemented Datom object for transaction reporting
 - Entity API provided via Zuko
 
-## [0.4.10] - 2020-06-05
+## 0.4.10 - 2020-06-05
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/0.2.2...HEAD
-[0.2.2]: https://github.com/threatgrid/asami/compare/0.4.10...0.2.2
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/threatgrid/asami/compare/0.4.10...1.1.0
