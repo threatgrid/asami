@@ -4,7 +4,7 @@
 ### Changed
 
 
-## [1.1.0] - 2020-08-05
+## 1.1.0 - 2020-08-05
 ### Added
 - Attributes can be modified on entities by using the `'` annotation (see [Replacement Annotation doc](https://github.com/threatgrid/asami/wiki/Transactions#replacement-annotations) for details)
 - Arrays in entities can be appended to by using the `+` annotation on attributes (see [Append Annotation doc](https://github.com/threatgrid/asami/wiki/Transactions#append-annotation) for details)
