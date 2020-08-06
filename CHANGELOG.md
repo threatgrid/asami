@@ -18,7 +18,7 @@
 ### Fixed
 - Entity arrays are now returned as vectors and not lists.
 
-## 1,0,0 - 2020-07-29
+## [1.0.0] - 2020-07-29
 ### Added
 - New Datomic-style API
 - Implemented Datom object for transaction reporting
@@ -26,7 +26,7 @@
 
 ### Changed
 
-## 0.4.10 - 2020-06-05
+## [0.4.10] - 2020-06-05
 ### Added
 - Introduced Update Annotations
 
