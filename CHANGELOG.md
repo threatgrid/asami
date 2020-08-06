@@ -24,8 +24,6 @@
 - Implemented Datom object for transaction reporting
 - Entity API provided via Zuko
 
-### Changed
-
 ## [0.4.10] - 2020-06-05
 ### Added
 - Introduced Update Annotations
