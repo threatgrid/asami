@@ -1,12 +1,7 @@
 (ns ^{:doc "Common internal elements of storage"
       :author "Paula Gearon"}
     asami.internal
-  (:require [schema.core :as s :refer [=>]]
-            [clojure.string :as string]
-            #?(:cljs [cljs.core :refer [Symbol]])
-            [asami.graph :as graph])
-  #?(:clj (:import [clojure.lang Symbol])))
-
+  (:require [asami.graph :as graph]))
 
 
 (def project-args {:new-node graph/new-node
