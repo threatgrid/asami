@@ -15,6 +15,7 @@ There are several other graph databases available in the Clojure ecosystem, with
 - Clojure and ClojureScript: Asami runs identically in both systems.
 - Query planner: Queries are analyzed to find an efficient execution plan. This can be turned off.
 - Analytics: Supports fast graph traversal operations, and can identify subgraphs.
+- Integrated with Loom: Asami graphs are valid Loom graphs, via [Asami-Loom](https://github.com/threatgrid/asami-loom).
 - Schema-less: Asami does not require a schema to insert data.
 - Open World Assumption: Related to being schema-less, Asami borrows semantics from [RDF](http://www.w3.org/TR/rdf-primer) to lean towards an open world model.
 - Pluggable Storage: Like Datomic, storage in Asami can be implemented in multiple ways. There are currently 2 in-memory graph systems, with durable storage on the way.
