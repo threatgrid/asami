@@ -14,7 +14,7 @@ Asami has a query API that looks very similar to a simplified Datomic. More deta
 There are several other graph databases available in the Clojure ecosystem, with each having their own focus. Asami is characterized by the following:
 - Clojure and ClojureScript: Asami runs identically in both systems.
 - Query planner: Queries are analyzed to find an efficient execution plan. This can be turned off.
-- Analytics: Supports fast graph traversal operations, and can identify subgraphs.
+- Analytics: Supports fast graph traversal operations, such as transitive closures, and can identify subgraphs.
 - Integrated with Loom: Asami graphs are valid Loom graphs, via [Asami-Loom](https://github.com/threatgrid/asami-loom).
 - Schema-less: Asami does not require a schema to insert data.
 - Open World Assumption: Related to being schema-less, Asami borrows semantics from [RDF](http://www.w3.org/TR/rdf-primer) to lean towards an open world model.
@@ -234,9 +234,7 @@ Asami supports transitive properties in queries. A property (or attribute) is tr
               [?foaf :name ?friend-of-a-friend]]
      db)
 ```
-This will find all friends, and friends of friends for Fred. The `+` is used to ensure at least one step is made. Using `*` will include Fred as well.
-
-The transitive property can also be a variable, in which case a set of relationships can be followed, or all relationships can be traversed (i.e. a downstream subgraph)
+This will find all friends, and friends of friends for Fred.
 
 ### Loom
 Asami also implements [Loom](https://github.com/aysylu/loom) via the [Asami-Loom](https://github.com/threatgrid/asami-loom) package.
