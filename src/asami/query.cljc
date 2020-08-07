@@ -392,7 +392,7 @@
   [{:keys [planner] :as options}]
   (case planner
     :user planner/user-plan
-    :min planner/plan-path  ; TODO: switch to minimal-first-planner
+    :min planner/plan-path
     planner/plan-path))
 
 (s/defn run-simple-query
@@ -438,9 +438,8 @@
   [graph
    patterns :- [Pattern]
    bindings :- (s/maybe Bindings)
-   & options]
+   options]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
-        options (apply (fn [& {:as o}] o) options)
         path-planner (select-planner options)
         [fpath & rpath :as path] (path-planner graph all-patterns options)]
     (if-not rpath
@@ -517,7 +516,7 @@
       query)))
 
 (s/defn execute-query
-  [selection constraints bindings graph project-fn]
+  [selection constraints bindings graph project-fn options]
   ;; joins must happen across a seq that is a conjunction
   (let [top-conjunction (if (seq? constraints)  ;; is this a list?
                           (let [[op & args] constraints]
@@ -531,7 +530,7 @@
         select-distinct (fn [xs] (if (and (coll? xs) (not (vector? xs)))
                                    (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
                                    xs))]
-    (->> (join-patterns graph top-conjunction bindings)
+    (->> (join-patterns graph top-conjunction bindings options)
          (project-fn selection)
          select-distinct)))
 
@@ -594,8 +593,8 @@
       (map project-aggregate partial-results)
       {:cols (mapv result-label selection)})))
 
-(s/defn aggregate-query
-  [find bindings with where graph project-fn]
+(defn aggregate-query
+  [find bindings with where graph project-fn options]
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -629,7 +628,7 @@
                                (if (seq ow)
                                  ;; outer query exists, so find the terms to be projected and execute
                                  (let [outer-terms (concat find-vars with (needed-vars ow iw))]
-                                   (execute-query outer-terms ow bindings graph project-fn))
+                                   (execute-query outer-terms ow bindings graph project-fn options))
                                  identity-binding))
                              outer-wheres inner-wheres)
           ;; execute the inner queries within the context provided by the outer queries
@@ -689,10 +688,14 @@
   "Main entry point of user queries"
   [query empty-graph inputs]
   (let [{:keys [find all in with where]} (parse query)
+        [inputs options] (if (seq in)
+                           [(take (count in) inputs) (drop (count in) inputs)]
+                           [[(first inputs)] (rest inputs)])
+        options (apply hash-map options)
         [bindings default-graph] (create-bindings in inputs)
         graph (or default-graph empty-graph)
         project-fn (partial projection/project internal/project-args)]
     (if (seq (filter planner/aggregate-form? find))
-      (aggregate-query find bindings with where graph project-fn)
+      (aggregate-query find bindings with where graph project-fn options)
       (binding [*select-distinct* (if all identity distinct)]
-        (execute-query find where bindings graph project-fn)))))
+        (execute-query find where bindings graph project-fn options)))))
