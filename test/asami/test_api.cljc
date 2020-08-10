@@ -329,26 +329,26 @@
 (deftest test-transitive
   (let [c (connect "asami:mem://test8")
         tx (transact c {:tx-data transitive-data})
-        d (db c)]
+        d (:db-after @tx)]
     (is (=
-         (q '{:find [?name ...]
-                :where [[?e :name "Washington Monument"]
-                        [?e :is-in ?e2]
-                        [?e2 :name ?name]]} d)
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in ?e2]
+                      [?e2 :name ?name]]} d)
          ["National Mall"]))
     ;; How does this work at the repl, and not here?
-    #_(is (=
-         (q '{:find [?name ...]
-                :where [[?e :name "Washington Monument"]
-                        [?e :is-in* ?e2]
-                        [?e2 :name ?name]]} d)
+    (is (=
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in* ?e2]
+                      [?e2 :name ?name]]} d)
          ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))))
 
 ;; tests both the query-plan function and the options
 (deftest test-plan
   (let [c (connect "asami:mem://test9")
         tx (transact c {:tx-data transitive-data})
-        d (db c)
+        d (:db-after @tx)
         p1 (query-plan '[:find [?name ...]
                          :where [?e :name "Washington Monument"]
                          [?e :is-in ?e2]
@@ -368,8 +368,7 @@
     (is (= p1 '{:plan [[?e :name "Washington Monument"]
                        [?e :is-in ?e2]
                        [?e2 :name ?name]]}))
-    ;; How does this work at the repl, and not here?
-    #_(is (= p2 '{:plan [[?e :name "Washington Monument"]
+    (is (= p2 '{:plan [[?e :name "Washington Monument"]
                        [?e :is-in ?e2]
                        [?e2 :name ?name]]}))
     (is (= p3 '{:plan [[?e2 :name ?name]
