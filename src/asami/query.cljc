@@ -294,13 +294,14 @@
    [_ & patterns]]
   (left-join patterns part graph))
 
-(s/defn optional
+#_(s/defn optional
   "Performs a left-outer-join, similarly to a conjunction"
   [graph
    part :- Results
    [_ & patterns]]
   (let [cols (:cols (meta part))
-        total-cols (->> (vars pattern)
+        total-cols (->> patterns
+                        (map vars)
                         (remove (set cols))
                         (concat cols)
                         (into []))
@@ -324,8 +325,9 @@
         :left-join disjunction}
    'and {:get-vars operand-vars
          :left-join conjunction}
-   'optional {:get-vars operand-vars
-              :left-join optional}})
+   ;;'optional {:get-vars operand-vars
+    ;; :left-join optional}
+   })
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
