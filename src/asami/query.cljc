@@ -22,6 +22,8 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
+(def ^:const null-value nil)
+
 (defn plain-var [v]
   (let [n (name v)]
     (if (#{\* \+} (last n))
@@ -292,13 +294,38 @@
    [_ & patterns]]
   (left-join patterns part graph))
 
+(s/defn optional
+  "Performs a left-outer-join, similarly to a conjunction"
+  [graph
+   part :- Results
+   [_ & patterns]]
+  (let [cols (:cols (meta part))
+        total-cols (->> (vars pattern)
+                        (remove (set cols))
+                        (concat cols)
+                        (into []))
+        pattern->left (projection/matching-vars pattern cols)
+        empties (repeat (- (count tolal-cols) (count cols)) null-value)]
+    ;; iterate over part, lookup pattern
+    (with-meta
+      (for [lrow part
+            :let [lookup (modify-pattern lrow pattern->left pattern)]
+            rrow (or (seq (gr/resolve-pattern graph lookup))
+                     [empties])]
+        (concat lrow rrow))
+      {:cols total-cols})))
+
+(def operand-vars #(mapcat get-vars (rest %)))
+
 (def operators
-  {'not {:get-vars #(mapcat get-vars (rest %))
+  {'not {:get-vars operand-vars
          :left-join minus}
-   'or {:get-vars #(mapcat get-vars (rest %))
+   'or {:get-vars operand-vars
         :left-join disjunction}
-   'and {:get-vars #(mapcat get-vars (rest %))
-         :left-join conjunction}})
+   'and {:get-vars operand-vars
+         :left-join conjunction}
+   'optional {:get-vars operand-vars
+              :left-join optional}})
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
