@@ -5,7 +5,7 @@
                                    Results Value Var
                                    EvalPattern eval-pattern?
                                    epv-pattern? filter-pattern?
-                                   op-pattern? vars vartest?]]
+                                   op-pattern? vartest?]]
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
@@ -22,7 +22,9 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
-(s/defn find-vars [f] (set (vars f)))
+(defn vars [s] (filter vartest? s))
+
+(defn find-vars [f] (set (vars f)))
 
 (defn op-error
   [pattern]
