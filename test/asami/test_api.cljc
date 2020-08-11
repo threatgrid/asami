@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q create-database connect db transact entity now as-of since]]
+  (:require [asami.core :refer [q query-plan create-database connect db transact entity now as-of since]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [schema.core :as s]
@@ -308,5 +308,72 @@
            #{["Peter"]}))
     (is (= {:name "Anna" :age #{31 32} :aka ["Anitzka" "Annie" "Anne"] :friend ["Peter"] :husband {:db/ident :maksim}}
            (entity db2 :anna)))))
+
+(def transitive-data
+    [{:db/id -1 :name "Washington Monument"}
+     {:db/id -2 :name "National Mall"}
+     {:db/id -3 :name "Washington, DC"}
+     {:db/id -4 :name "USA"}
+     {:db/id -5 :name "Earth"}
+     {:db/id -6 :name "Solar System"}
+     {:db/id -7 :name "Orion-Cygnus Arm"}
+     {:db/id -8 :name "Milky Way Galaxy"}
+     [:db/add -1 :is-in -2]
+     [:db/add -2 :is-in -3]
+     [:db/add -3 :is-in -4]
+     [:db/add -4 :is-in -5]
+     [:db/add -5 :is-in -6]
+     [:db/add -6 :is-in -7]
+     [:db/add -7 :is-in -8]])
+
+(deftest test-transitive
+  (let [c (connect "asami:mem://test8")
+        tx (transact c {:tx-data transitive-data})
+        d (:db-after @tx)]
+    (is (=
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in ?e2]
+                      [?e2 :name ?name]]} d)
+         ["National Mall"]))
+    ;; How does this work at the repl, and not here?
+    (is (=
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in* ?e2]
+                      [?e2 :name ?name]]} d)
+         ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))))
+
+;; tests both the query-plan function and the options
+(deftest test-plan
+  (let [c (connect "asami:mem://test9")
+        tx (transact c {:tx-data transitive-data})
+        d (:db-after @tx)
+        p1 (query-plan '[:find [?name ...]
+                         :where [?e :name "Washington Monument"]
+                         [?e :is-in ?e2]
+                         [?e2 :name ?name]] d)
+        p2 (query-plan '[:find [?name ...]
+                         :where [?e2 :name ?name]
+                         [?e :is-in ?e2]
+                         [?e :name "Washington Monument"]] d)
+        p3 (query-plan '[:find [?name ...]
+                         :where [?e2 :name ?name]
+                         [?e :is-in ?e2]
+                         [?e :name "Washington Monument"]] d :planner :user)
+        p4 (query-plan '[:find (count ?name)
+                         :where [?e2 :name ?name]
+                         [?e :is-in ?e2]
+                         [?e :name "Washington Monument"]] d)]
+    (is (= p1 '{:plan [[?e :name "Washington Monument"]
+                       [?e :is-in ?e2]
+                       [?e2 :name ?name]]}))
+    (is (= p2 '{:plan [[?e :name "Washington Monument"]
+                       [?e :is-in ?e2]
+                       [?e2 :name ?name]]}))
+    (is (= p3 '{:plan [[?e2 :name ?name]
+                       [?e :is-in ?e2]
+                       [?e :name "Washington Monument"]]}))
+    ))
 
 #?(:cljs (run-tests))

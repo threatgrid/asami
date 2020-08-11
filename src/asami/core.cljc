@@ -337,7 +337,7 @@
    connection: The connection to the database to be updated.
    tx-info: This is either a seq of items to be transacted, or a map containing a :tx-data value with such a seq.
             Each item to be transacted is one of:
-            - vector of the form: [:db/assert entity attribute value] - creates a datom
+            - vector of the form: [:db/add entity attribute value] - creates a datom
             - vector of the form: [:db/retract entity attribute value] - removes a datom
             - map: an entity to be inserted/updated.
   Entities and assertions may have attributes that are keywords with a trailing ' character.
@@ -400,4 +400,9 @@
    See the documentation at https://github.com/threatgrid/asami/wiki/Querying
    for a full description of queries."
   [query & inputs]
-  (query/query-entry query mem/empty-graph (graphs-of inputs)))
+  (query/query-entry query mem/empty-graph (graphs-of inputs) false))
+
+(defn query-plan
+  "Return a query plan and do not execute the query"
+  [query & inputs]
+  (query/query-entry query mem/empty-graph (graphs-of inputs) true))

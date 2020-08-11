@@ -588,6 +588,7 @@
                                   (s/one #{Var} "vars to get aggregations for")]
   "Splits a WHERE clause up into the part suitable for an outer query,
    and the remaining constraints, which will be used for an inner query."
+  ;; TODO: consider passing options, to select planning or not
   [constraints :- Pattern                      ;; the WHERE clause
    selection :- [(s/cond-pre Var Aggregate)]   ;; the FIND clause
    withs :- [Var]]                             ;; the WITH clause

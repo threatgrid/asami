@@ -22,7 +22,13 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
-(s/defn find-vars [f] (set (vars f)))
+(defn plain-var [v]
+  (let [n (name v)]
+    (if (#{\* \+} (last n))
+      (symbol (namespace v) (subs n 0 (dec (count n))))
+      v)))
+
+(defn find-vars [f] (set (map plain-var (vars f))))
 
 (defn op-error
   [pattern]
@@ -392,7 +398,7 @@
   [{:keys [planner] :as options}]
   (case planner
     :user planner/user-plan
-    :min planner/plan-path  ; TODO: switch to minimal-first-planner
+    :min planner/plan-path
     planner/plan-path))
 
 (s/defn run-simple-query
@@ -433,33 +439,39 @@
           (constantly [])
           (recur remaining))))))
 
-(s/defn join-patterns :- Results
-  "Joins the resolutions for a series of patterns into a single result."
+(def Plan {s/Keyword [s/Any]})
+
+(def AuditableResults (s/if map? Plan Results))
+
+(s/defn join-patterns :- AuditableResults
+  "Joins the resolutions for a series of patterns into a single result.
+   If options contains :path-plan then returns the plan and does not execute"
   [graph
    patterns :- [Pattern]
    bindings :- (s/maybe Bindings)
-   & options]
+   {:keys [query-plan] :as options}]
   (let [all-patterns (if (seq bindings) (cons bindings patterns) patterns)
-        options (apply (fn [& {:as o}] o) options)
         path-planner (select-planner options)
         [fpath & rpath :as path] (path-planner graph all-patterns options)]
-    (if-not rpath
+    (if query-plan
+      {:plan path}
+      (if-not rpath
 
-      ;; single path element - executed separately as an optimization
-      (cond
-        (planner/bindings? fpath) fpath
-        (epv-pattern? fpath) (with-meta
-                               (gr/resolve-pattern graph fpath)
-                               {:cols (vec (vars fpath))})
-        :default (run-simple-query graph [fpath]))
+        ;; single path element - executed separately as an optimization
+        (cond
+          (planner/bindings? fpath) fpath
+          (epv-pattern? fpath) (with-meta
+                                 (gr/resolve-pattern graph fpath)
+                                 {:cols (vec (vars fpath))})
+          :default (run-simple-query graph [fpath]))
 
-      ;; normal operation
-      (let [ ;; if the plan begins with a negation, then it's not bound to the rest of
-            ;; the plan, and it creates a "gate" for the result
-            result-gate (gate-fn graph (take-while planner/not-operation? path))
-            path' (drop-while planner/not-operation? path)]
-        (-> (run-simple-query graph path')
-            result-gate)))))
+        ;; normal operation
+        (let [ ;; if the plan begins with a negation, then it's not bound to the rest of
+              ;; the plan, and it creates a "gate" for the result
+              result-gate (gate-fn graph (take-while planner/not-operation? path))
+              path' (drop-while planner/not-operation? path)]
+          (-> (run-simple-query graph path')
+              result-gate))))))
 
 (s/defn add-to-graph
   [graph
@@ -517,23 +529,27 @@
       query)))
 
 (s/defn execute-query
-  [selection constraints bindings graph project-fn]
+  [selection constraints bindings graph project-fn {:keys [query-plan] :as options}]
   ;; joins must happen across a seq that is a conjunction
-  (let [top-conjunction (if (seq? constraints)  ;; is this a list?
+  (let [top-conjunction (if (seq? constraints) ;; is this a list?
                           (let [[op & args] constraints]
                             (cond
-                              (vector? op) constraints    ;; Starts with top level EPV. Already in the correct form
-                              (#{'and 'AND} op) args      ;; Starts with top level AND. Use the arguments
+                              (vector? op) constraints ;; Starts with top level EPV. Already in the correct form
+                              (#{'and 'AND} op) args ;; Starts with top level AND. Use the arguments
                               (operators op) (list constraints) ;; top level form. Wrap as a conjunction
-                              (seq? op) constraints       ;; first form is an operation. Already in the correct form
+                              (seq? op) constraints ;; first form is an operation. Already in the correct form
                               :default (throw (ex-info "Unknown constraint format" {:constraint constraints}))))
-                          (list constraints))             ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
+                          (list constraints)) ;; a single vector, which is one constraint that needs to be wrapped. Unexpected
         select-distinct (fn [xs] (if (and (coll? xs) (not (vector? xs)))
                                    (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
                                    xs))]
-    (->> (join-patterns graph top-conjunction bindings)
-         (project-fn selection)
-         select-distinct)))
+    (let [resolved (join-patterns graph top-conjunction bindings options)]
+      ;; check if this is a query plan without results
+      (if query-plan
+        resolved
+        (->> resolved
+             (project-fn selection)
+             select-distinct)))))
 
 (s/defn prepend
   [element
@@ -594,8 +610,8 @@
       (map project-aggregate partial-results)
       {:cols (mapv result-label selection)})))
 
-(s/defn aggregate-query
-  [find bindings with where graph project-fn]
+(defn aggregate-query
+  [find bindings with where graph project-fn {:keys [query-plan] :as options}]
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -629,14 +645,19 @@
                                (if (seq ow)
                                  ;; outer query exists, so find the terms to be projected and execute
                                  (let [outer-terms (concat find-vars with (needed-vars ow iw))]
-                                   (execute-query outer-terms ow bindings graph project-fn))
+                                   (execute-query outer-terms ow bindings graph project-fn options))
                                  identity-binding))
-                             outer-wheres inner-wheres)
+                             outer-wheres inner-wheres)]
+      (if query-plan
+        ;; results are audit plans
+        {:type :aggregate
+         :outer-queries (map :plan outer-results)
+         :inner-queries inner-wheres}
           ;; execute the inner queries within the context provided by the outer queries
           ;; remove the empty results. This means that empty values are not counted!
-          inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
-      ;; calculate the aggregates from the final results and project
-      (aggregate-over find inner-results))))
+        (let [inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
+          ;; calculate the aggregates from the final results and project
+          (aggregate-over find inner-results))))))
 
 
 (defn ^:private fresh []
@@ -687,12 +708,16 @@
 
 (s/defn query-entry
   "Main entry point of user queries"
-  [query empty-graph inputs]
+  [query empty-graph inputs plan?]
   (let [{:keys [find all in with where]} (parse query)
+        [inputs options] (if (seq in)
+                           [(take (count in) inputs) (drop (count in) inputs)]
+                           [[(first inputs)] (rest inputs)])
+        options (-> (apply hash-map options) (assoc :query-plan plan?))
         [bindings default-graph] (create-bindings in inputs)
         graph (or default-graph empty-graph)
         project-fn (partial projection/project internal/project-args)]
     (if (seq (filter planner/aggregate-form? find))
-      (aggregate-query find bindings with where graph project-fn)
+      (aggregate-query find bindings with where graph project-fn options)
       (binding [*select-distinct* (if all identity distinct)]
-        (execute-query find where bindings graph project-fn)))))
+        (execute-query find where bindings graph project-fn options)))))
