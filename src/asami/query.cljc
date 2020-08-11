@@ -294,26 +294,26 @@
    [_ & patterns]]
   (left-join patterns part graph))
 
-#_(s/defn optional
+(s/defn optional
   "Performs a left-outer-join, similarly to a conjunction"
   [graph
    part :- Results
    [_ & patterns]]
-  (let [cols (:cols (meta part))
+  (let [col-meta (meta part)
+        cols (:cols (meta part))
         total-cols (->> patterns
                         (map vars)
                         (remove (set cols))
                         (concat cols)
                         (into []))
         pattern->left (projection/matching-vars pattern cols)
-        empties (repeat (- (count tolal-cols) (count cols)) null-value)]
-    ;; iterate over part, lookup pattern
+        empties (repeat (- (count tolal-cols) (count cols)) null-value)
+        ljoin #(left-join %2 %1 graph)]
     (with-meta
       (for [lrow part
-            :let [lookup (modify-pattern lrow pattern->left pattern)]
-            rrow (or (seq (gr/resolve-pattern graph lookup))
-                     [empties])]
-        (concat lrow rrow))
+            rrow (or (seq (reduce ljoin (with-meta [lrow] col-meta) patterns))
+                     [(concat lrow empties)])]
+        rrow)
       {:cols total-cols})))
 
 (def operand-vars #(mapcat get-vars (rest %)))
