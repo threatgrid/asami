@@ -24,6 +24,8 @@
 
 (def ^:const null-value nil)
 
+(defn vars [s] (filter vartest? s))
+
 (defn plain-var [v]
   (let [n (name v)]
     (if (#{\* \+} (last n))
@@ -171,12 +173,18 @@
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
         arg-indexes (map-indexed #(var-map %2 (- %1)) args)
+        arg-indexes (map-indexed
+                     (fn [i arg]
+                       (if-let [j (get var-map arg)]
+                         j
+                         (constantly (nth args i))))
+                     args)
         callable-op (cond (fn? op) op
                           (symbol? op) (or (get *env* op) (fn-for op))
                           (string? op) (fn-for (symbol op))
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]
-                    (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
+                    (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))]
     (try
       (with-meta (filter filter-fn part) m)
       (catch #?(:clj Throwable :cljs :default) e
@@ -298,13 +306,11 @@
   "Performs a left-outer-join, similarly to a conjunction"
   [graph
    part :- Results
-   [_ & patterns]]
+   [_ & patterns :as operation]]
   (let [col-meta (meta part)
         cols (:cols col-meta)
-        new-cols (->> patterns
-                      (mapcat vars)
+        new-cols (->> (get-vars operation)
                       (remove (set cols)))
-        pattern->left (projection/matching-vars pattern cols)
         empties (repeat (count new-cols) null-value)
         ljoin #(left-join %2 %1 graph)]
     (with-meta
@@ -312,9 +318,17 @@
                 (or (seq (reduce ljoin (with-meta [lrow] col-meta) patterns))
                     [(concat lrow empties)]))
               part)
-      {:cols total-cols})))
+      {:cols (vec (concat cols new-cols))})))
 
-(def operand-vars #(mapcat get-vars (rest %)))
+(defn operand-vars
+  [o]
+  (first
+   (reduce (fn [[acc seen? :as s] v]
+             (if (seen? v)
+               s
+               [(conj acc v) (conj seen? v)]))
+           [[] #{}]
+           (mapcat get-vars (rest o)))))
 
 (def operators
   {'not {:get-vars operand-vars
@@ -323,9 +337,8 @@
         :left-join disjunction}
    'and {:get-vars operand-vars
          :left-join conjunction}
-   ;;'optional {:get-vars operand-vars
-    ;; :left-join optional}
-   })
+   'optional {:get-vars operand-vars
+         :left-join optional}})
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
