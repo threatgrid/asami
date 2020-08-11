@@ -309,4 +309,27 @@
     (is (= {:name "Anna" :age #{31 32} :aka ["Anitzka" "Annie" "Anne"] :friend ["Peter"] :husband {:db/ident :maksim}}
            (entity db2 :anna)))))
 
+(deftest test-filter-function
+  (testing "filter function is constructed properly"
+    (let [conn (connect "asami:mem://test8")]
+      (deref (transact conn {:tx-data [{:movie/title "Explorers"
+                                        :movie/genre "adventure/comedy/family"
+                                        :movie/release-year 1985}
+                                       {:movie/title "Demolition Man"
+                                        :movie/genre "action/sci-fi/thriller"
+                                        :movie/release-year 1993}
+                                       {:movie/title "Johnny Mnemonic"
+                                        :movie/genre "cyber-punk/action"
+                                        :movie/release-year 1995}
+                                       {:movie/title "Toy Story"
+                                        :movie/genre "animation/adventure"
+                                        :movie/release-year 1995}]}))
+      (is (= [["Explorers"]
+              ["Toy Story"]]
+             (q '{:find ?name
+                  :where [[?m :movie/title ?name]
+                          [?m :movie/genre ?genre]
+                          [(re-find #"comedy|animation" ?genre)]]}
+                (db conn)))))))
+
 #?(:cljs (run-tests))

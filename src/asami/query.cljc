@@ -162,13 +162,18 @@
         var-map (->> (:cols m)
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
-        arg-indexes (map-indexed #(var-map %2 (- %1)) args)
+        arg-indexes (map-indexed
+                     (fn [i arg]
+                       (if-some [j (get var-map arg)]
+                         j
+                         (constantly (nth args i))))
+                     args)
         callable-op (cond (fn? op) op
                           (symbol? op) (or (get *env* op) (fn-for op))
                           (string? op) (fn-for (symbol op))
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
         filter-fn (fn [& [a]]
-                    (apply callable-op (map #(if (neg? %) (nth args (- %)) (nth a %)) arg-indexes)))]
+                    (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))]
     (try
       (with-meta (filter filter-fn part) m)
       (catch #?(:clj Throwable :cljs :default) e
