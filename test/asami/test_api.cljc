@@ -326,7 +326,7 @@
                                         :movie/release-year 1995}]}))
       (is (= [["Explorers"]
               ["Toy Story"]]
-             (q '{:find ?name
+             (q '{:find [?name]
                   :where [[?m :movie/title ?name]
                           [?m :movie/genre ?genre]
                           [(re-find #"comedy|animation" ?genre)]]}
