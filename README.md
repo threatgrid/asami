@@ -10,6 +10,16 @@ Asami also follows an _Open World Assumption_ model, in the same way that [RDF](
 
 Asami has a query API that looks very similar to a simplified Datomic. More details are available in the [Query documentation](https://github.com/threatgrid/asami/wiki/Querying).
 
+## Features
+There are several other graph databases available in the Clojure ecosystem, with each having their own focus. Asami is characterized by the following:
+- Clojure and ClojureScript: Asami runs identically in both systems.
+- Query planner: Queries are analyzed to find an efficient execution plan. This can be turned off.
+- Analytics: Supports fast graph traversal operations, such as transitive closures, and can identify subgraphs.
+- Integrated with Loom: Asami graphs are valid Loom graphs, via [Asami-Loom](https://github.com/threatgrid/asami-loom).
+- Schema-less: Asami does not require a schema to insert data.
+- Open World Assumption: Related to being schema-less, Asami borrows semantics from [RDF](http://www.w3.org/TR/rdf-primer) to lean towards an open world model.
+- Pluggable Storage: Like Datomic, storage in Asami can be implemented in multiple ways. There are currently 2 in-memory graph systems, with durable storage on the way.
+
 ## Usage
 ### Installing
 Using Asami requires [Clojure](https://clojure.org/guides/getting_started) or [ClojureScript](https://clojurescript.org/guides/quick-start).
@@ -214,6 +224,17 @@ We can also get all the subgraphs:
         (aa/subgraphs graph))
 (("Fred" "Wilma" "Pebbles" "Dino") ("Barney" "Betty" "Bamm-Bamm"))
 ```
+
+#### Transitive Queries
+Asami supports transitive properties in queries. A property (or attribute) is treated as transitive if it is followed by a `+` or a `*` character.
+```clojure
+(d/q '[:find ?friend-of-a-friend
+       :where [?person :name "Fred"]
+              [?person :friend+ ?foaf]
+              [?foaf :name ?friend-of-a-friend]]
+     db)
+```
+This will find all friends, and friends of friends for Fred.
 
 ### Loom
 Asami also implements [Loom](https://github.com/aysylu/loom) via the [Asami-Loom](https://github.com/threatgrid/asami-loom) package.
