@@ -5,7 +5,7 @@
                                    Results Value Var
                                    EvalPattern eval-pattern?
                                    epv-pattern? filter-pattern?
-                                   op-pattern? vars vartest?]]
+                                   op-pattern? vartest?]]
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
@@ -300,20 +300,18 @@
    part :- Results
    [_ & patterns]]
   (let [col-meta (meta part)
-        cols (:cols (meta part))
-        total-cols (->> patterns
-                        (map vars)
-                        (remove (set cols))
-                        (concat cols)
-                        (into []))
+        cols (:cols col-meta)
+        new-cols (->> patterns
+                      (mapcat vars)
+                      (remove (set cols)))
         pattern->left (projection/matching-vars pattern cols)
-        empties (repeat (- (count tolal-cols) (count cols)) null-value)
+        empties (repeat (count new-cols) null-value)
         ljoin #(left-join %2 %1 graph)]
     (with-meta
-      (for [lrow part
-            rrow (or (seq (reduce ljoin (with-meta [lrow] col-meta) patterns))
-                     [(concat lrow empties)])]
-        rrow)
+      (mapcat (fn [lrow]
+                (or (seq (reduce ljoin (with-meta [lrow] col-meta) patterns))
+                    [(concat lrow empties)]))
+              part)
       {:cols total-cols})))
 
 (def operand-vars #(mapcat get-vars (rest %)))
