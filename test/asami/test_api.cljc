@@ -398,4 +398,19 @@
                        [?e :is-in ?e2]
                        [?e :name "Washington Monument"]]}))))
 
+
+(deftest test-explicit-default-graph
+  (testing "explicity default graph"
+    (let [conn (connect "asami:mem://test10")]
+      (deref (transact conn {:tx-data [{:movie/title "Explorers"
+                                        :movie/genre "adventure/comedy/family"
+                                        :movie/release-year 1985}]}))
+      (is (= "Explorers"
+             (q '{:find [?name .]
+                  :in [$ ?release-year]
+                  :where [[?m :movie/title ?name]
+                          [?m :movie/release-year ?release-year]]}
+                  (db conn)
+                  1985))))))
+
 #?(:cljs (run-tests))
