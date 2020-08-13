@@ -370,8 +370,7 @@
 ;; tests both the query-plan function and the options
 (deftest test-plan
   (let [c (connect "asami:mem://test9")
-        tx (transact c {:tx-data transitive-data})
-        d (:db-after @tx)
+        {d :db-after :as tx} @(transact c {:tx-data transitive-data})
         p1 (query-plan '[:find [?name ...]
                          :where [?e :name "Washington Monument"]
                          [?e :is-in ?e2]
@@ -397,5 +396,55 @@
     (is (= p3 '{:plan [[?e2 :name ?name]
                        [?e :is-in ?e2]
                        [?e :name "Washington Monument"]]}))))
+
+(def opt-data
+  [{:db/ident "austen"
+    :name "Austen, Jane"}
+   {:author {:db/ident "austen"}
+    :title "Pride and Prejudice"}
+   {:author {:db/ident "austen"}
+    :label "Emma"}
+   {:author {:db/ident "austen"}
+    :label "Sense and Sensibility"}
+   {:db/ident "bronte"
+    :name "Brontë, Charlotte"}
+   {:author {:db/ident "bronte"}
+    :title "Jane Eyre"}
+   {:db/ident "shelley"
+    :name "Shelley, Mary"}])
+
+(deftest test-optional
+  (let [c (connect "asami:mem://test10")
+        {d :db-after :as tx} @(transact c {:tx-data opt-data})
+        rx (q '[:find ?name ?t
+                :where [?a :name ?name]
+                (and [?book :author ?a] [?book :title ?t])] d)
+        ry (q '[:find ?name ?t
+                :where [?a :name ?name]
+                (and [?book :author ?a] (or [?book :title ?t] [?book :label ?t]))] d)
+        r1 (q '[:find ?name ?t
+                :where [?a :name ?name]
+                (optional [?book :author ?a] [?book :title ?t])] d)
+        r2 (q '[:find ?name ?t
+                :where [?a :name ?name]
+                (optional [?book :author ?a] (or [?book :title ?t] [?book :label ?t]))] d)]
+    (is (= #{["Austen, Jane" "Pride and Prejudice"]
+             ["Brontë, Charlotte" "Jane Eyre"]}
+           (set rx)))
+    (is (= #{["Austen, Jane" "Pride and Prejudice"]
+             ["Austen, Jane" "Sense and Sensibility"]
+             ["Austen, Jane" "Emma"]
+             ["Brontë, Charlotte" "Jane Eyre"]}
+           (set ry)))
+    (is (= #{["Austen, Jane" "Pride and Prejudice"]
+             ["Brontë, Charlotte" "Jane Eyre"]
+             ["Shelley, Mary" nil]}
+           (set r1)))
+    (is (= #{["Austen, Jane" "Pride and Prejudice"]
+             ["Austen, Jane" "Sense and Sensibility"]
+             ["Austen, Jane" "Emma"]
+             ["Brontë, Charlotte" "Jane Eyre"]
+             ["Shelley, Mary" nil]}
+           (set r2)))))
 
 #?(:cljs (run-tests))

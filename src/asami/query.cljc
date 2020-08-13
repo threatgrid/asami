@@ -22,6 +22,8 @@
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
+(def ^:const null-value nil)
+
 (defn vars [s] (filter vartest? s))
 
 (defn plain-var [v]
@@ -41,7 +43,7 @@
   [pattern]
   (throw (ex-info (str "Unknown pattern type in query: " pattern) {:pattern pattern})))
 
-(declare operators)
+(declare operators operand-vars)
 
 (extend-protocol HasVars
   #?(:clj Object :cljs object)
@@ -52,8 +54,8 @@
       (planner/bindings? pattern) (set (:cols (meta pattern)))
       (epv-pattern? pattern) (find-vars pattern)
       (filter-pattern? pattern) (or (:vars (meta pattern)) (find-vars (first pattern)))
-      (op-pattern? pattern) (if-let [{:keys [get-vars]} (operators (first pattern))]
-                              (get-vars pattern)
+      (op-pattern? pattern) (if (operators (first pattern))
+                              (operand-vars pattern)
                               (op-error pattern))
       (eval-pattern? pattern) (let [[expr _] pattern]
                                 (filter vartest? expr))
@@ -61,12 +63,21 @@
   nil
   (get-vars [pattern] nil))
 
+(defn operand-vars
+  [o]
+  (first
+   (reduce (fn [[acc seen? :as s] v]
+             (if (seen? v)
+               s
+               [(conj acc v) (conj seen? v)]))
+           [[] #{}]
+           (mapcat get-vars (rest o)))))
+
 (s/defn without :- [s/Any]
   "Returns a sequence minus a specific element"
   [e :- s/Any
    s :- [s/Any]]
   (remove (partial = e) s))
-
 
 (s/defn modify-pattern :- [s/Any]
   "Creates a new EPVPattern from an existing one, based on existing bindings.
@@ -170,9 +181,10 @@
         var-map (->> (:cols m)
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
+        arg-indexes (map-indexed #(var-map %2 (- %1)) args)
         arg-indexes (map-indexed
                      (fn [i arg]
-                       (if-some [j (get var-map arg)]
+                       (if-let [j (get var-map arg)]
                          j
                          (constantly (nth args i))))
                      args)
@@ -293,19 +305,39 @@
       {:cols (:cols (meta (first spread)))})))
 
 (s/defn conjunction
-  "Reorders arguments for left-join and drop the AND operator"
+  "Iterates over the arguments to perform a left-join on each"
   [graph
    part :- Results
    [_ & patterns]]
-  (left-join patterns part graph))
+  (reduce (fn [result pattern] (left-join pattern result graph)) part patterns))
+
+(s/defn optional
+  "Performs a left-outer-join, similarly to a conjunction"
+  [graph
+   part :- Results
+   [_ & patterns :as operation]]
+  (let [col-meta (meta part)
+        cols (:cols col-meta)
+        new-cols (->> (get-vars operation)
+                      (remove (set cols)))
+        empties (repeat (count new-cols) null-value)
+        ljoin #(left-join %2 %1 graph)]
+    (with-meta
+      (mapcat (fn [lrow]
+                (or (seq (reduce ljoin (with-meta [lrow] col-meta) patterns))
+                    [(concat lrow empties)]))
+              part)
+      {:cols (vec (concat cols new-cols))})))
 
 (def operators
-  {'not {:get-vars #(mapcat get-vars (rest %))
-         :left-join minus}
-   'or {:get-vars #(mapcat get-vars (rest %))
-        :left-join disjunction}
-   'and {:get-vars #(mapcat get-vars (rest %))
-         :left-join conjunction}})
+  {'not {:left-join minus}
+   'NOT {:left-join minus}
+   'or {:left-join disjunction}
+   'OR {:left-join disjunction}
+   'and {:left-join conjunction}
+   'AND {:left-join conjunction}
+   'optional {:left-join optional}
+   'OPTIONAL {:left-join optional}})
 
 (defn left-join
   "Joins a partial result (on the left) to a pattern (on the right).
@@ -674,13 +706,13 @@
   "In the :where sequence of query apply f to each EPV pattern."
   [f {:keys [where] :as query}]
   (assoc query
-         :where (map (fn [constraint]
+         :where (map (fn opf [constraint]
                        (cond
                          (epv-pattern? constraint)
                          (f constraint)
 
                          (op-pattern? constraint)
-                         (cons (first constraint) (map f (rest constraint)))
+                         (cons (first constraint) (map opf (rest constraint)))
 
                          :else
                          constraint))
