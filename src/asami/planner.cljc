@@ -172,38 +172,48 @@
    planned-patterns
    general-patterns
    filter-patterns
+   opt-patterns
    not-patterns]
   (let [out-vars (fn [p] (if (eval-pattern? p) [(second p)] (get-vars p)))
-        all-non-negation-vars (set (mapcat out-vars (concat planned-patterns general-patterns)))
+        all-non-negation-vars (set (mapcat out-vars (concat planned-patterns general-patterns opt-patterns)))
         filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
         all-bound-for? (fn [bound fltr]
                          (every? #(or (bound %) (not (all-non-negation-vars %)))
                                  (filter-vars fltr)))
-        plan-negation-path (fn [bound [op & patterns]]
-                             (apply list op (plan-path graph patterns (assoc options :bound bound))))]
+        plan-path-with-bound (fn [bound [op & patterns]]
+                               (apply list op (plan-path graph patterns (assoc options :bound bound))))]
     (loop [plan []
            bound #{}
            [np & rp :as patterns] planned-patterns
            filters filter-patterns
+           optionals opt-patterns
            negations not-patterns]
       (if-not (seq patterns)
         ;; no patterns left, so add remaining general patterns, negations, then filters
-        (let [planned-negations (map (partial plan-negation-path bound) negations)]
-          (concat plan general-patterns planned-negations filters))
+        (let [planned-optionals (map (partial plan-path-with-bound bound) opt-patterns)
+              planned-negations (map (partial plan-path-with-bound bound) negations)]
+          (concat plan general-patterns planned-optionals planned-negations filters))
 
         ;; divide the filters into those which are fully bound, and the rest
         (let [all-bound? (partial all-bound-for? bound)
+              plan-remaining (fn [ptns]
+                               (->> ptns
+                                    (filter all-bound?)
+                                    (map (partial plan-path-with-bound bound))))
               nxt-filters (filter all-bound? filters)
-              nxt-negations (->> negations
-                                 (filter all-bound?)
-                                 (map (partial plan-negation-path bound)))
-              all-nexts (concat nxt-negations nxt-filters)
+              nxt-optionals (plan-remaining optionals)
+              nxt-negations (plan-remaining negations)
+              negative-nexts (concat nxt-negations nxt-filters)
+              remaining-optionals (remove all-bound? optionals)
               remaining-filters (remove all-bound? filters)
               remaining-negations (remove all-bound? negations)]
-          ;; if filters were bound, append them, else get the next EPV pattern
-          (if (seq all-nexts)
-            (recur (into plan all-nexts) bound patterns remaining-filters remaining-negations)
-            (recur (conj plan np) (into bound (out-vars np)) rp filters negations)))))))
+          ;; if negatives were bound, append them, else get the next binding pattern
+          (if (seq negative-nexts)
+            (recur (into plan negative-nexts) bound patterns remaining-filters optionals remaining-negations)
+            ;; if optionals were bound, append them, else get the next EPV Pattern
+            (if (seq nxt-optionals)
+              (recur (into plan nxt-optionals) (into bound (mapcat out-vars nxt-optionals)) patterns filters remaining-optionals negations)
+              (recur (conj plan np) (into bound (out-vars np)) rp filters optionals negations))))))))
 
 (s/defn bindings-chain :- (s/maybe
                            [(s/one [EvalPattern] "eval-patterns that can be used to bind a pattern")
@@ -360,11 +370,15 @@
           (concat all-ordered (order evalps))
           (recur (first-group bound rmdr evalps) all-ordered))))))
 
-(s/defn not-operation? :- s/Bool
-  "Returns true if a pattern is a NOT operation"
-  [pattern :- PatternOrBindings]
-  (and (seq? pattern)
-       (contains? #{'not 'NOT} (first pattern))))
+(s/defn opt-type? :- s/Bool
+  "Returns true if a pattern is a given operation type"
+  [types :- #{s/Symbol}
+   pattern :- PatternOrBindings]
+  (and (seq? pattern) (contains? types (first pattern))))
+
+(def not-operation? "Returns true if a pattern is a NOT operation" (partial opt-type? #{'not 'NOT}))
+
+(def opt-operation? "Returns true if a pattern is a NOT operation" (partial opt-type? #{'optional 'OPTIONAL}))
 
 (s/defn extract-patterns-by-type :- {s/Keyword [PatternOrBindings]}
   "Categorizes elements of a WHERE clause, returning a keyword map"
@@ -377,6 +391,7 @@
                       (filter-pattern? p) :filter-patterns  ;; [(test ?x)]
                       (eval-pattern? p) :eval-patterns  ;; [(operation ?x) ?y]
                       (not-operation? p) :not-patterns  ;; (not [?entity :attr "value"])
+                      (opt-operation? p) :opt-patterns  ;; (optional [?entity :attr "value"])
                       (op-pattern? p) :op-patterns  ;; (or [?e :a "v"] [?e :a "w"])
                       :default :unknown)  ;; error
                     (fnil conj []) p))
@@ -396,7 +411,8 @@
    patterns :- [PatternOrBindings]
    options]
   (let [{:keys [prebounds epv-patterns filter-patterns
-                eval-patterns not-patterns op-patterns unknown] :as p} (extract-patterns-by-type patterns)
+                eval-patterns not-patterns opt-patterns
+                op-patterns unknown] :as p} (extract-patterns-by-type patterns)
         _ (when (seq unknown)
             (println "METAS: " (map meta patterns))
             (println "PATTERNS: " patterns)
@@ -415,7 +431,7 @@
         planned (min-join-path bound count-map (concat prebounds epv-patterns) eval-patterns)]
 
     ;; result
-    (merge-operations graph options planned planned-sub-patterns filter-patterns not-patterns)))
+    (merge-operations graph options planned planned-sub-patterns filter-patterns opt-patterns not-patterns)))
 
 (s/defn new-or
   "Create an OR expression from a sequence of arguments.
