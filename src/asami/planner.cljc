@@ -44,16 +44,17 @@
 
 (def addset (fnil conj #{}))
 
-(s/defn find-start :- CountablePattern
+(s/defn find-start :- (s/maybe CountablePattern)
   "Returns the first pattern with the smallest count"
   [pattern-counts :- {CountablePattern s/Num}
    patterns :- [CountablePattern]]
-  (let [local-counts (select-keys pattern-counts patterns)
-        low-count (reduce min (map second local-counts))
-        pattern (ffirst (filter #(= low-count (second %)) local-counts))]
-    ;; must use first/filter/= instead of some/#{pattern} because
-    ;; patterns contains metadata and pattern does not
-    (first (filter (partial = pattern) patterns))))
+  (if (seq patterns)
+    (let [local-counts (select-keys pattern-counts patterns)
+          low-count (reduce min (map second local-counts))
+          pattern (ffirst (filter #(= low-count (second %)) local-counts))]
+      ;; must use first/filter/= instead of some/#{pattern} because
+      ;; patterns contains metadata and pattern does not
+      (first (filter (partial = pattern) patterns)))))
 
 
 (s/defn order :- [EvalPattern]
@@ -126,8 +127,8 @@
                               pattern->pre-reqs (into {} (keep pattern-prereq-pair rpatterns))]
                           (if (seq pattern->pre-reqs)
                             (let [fully-bound-patterns (keep (fn [[ptn pre-reqs]]
-                                                                 (if (all-bound? (map second pre-reqs) ptn) ptn))
-                                                               pattern->pre-reqs)
+                                                               (if (all-bound? (map second pre-reqs) ptn) ptn))
+                                                             pattern->pre-reqs)
                                   p (if (seq fully-bound-patterns)
                                       (min-pattern fully-bound-patterns)
                                       (min-pattern (keys pattern->pre-reqs)))
@@ -154,7 +155,9 @@
                          patterns)
                        (remove (comp (partial some binding-outs) get-vars))
                        (find-start pattern-counts))
-            full-path (cons start (path-through (get-vars start) (without start patterns) binding-outs))]
+            full-path (if start
+                        (cons start (path-through (get-vars start) (without start patterns) binding-outs))
+                        (path-through #{} patterns binding-outs))]
         (assert (= (count patterns) (count (remove eval-pattern? full-path)))
                 (str "No valid paths through: " (vec patterns)))
         full-path))))
@@ -175,8 +178,10 @@
    opt-patterns
    not-patterns]
   (let [out-vars (fn [p] (if (eval-pattern? p) [(second p)] (get-vars p)))
-        all-non-negation-vars (set (mapcat out-vars (concat planned-patterns general-patterns opt-patterns)))
+        non-optional-vars (set (mapcat out-vars (concat planned-patterns general-patterns)))
+        all-non-negation-vars (into non-optional-vars opt-patterns)
         filter-vars (u/mapmap get-vars (concat filter-patterns not-patterns))
+        opt-vars (u/mapmap #(filter non-optional-vars (get-vars %)) opt-patterns)
         all-bound-for? (fn [bound fltr]
                          (every? #(or (bound %) (not (all-non-negation-vars %)))
                                  (filter-vars fltr)))
@@ -196,13 +201,16 @@
 
         ;; divide the filters into those which are fully bound, and the rest
         (let [all-bound? (partial all-bound-for? bound)
-              plan-remaining (fn [ptns]
-                               (->> ptns
-                                    (filter all-bound?)
-                                    (map (partial plan-path-with-bound bound))))
+              all-non-opt-bound? (fn [p] (->> (opt-vars p)
+                                              (remove bound)             ;; remove the bound ones
+                                              empty?))                   ;; unbound ones left over
               nxt-filters (filter all-bound? filters)
-              nxt-optionals (plan-remaining optionals)
-              nxt-negations (plan-remaining negations)
+              nxt-optionals (->> optionals
+                                 (filter all-non-opt-bound?)
+                                 (map (partial plan-path-with-bound bound)))
+              nxt-negations (->> negations
+                                 (filter all-bound?)
+                                 (map (partial plan-path-with-bound bound)))
               negative-nexts (concat nxt-negations nxt-filters)
               remaining-optionals (remove all-bound? optionals)
               remaining-filters (remove all-bound? filters)
@@ -301,9 +309,9 @@
           (groups [[v i e]] (reduce step [v i []] e))]
     (let [eval-outs (set (map second eval-patterns))
           independents (remove #(some eval-outs (get-vars %)) patterns)
-          [first-pattern] (if (seq bound)
-                            (filter #(some bound (get-vars %)) independents)
-                            independents)]
+          [first-pattern] (or (and (seq bound)
+                                   (seq (filter #(some bound (get-vars %)) independents)))
+                              independents)]
       (loop [included-vars (set (get-vars first-pattern))
              included [first-pattern]
              excluded (without first-pattern patterns)
