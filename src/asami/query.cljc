@@ -425,7 +425,7 @@
                           (filter identity))
             bindings (if (seq bindings)
                        (reduce outer-product bindings)
-                       bindings)]
+                       identity-binding)]
         [bindings default]))))
 
 (defn conforms? [t d]
