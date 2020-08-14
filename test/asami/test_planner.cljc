@@ -184,11 +184,11 @@
     (is (= m4 {2 5, 5 4}))))
 
 (deftest test-merge-filters
-  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-operations nil {} '[[:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+  (is (= '[[:a ?a ?b] [(= ?b :z)]] (merge-operations nil {} '[[:a ?a ?b]] [] '[[(= ?b :z)]] [] [])))
   (is (= '[[:x ?c ?a] [:a ?a ?b] [(= ?b :z)]]
-         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [])))
+         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?b :z)]] [] [])))
   (is (= '[[:x ?c ?a] [(= ?a :z)] [:a ?a ?b]]
-         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] []))))
+         (merge-operations nil {} '[[:x ?c ?a] [:a ?a ?b]] [] '[[(= ?a :z)]] [] []))))
 
 (deftest test-bindings-chain
   (let [[ins1 outs1] (bindings-chain '[[(inc ?c) ?d] [(str ?b "-" ?d) ?e] [(dec ?c) ?f]]
