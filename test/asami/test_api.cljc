@@ -407,10 +407,9 @@
                                         :movie/release-year 1985}]}))
       (is (= "Explorers"
              (q '{:find [?name .]
-                  :in [$ ?release-year]
+                  :in [$]
                   :where [[?m :movie/title ?name]
-                          [?m :movie/release-year ?release-year]]}
-                  (db conn)
-                  1985))))))
+                          [?m :movie/release-year 1985]]}
+                  (db conn)))))))
 
 #?(:cljs (run-tests))
