@@ -397,6 +397,7 @@
                        [?e :is-in ?e2]
                        [?e :name "Washington Monument"]]}))))
 
+
 (def opt-data
   [{:db/ident "austen"
     :name "Austen, Jane"}
@@ -446,5 +447,18 @@
              ["Brontë, Charlotte" "Jane Eyre"]
              ["Shelley, Mary" nil]}
            (set r2)))))
+
+(deftest test-explicit-default-graph
+  (testing "explicity default graph"
+    (let [conn (connect "asami:mem://test11")]
+      (deref (transact conn {:tx-data [{:movie/title "Explorers"
+                                        :movie/genre "adventure/comedy/family"
+                                        :movie/release-year 1985}]}))
+      (is (= "Explorers"
+             (q '{:find [?name .]
+                  :in [$]
+                  :where [[?m :movie/title ?name]
+                          [?m :movie/release-year 1985]]}
+                  (db conn)))))))
 
 #?(:cljs (run-tests))

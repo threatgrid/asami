@@ -421,11 +421,11 @@
         (throw (ex-info "Only one default data source permitted" {:defaults defaults})))
       (when-not (<= (count in) (count values))
         (throw (ex-info "In clause must not be more than the number of sources" {:in in :sources values})))
-      [(->> (map (fn [n v] (when-not (= '$ n) [n v])) in values)
-            (filter identity)
-            (map (partial apply create-binding))
-            (reduce outer-product))
-       default])))
+      (let [bindings (->> (map (fn [n v] (when-not (= '$ n) (create-binding n v))) in values)
+                          (filter identity))
+            bindings (when (seq bindings)
+                       (reduce outer-product bindings))]
+        [bindings default]))))
 
 (defn conforms? [t d]
   (try
