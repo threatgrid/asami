@@ -423,9 +423,8 @@
         (throw (ex-info "In clause must not be more than the number of sources" {:in in :sources values})))
       (let [bindings (->> (map (fn [n v] (when-not (= '$ n) (create-binding n v))) in values)
                           (filter identity))
-            bindings (if (seq bindings)
-                       (reduce outer-product bindings)
-                       identity-binding)]
+            bindings (when (seq bindings)
+                       (reduce outer-product bindings))]
         [bindings default]))))
 
 (defn conforms? [t d]
