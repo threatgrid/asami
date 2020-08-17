@@ -92,7 +92,10 @@ allow rules to successfully use this graph type."
 ;; TODO count these efficiently
 (defmethod count-transitive-from-index :default
   [graph tag s p o]
-  (count (common/get-transitive-from-index graph tag s p o)))
+  (if (= [? ? ?] (common/simplify graph s p o))
+    ;; There is no sense in this except for planning, so estimate an upper bound
+    (* (count (:spo graph)) (count (:osp graph)))
+    (count (common/get-transitive-from-index graph tag s p o))))
 
 (declare empty-multi-graph)
 
