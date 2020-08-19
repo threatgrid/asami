@@ -1,7 +1,21 @@
 # Change Log
 
 ## [Unreleased]
+
+## [1.1.1] - 2020-08-19
+### Added
+- User planning can now be selected with query options. Add `:planner :user` to the end of the query arguments.
+- `optional` operator, as per the [SPARQL OPTIONAL](https://www.w3.org/TR/sparql11-query/#optionals) operation.
+- Added `show-plan` function to observe how a query will be performed.
+
 ### Changed
+- Selecting variables as transitive attributes returns a path vector for that column.
+
+### Fixed
+- Fixed issue with filter arguments sometimes failing.
+- Transitive querying. Now handles unbound path elements better, planning is improved, and zero-steps are properly handled.
+- Tuple selector in the `:find` clause now work for single elements, and with empty results.
+- Single graph element in the `:in` clause now works.
 
 
 ## 1.1.0 - 2020-08-05
@@ -18,6 +32,7 @@
 ### Fixed
 - Entity arrays are now returned as vectors and not lists.
 
+
 ## 1.0.0 - 2020-07-29
 ### Added
 - New Datomic-style API
@@ -28,5 +43,5 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.1.0...HEAD
-[1.1.0]: https://github.com/threatgrid/asami/compare/0.4.10...1.1.0
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.1.1...HEAD
+[1.1.1]: https://github.com/threatgrid/asami/compare/1.1.0...1.1.1
