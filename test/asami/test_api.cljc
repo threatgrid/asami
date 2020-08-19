@@ -359,11 +359,16 @@
                       [?e :is-in ?e2]
                       [?e2 :name ?name]]} d)
          ["National Mall"]))
-    ;; How does this work at the repl, and not here?
     (is (=
          (q '{:find [[?name ...]]
               :where [[?e :name "Washington Monument"]
                       [?e :is-in* ?e2]
+                      [?e2 :name ?name]]} d)
+         ["Washington Monument" "National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))
+    (is (=
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in+ ?e2]
                       [?e2 :name ?name]]} d)
          ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))))
 

@@ -79,6 +79,14 @@ and multigraph implementations."
         (and trans?
              [pred (get #{:star :plus} trans? :star)])))))
 
+
+(defn zero-step
+  "Prepend a zero step value if the tag requests it"
+  [tag zero result]
+  (if (= :star tag)
+    (cons zero result)
+    result))
+
 ;; calculating transitive predicates
 
 (defmulti get-transitive-from-index
@@ -105,7 +113,7 @@ and multigraph implementations."
                                                 (if edge
                                                   (if (= o o')
                                                     [[o'] nil] ;; first solution, terminate early
-                                                    (if (seen? o')
+                                                    (if (or (seen? o') (not (keyword? o')))
                                                       (recur redges edge-result seen?)
                                                       (recur redges (conj edge-result o') (conj seen? o'))))
                                                   [edge-result seen?]))]
@@ -125,7 +133,7 @@ and multigraph implementations."
     (loop [seen? #{} starts [s] result []]
       (let [step (for [s' starts o (get-objects (get-in idx [s' p])) :when (not (seen? o))] o)]
         (if (empty? step)
-          (map vector result)
+          (zero-step tag [s] (map vector result))
           (recur (into seen? step) step (concat result step)))))))
 
 ;; finds all transitive paths that end at a node
@@ -135,7 +143,7 @@ and multigraph implementations."
     (loop [seen? #{} starts [o] result []]
       (let [step (for [o' starts s (get-subjects (get-in idx [p o'])) :when (not (seen? s))] s)]
         (if (empty? step)
-          (map vector result)
+          (zero-step tag [o] (map vector result))
           (recur (into seen? step) step (concat result step)))))))
 
 (def counter (atom 0))
@@ -163,26 +171,37 @@ and multigraph implementations."
    (*stream-from #(set (keys (osp %1))) all-knowns node)))
 
 ;; entire graph from a node
+;; the predicates returned are the first step in the path
+;; consider the entire path, as per the [:v ? :v] function
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spo :as graph} tag s p o]
   (let [object-sets-fn (lowest-level-sets-fn graph)
         object-set-fn (lowest-level-set-fn graph)
-        s-idx (idx s)]
-    (for [pred (keys s-idx)
-          obj (let [objs (object-set-fn (s-idx pred))]
-                (concat objs (reduce (partial downstream-from idx object-sets-fn) #{} objs)))]
-      [pred obj])))
+        s-idx (idx s)
+        starred (= :star tag)
+        knowns (if starred #{s} #{})
+        tuples (for [pred (keys s-idx)
+                     obj (let [objs (object-set-fn (s-idx pred))
+                               down-from (reduce (partial downstream-from idx object-sets-fn) knowns objs)]
+                           (concat objs (if starred (disj down-from s) down-from)))]
+                 [pred obj])]
+    (zero-step tag [nil s] tuples)))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :osp pos :pos :as graph} tag s p o]
-  (let [get-subjects (lowest-level-fn graph)]
-    (for [pred (keys pos)
-          subj (let [subjs (get-subjects (get-in pos [pred o]))]
-                 (concat subjs (reduce (partial upstream-from idx) #{} subjs)))]
-      [subj pred])))
+  (let [get-subjects (lowest-level-fn graph)
+        starred (= :star tag)
+        knowns (if starred #{o} #{})
+        tuples (for [pred (keys pos)
+                     subj (let [subjs (get-subjects (get-in pos [pred o]))
+                                up-from (reduce (partial upstream-from idx) knowns subjs)]
+                            (concat subjs (if starred (disj up-from o) up-from)))]
+                 [subj pred])]
+    (zero-step tag [o nil] tuples)))
 
 ;; finds a path between 2 nodes
+;; tags are irrelevant when the ends are fixed
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spo :as graph} tag s p o]
   (let [get-objects (lowest-level-fn graph)]
