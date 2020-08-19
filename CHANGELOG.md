@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.1.1] - 2020-08-19
+## [1.2.0] - 2020-08-19
 ### Added
 - User planning can now be selected with query options. Add `:planner :user` to the end of the query arguments.
 - `optional` operator, as per the [SPARQL OPTIONAL](https://www.w3.org/TR/sparql11-query/#optionals) operation.
@@ -43,5 +43,5 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.1.1...HEAD
-[1.1.1]: https://github.com/threatgrid/asami/compare/1.1.0...1.1.1
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.0...HEAD
+[1.2.0]: https://github.com/threatgrid/asami/compare/1.1.0...1.2.0
