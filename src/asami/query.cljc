@@ -32,7 +32,9 @@
       (symbol (namespace v) (subs n 0 (dec (count n))))
       v)))
 
-(defn find-vars [f] (set (map plain-var (vars f))))
+(defn plain-vars [v] (map plain-var (vars v)))
+
+(defn find-vars [f] (set (plain-vars f)))
 
 (defn op-error
   [pattern]
@@ -106,7 +108,7 @@
    part :- Results
    pattern :- EPVPattern]
   (let [cols (:cols (meta part))
-        total-cols (->> (vars pattern)
+        total-cols (->> (plain-vars pattern)
                         (remove (set cols))
                         (concat cols)
                         (into []))
@@ -256,7 +258,7 @@
                ;; map the first pattern's vars into the existing binding columns. Used for the first resolution.
                pattern->left (projection/matching-vars fpattern cols)
                ;; find all bound vars that will be needed for the entire subquery
-               vars (reduce #(into %1 (get-vars %2)) #{} patterns)
+               vars (reduce #(into %1 (map plain-var (get-vars %2))) #{} patterns)
                ;; get the required bound column names, in order
                pre-bound (keep vars cols)
                ;; the required bound column indexes
@@ -455,7 +457,7 @@
                                       ;; the first element is a pattern lookup
                                       (epv-pattern? fpattern) [(with-meta
                                                                  (gr/resolve-pattern graph fpattern)
-                                                                 {:cols (vec (vars fpattern))})
+                                                                 {:cols (vec (plain-vars fpattern))})
                                                                patterns]
                                       ;; the first element is an operation,
                                       ;; start with an empty result and process all the patterns
@@ -501,7 +503,7 @@
           (planner/bindings? fpath) fpath
           (epv-pattern? fpath) (with-meta
                                  (gr/resolve-pattern graph fpath)
-                                 {:cols (vec (vars fpath))})
+                                 {:cols (vec (plain-vars fpath))})
           :default (run-simple-query graph [fpath]))
 
         ;; normal operation

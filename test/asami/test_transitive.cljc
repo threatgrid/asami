@@ -45,7 +45,7 @@
 
 (defn simple-path [g]
   (let [r1 (resolve-pattern g '[:a ?p* :c])]
-    (is (= [[:p1] [:p1]] r1))))
+    (is (= [[[:p1 :p1]]] r1))))
 
 (deftest test-simple-path
   (let [g (assert-data empty-graph [[:a :p1 :b] [:b :p1 :c]])
@@ -87,8 +87,8 @@
 (defn branch-path [g]
   (let [r1 (resolve-pattern g '[:a ?p* :c])
         r2 (resolve-pattern g '[:a ?p* :e])]
-    (is (= [[:p1] [:p1]] r1))
-    (is (= [[:p1] [:p1] [:p1]] r2))))
+    (is (= [[[:p1 :p1]]] r1))
+    (is (= [[[:p1 :p1 :p1]]] r2))))
 
 (deftest test-branch-path
   (let [g (assert-data empty-graph simple-branch-data)
@@ -133,8 +133,8 @@
   (let [r1 (resolve-pattern g '[:a ?p* :c])
         r2 (resolve-pattern g '[:a ?p* :f])
         r3 (resolve-pattern g '[:a ?p* :h])]
-    (is (= [[:p1] [:p1]] r1))
-    (is (= [[:p1] [:p1] [:p2]] r2))
+    (is (= [[[:p1 :p1]]] r1))
+    (is (= [[[:p1 :p1 :p2]]] r2))
     (is (= [] r3))))
 
 (deftest test-dbl-branch-path
@@ -167,8 +167,8 @@
 (defn loop-path [g]
   (let [r1 (resolve-pattern g '[:a ?p* :c])
         r2 (resolve-pattern g '[:a ?p* :a])]
-    (is (= [[:p1] [:p1]] r1))
-    (is (= [[:p1] [:p1] [:p1]] r2))))
+    (is (= [[[:p1 :p1]]] r1))
+    (is (= [[[:p1 :p1 :p1]]] r2))))
 
 (deftest test-loop-path
   (let [g (assert-data empty-graph simple-loop-data)
@@ -217,8 +217,8 @@
   (let [r1 (resolve-pattern g '[:a ?p* :c])
         r2 (resolve-pattern g '[:a ?p* :f])
         r3 (resolve-pattern g '[:a ?p* :h])]
-    (is (= [[:p1] [:p1]] r1))
-    (is (= [[:p1] [:p1] [:p2]] r2))
+    (is (= [[[:p1 :p1]]] r1))
+    (is (= [[[:p1 :p1 :p2]]] r2))
     (is (= [] r3))))
 
 (deftest test-dbl-branch-loop-path

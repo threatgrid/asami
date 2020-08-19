@@ -2,7 +2,7 @@
 and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple node-type?]]
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -202,7 +202,7 @@ and multigraph implementations."
                 (if path-node
                   (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
                                                   (if edge
-                                                    (if (seen? o')
+                                                    (if (or (seen? o') (not (keyword? o')))
                                                       (recur redges edge-result seen?)
                                                       (let [new-path-node [(conj path p') o']]
                                                         (if (= o o')
@@ -217,7 +217,10 @@ and multigraph implementations."
         (let [[next-paths next-seen] (step paths seen)]
           (if (not-solution? next-paths)
             (recur next-paths next-seen)
-            (map vector (ffirst next-paths))))))))
+            (let [path (ffirst next-paths)]
+              (if (seq path)
+                [[(ffirst next-paths)]]
+                []))))))))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
