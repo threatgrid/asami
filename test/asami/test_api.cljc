@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q query-plan create-database connect db transact entity now as-of since]]
+  (:require [asami.core :refer [q show-plan create-database connect db transact entity now as-of since]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [schema.core :as s]
@@ -372,23 +372,23 @@
                       [?e2 :name ?name]]} d)
          ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))))
 
-;; tests both the query-plan function and the options
+;; tests both the show-plan function and the options
 (deftest test-plan
   (let [c (connect "asami:mem://test9")
         {d :db-after :as tx} @(transact c {:tx-data transitive-data})
-        p1 (query-plan '[:find [?name ...]
+        p1 (show-plan '[:find [?name ...]
                          :where [?e :name "Washington Monument"]
                          [?e :is-in ?e2]
                          [?e2 :name ?name]] d)
-        p2 (query-plan '[:find [?name ...]
+        p2 (show-plan '[:find [?name ...]
                          :where [?e2 :name ?name]
                          [?e :is-in ?e2]
                          [?e :name "Washington Monument"]] d)
-        p3 (query-plan '[:find [?name ...]
+        p3 (show-plan '[:find [?name ...]
                          :where [?e2 :name ?name]
                          [?e :is-in ?e2]
                          [?e :name "Washington Monument"]] d :planner :user)
-        p4 (query-plan '[:find (count ?name)
+        p4 (show-plan '[:find (count ?name)
                          :where [?e2 :name ?name]
                          [?e :is-in ?e2]
                          [?e :name "Washington Monument"]] d)]

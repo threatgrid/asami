@@ -402,7 +402,7 @@
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs) false))
 
-(defn query-plan
+(defn show-plan
   "Return a query plan and do not execute the query"
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs) true))
