@@ -1,4 +1,4 @@
-(defproject org.clojars.quoll/asami "1.1.0-SNAPSHOT"
+(defproject org.clojars.quoll/asami "1.1.1"
   :description "An in memory graph store for Clojure and ClojureScript"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
@@ -7,7 +7,7 @@
                  [org.clojure/clojurescript "1.10.773"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/zuko "0.2.3"]]
+                 [org.clojars.quoll/zuko "0.2.4"]]
   :plugins [[lein-cljsbuild "1.1.7"]
             [cider/cider-nrepl "0.24.0"]]
   :cljsbuild {
