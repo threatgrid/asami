@@ -402,6 +402,29 @@
                        [?e :is-in ?e2]
                        [?e :name "Washington Monument"]]}))))
 
+(deftest test-plan-with-opt
+  (let [c (connect "asami:mem://test10")
+        {d :db-after :as tx} @(transact c {:tx-data [{:movie/title "Explorers"
+                                                      :movie/genre "adventure/comedy/family"
+                                                      :movie/release-year 1985}
+                                                     {:movie/title "Demolition Man"
+                                                      :movie/genre "action/sci-fi/thriller"
+                                                      :movie/release-year 1993}
+                                                     {:movie/title "Johnny Mnemonic"
+                                                      :movie/genre "cyber-punk/action"
+                                                      :movie/release-year 1995}
+                                                     {:movie/title "Toy Story"
+                                                      :movie/genre "animation/adventure/comedy"
+                                                      :movie/release-year 1995
+                                                      :movie/sequel "Toy Story 2"}
+                                                     {:movie/title "Sense and Sensibility"
+                                                      :movie/genre "drama/romance"
+                                                      :movie/release-year 1995}]})
+        p1 (show-plan '[:find ?name ?sequel
+                        :where [?m :movie/title ?name]
+                        [?m :movie/release-year 1995]
+                        (optional [?m :movie/sequel ?sequel])] d)]
+    (is (= p1 '{:plan ([?m :movie/release-year 1995] (optional [?m :movie/sequel ?sequel]) [?m :movie/title ?name])}))))
 
 (def opt-data
   [{:db/ident "austen"

@@ -195,9 +195,9 @@
            negations not-patterns]
       (if-not (seq patterns)
         ;; no patterns left, so add remaining general patterns, negations, then filters
-        (let [planned-optionals (map (partial plan-path-with-bound bound) opt-patterns)
+        (let [planned-optionals (map (partial plan-path-with-bound bound) optionals)
               planned-negations (map (partial plan-path-with-bound bound) negations)]
-          (concat plan general-patterns planned-optionals planned-negations filters))
+          (doall (concat plan general-patterns planned-optionals planned-negations filters)))
 
         ;; divide the filters into those which are fully bound, and the rest
         (let [all-bound? (partial all-bound-for? bound)
@@ -212,7 +212,7 @@
                                  (filter all-bound?)
                                  (map (partial plan-path-with-bound bound)))
               negative-nexts (concat nxt-negations nxt-filters)
-              remaining-optionals (remove all-bound? optionals)
+              remaining-optionals (remove all-non-opt-bound? optionals)
               remaining-filters (remove all-bound? filters)
               remaining-negations (remove all-bound? negations)]
           ;; if negatives were bound, append them, else get the next binding pattern
