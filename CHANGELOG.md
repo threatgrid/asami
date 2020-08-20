@@ -1,6 +1,7 @@
 # Change Log
 
 ## [Unreleased]
+_Nothing yet_
 
 ## [1.2.0] - 2020-08-19
 ### Added
