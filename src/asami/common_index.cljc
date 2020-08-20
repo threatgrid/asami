@@ -201,7 +201,6 @@ and multigraph implementations."
     (zero-step tag [o nil] tuples)))
 
 ;; finds a path between 2 nodes
-;; tags are irrelevant when the ends are fixed
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spo :as graph} tag s p o]
   (let [get-objects (lowest-level-fn graph)]
@@ -232,14 +231,16 @@ and multigraph implementations."
                       (recur rpathnodes next-result next-seen)
                       [next-result next-seen]))
                   [result seen*])))] ;; solution found, or else empty result found
-      (loop [paths [[[] s]] seen #{}]
-        (let [[next-paths next-seen] (step paths seen)]
-          (if (not-solution? next-paths)
-            (recur next-paths next-seen)
-            (let [path (ffirst next-paths)]
-              (if (seq path)
-                [[(ffirst next-paths)]]
-                []))))))))
+      (if (and (= s o) (= tag :star))
+        [[[]]]
+        (loop [paths [[[] s]] seen #{}]
+          (let [[next-paths next-seen] (step paths seen)]
+            (if (not-solution? next-paths)
+              (recur next-paths next-seen)
+              (let [path (ffirst next-paths)]
+                (if (seq path)
+                  [[(ffirst next-paths)]]
+                  [])))))))))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]

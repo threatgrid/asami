@@ -214,9 +214,11 @@
 
 (defn loop-path [g]
   (let [r1 (resolve-pattern g '[:a ?p* :c])
-        r2 (resolve-pattern g '[:a ?p* :a])]
+        r2 (resolve-pattern g '[:a ?p* :a])
+        r3 (resolve-pattern g '[:a ?p+ :a])]
     (is (= [[[:p1 :p1]]] r1))
-    (is (= [[[:p1 :p1 :p1]]] r2))))
+    (is (= [[[]]] r2))
+    (is (= [[[:p1 :p1 :p1]]] r3))))
 
 (deftest test-loop-path
   (let [g (assert-data empty-graph simple-loop-data)
