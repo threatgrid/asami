@@ -398,11 +398,16 @@
   "Execute a query against the provided inputs.
    The query can be a map, a seq, or a string.
    See the documentation at https://github.com/threatgrid/asami/wiki/Querying
-   for a full description of queries."
+   for a full description of queries.
+   The end of the parameters may include a series of key/value pairs for query options.
+   The only recognized option for now is:
+     `:planner :user`
+   This ensures that a query is executed in user-specified order, and not the order calculated by the optimizing planner."
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs) false))
 
 (defn show-plan
-  "Return a query plan and do not execute the query"
+  "Return a query plan and do not execute the query.
+   All parameters are identical to the `q` function."
   [query & inputs]
   (query/query-entry query mem/empty-graph (graphs-of inputs) true))
