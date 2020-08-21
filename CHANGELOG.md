@@ -3,6 +3,11 @@
 ## [Unreleased]
 _Nothing yet_
 
+## [1.2.1] - 2020-08-21
+### Fixed
+- Fixed problem that duplicated optional constraints during query planning.
+- Fixed zero steps for transitive paths between nodes.
+
 ## [1.2.0] - 2020-08-19
 ### Added
 - User planning can now be selected with query options. Add `:planner :user` to the end of the query arguments.
@@ -44,5 +49,6 @@ _Nothing yet_
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.0...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.1...HEAD
+[1.2.1]: https://github.com/threatgrid/asami/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/threatgrid/asami/compare/1.1.0...1.2.0
