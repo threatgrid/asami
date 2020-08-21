@@ -11,7 +11,7 @@
                :cljs [schema.test :as st :refer-macros [deftest]]))
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
-(def assert-data "Access to private function" #'asami.core/assert-data)
+(def assert-data "Access to private function" #'asami.memory/add-to-graph)
 
 (def nn new-node)
 

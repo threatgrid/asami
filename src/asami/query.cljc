@@ -514,16 +514,6 @@
           (-> (run-simple-query graph path')
               result-gate))))))
 
-(s/defn add-to-graph
-  [graph
-   data :- Results]
-  (reduce (fn [acc d] (apply gr/graph-add acc d)) graph data))
-
-(s/defn delete-from-graph
-  [graph
-   data :- Results]
-  (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
-
 (def query-keys #{:find :in :with :where})
 
 (s/defn query-map
