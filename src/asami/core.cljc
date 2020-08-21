@@ -2,80 +2,22 @@
       :author "Paula Gearon"}
     asami.core
     (:require [clojure.string :as str]
-              [asami.graph :as gr]
-              [asami.index :as mem]
-              [asami.multi-graph :as multi]
+              [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+              [asami.memory :as memory]
               [asami.query :as query]
               [asami.internal :as internal]
               [asami.datom :as datom :refer [->Datom]]
               [naga.store :as store :refer [Storage StorageType]]
+              [asami.graph :as gr]
               [zuko.util :as util]
+              [zuko.node :as node]
               [zuko.entity.general :as entity :refer [EntityMap GraphType]]
               [zuko.entity.writer :as writer :refer [Triple]]
               [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true]))
-    #?(:clj (:import [java.util Date])))
+                 :cljs [schema.core :as s :include-macros true])))
 
-(defn now
-  "Creates an object to represent the current time"
-  []
-  #?(:clj (Date.)
-     :cljs (js/Date.)))
-
-(defn instant?
-  "Tests if a value is a timestamp"
-  [t]
-  (= #?(:clj Date :cljs js/Date) (type t)))
-
-(defn ^:private find-index
-  "Performs a binary search through a sorted vector, returning the index of a provided value
-   that is in the vector, or the next lower index if the value is not present.
-   a: The vector to be searched
-   v: The value being searched for
-   cmp: A 2 argument comparator function (Optional).
-        Defaults to clojure.core/compare
-        Must return -1 when the first arg < the second arg.
-                    +1 when the first arg > the second arg.
-                    0 when the args are equal."
-  ([a v]
-   (find-index a v compare))
-  ([a v cmp]
-     (loop [low 0 high (count a)]
-       (if (= (inc low) high)
-         low
-         (let [mid (int (/ (+ low high) 2))
-               mv (nth a mid)
-               c (cmp mv v)]
-           (cond
-             (zero? c) mid
-             (> 0 c) (recur mid high)
-             (< 0 c) (recur low mid)))))))
-
-(defonce databases (atom {}))
-
-(def empty-graph mem/empty-graph)
-(def empty-multi-graph multi/empty-multi-graph)
-
-;; graph is the wrapped graph
-;; history is a seq of Databases, excluding this one
-;; timestamp is the time the database was created
-(defrecord Database [graph history timestamp])
-
-(def DatabaseType (s/pred (partial instance? Database)))
-
-;; name is the name of the database
-;; state is an atom containing:
-;; :db is the latest DB
-;; :history is a list of tuples of Database, including db
-(defrecord Connection [name state])
-
-(def ConnectionType (s/pred (partial instance? Connection)))
-
-(defn- new-empty-connection
-  [name empty-gr]
-  (let [db (->Database empty-gr [] (now))]
-    (->Connection name (atom {:db db :history [db]}))))
+(defonce connections (atom {}))
 
 (s/defn ^:private parse-uri :- {:type s/Str
                                 :name s/Str}
@@ -92,11 +34,11 @@
    database was created, false if it already exists."
   [uri :- s/Str]
   (boolean
-   (if-not (@databases uri)
+   (if-not (@connections uri)
      (let [{:keys [type name]} (parse-uri uri)]
        (case type
-         "mem" (swap! databases assoc uri (new-empty-connection name empty-graph)) 
-         "multi" (swap! databases assoc uri (new-empty-connection name empty-multi-graph)) 
+         "mem" (swap! connections assoc uri (memory/new-connection name memory/empty-graph)) 
+         "multi" (swap! connections assoc uri (memory/new-connection name memory/empty-multi-graph)) 
          "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
          (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))))
 
@@ -107,90 +49,22 @@
   asami:mem://dbname    A standard graph
   asami:multi://dbname  A multigraph"
   [uri :- s/Str]
-  (if-let [conn (@databases uri)]
+  (if-let [conn (@connections uri)]
     conn
     (do
       (create-database uri)
-      (@databases uri))))
+      (@connections uri))))
 
-(s/defn db :- DatabaseType
-  "Retrieves the most recent value of the database for reading."
-  [connection :- ConnectionType]
-  (:db @(:state connection)))
-
-(s/defn as-of :- DatabaseType
-  "Retrieves the database as of a given moment, inclusive.
-   The t value may be an instant, or a transaction ID.
-   The database returned will be whatever database was the latest at the specified time or transaction."
-  [{:keys [graph history timestamp] :as db} :- DatabaseType
-   t :- (s/cond-pre s/Int (s/pred instant?))]
-  (cond
-    (instant? t) (if (>= (compare t timestamp) 0)
-                   db
-                   (nth history
-                        (find-index history t #(compare (:timestamp %1) %2))))
-    (int? t) (if (>= t (count history))
-               db
-               (nth history (min (max t 0) (dec (count history)))))))
-
-(s/defn as-of-t :- s/Int
-  "Returns the as-of point for a database, or nil if none"
-  [{history :history :as db} :- DatabaseType]
-  (and history (count history)))
-
-(s/defn since :- (s/maybe DatabaseType)
-  "Returns the value of the database since some point t, exclusive.
-   t can be a transaction number, or instant."
-  [{:keys [graph history timestamp] :as db} :- DatabaseType
-   t :- (s/cond-pre s/Int (s/pred instant?))]
-  (cond
-    (instant? t) (cond
-                   (> (compare t timestamp) 0) nil
-                   (< (compare t (:timestamp (first history))) 0) (first history)
-                   :default (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
-                              (if (= tx (count history))
-                                db
-                                (nth history tx))))
-    (int? t) (cond (>= t (count history)) nil
-                   (= (count history) (inc t)) db
-                   :default (nth history (min (max (inc t) 0) (dec (count history)))))))
-
-(s/defn since-t :- s/Int
-  "Returns the since point of a database, or nil if none"
-  [{history :history :as db} :- DatabaseType]
-  (if-not (seq history)
-    0
-    (count history)))
-
-(s/defn graph :- GraphType
-  "Returns the Graph object associated with a Database"
-  [database :- DatabaseType]
-  (:graph database))
-
-(s/defn as-database :- DatabaseType
-  "Creates a Database around an existing Graph.
+(s/defn as-connection :- ConnectionType
+  "Creates a Database/Connection around an existing Graph.
    graph: The graph to build a database around.
-   uri: Optional. The uri of the database. If this is provided then a connection will be available."
-  ([graph :- GraphType]
-   (->Database graph [] (now)))
-  ([graph :- GraphType
-    uri :- s/Str]
-   (let [{:keys [name]} (parse-uri uri)
-         new-conn (new-empty-connection name graph)]
-     (swap! databases assoc uri new-conn)
-     (db new-conn))))
-
-(s/defn ^:private assert-data :- GraphType
-  "Adds triples to a graph"
+   uri: The uri of the database."
   [graph :- GraphType
-   data :- [[s/Any]]]
-  (query/add-to-graph graph data))
-
-(s/defn ^:private retract-data :- GraphType
-  "Removes triples from a graph"
-  [graph :- GraphType
-   data :- [[s/Any]]]
-  (query/delete-from-graph graph data))
+   uri :- s/Str]
+  (let [{:keys [name]} (parse-uri uri)
+        c (memory/new-connection name graph)]
+    (swap! connections assoc uri c)
+    (storage/db c)))
 
 (defn ^:private annotated-attribute?
   "Checks if an attribute has been annotated with a character"
@@ -279,7 +153,7 @@
                   ;; create appending triples
                   append-triples (mapcat (fn [[attr head]]
                                            (let [v (obj (append->annotate attr))
-                                                 new-node (gr/new-node)]
+                                                 new-node (node/new-node graph)]
                                              [[(find-tail head) :tg/rest new-node] [new-node :tg/first v] [head :tg/contains v]])) attr-heads)]
               [new-obj removals append-triples]))
           [obj nil nil])]
@@ -320,12 +194,20 @@
                            (if (= (nth obj 2) :db/id)
                              (let [id (nth obj 3)]
                                (if (temp-id? id)
-                                 (let [new-id (or (ids id) (gr/new-node))]
+                                 (let [new-id (or (ids id) (node/new-node graph))]
                                    [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
                            [(conj acc (mapv #(ids % %) (rest obj))) racc ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
         [triples rtriples id-map] (reduce add-triples [[] (vec retractions) {}] new-data)]
     [triples rtriples id-map]))
+
+(def db storage/db)
+(def as-of storage/as-of)
+(def as-of-t storage/as-of-t)
+(def since storage/since)
+(def since-t storage/since-t)
+(def graph storage/graph)
+(def entity storage/entity)
 
 (s/defn transact
   ;; returns a deref'able object that derefs to:
@@ -361,14 +243,7 @@
                    {:keys [graph history] :as db-before} (:db @state)
                    tx-data (or tx-data tx-info) ;; capture the old usage which didn't have an arg map
                    [triples removals tempids] (build-triples db-before tx-data)
-                   next-graph (-> graph
-                                  (retract-data removals)
-                                  (assert-data triples))
-                   db-after (->Database
-                             next-graph
-                             (conj history db-before)
-                             (now))]
-               (reset! (:state connection) {:db db-after :history (conj (:history db-after) db-after)})
+                   [db-before db-after] (storage/transact-data connection triples removals)]
                {:db-before db-before
                 :db-after db-after
                 :tx-data (concat
@@ -380,19 +255,10 @@
                (force d)
                d))))
 
-(s/defn entity :- {s/Any s/Any}
-  "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
-   Objects may be nested, but references to top level objects will be nil in order to avoid loops."
-  ;; TODO create an Entity type that lazily loads, and references the database it came from
-  [{graph :graph :as db} id]
-  (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
-                   (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
-    (reader/ref->entity graph ref)))
-
 (defn- graphs-of
   "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
   [inputs]
-  (map #(if (instance? Database %) (:graph %) %) inputs))
+  (map #(if (satisfies? storage/Database %) (storage/graph %) %) inputs))
 
 (defn q
   "Execute a query against the provided inputs.
@@ -404,10 +270,10 @@
      `:planner :user`
    This ensures that a query is executed in user-specified order, and not the order calculated by the optimizing planner."
   [query & inputs]
-  (query/query-entry query mem/empty-graph (graphs-of inputs) false))
+  (query/query-entry query memory/empty-graph (graphs-of inputs) false))
 
 (defn show-plan
   "Return a query plan and do not execute the query.
    All parameters are identical to the `q` function."
   [query & inputs]
-  (query/query-entry query mem/empty-graph (graphs-of inputs) true))
+  (query/query-entry query memory/empty-graph (graphs-of inputs) true))

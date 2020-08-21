@@ -20,7 +20,7 @@
 
 (use-fixtures :once st/validate-schemas)
 
-(def assert-data "Access to private function" #'asami.core/assert-data)
+(def assert-data "Access to private function" #'asami.memory/add-to-graph)
 
 (deftest var-mapping
   (let [m1 (matching-vars `[?a :rel ?c] `[?a ?b ?c] )

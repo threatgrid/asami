@@ -1,8 +1,9 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact entity now as-of since]]
+  (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since]]
             [asami.index :as i]
             [asami.multi-graph :as m]
+            [asami.memory :refer [now]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
