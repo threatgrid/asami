@@ -70,6 +70,7 @@
 (defrecord MemoryConnection [name state]
   storage/Connection
   (db [this] (db* this))
+  (delete-database [this]) ;; no-op for memory databases
   (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
 
 
@@ -86,8 +87,6 @@
   "Removes triples from the graph"
   [graph data]
   (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
-
-
 
 (defn new-connection
   "Creates a memory Connection object"

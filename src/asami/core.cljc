@@ -29,18 +29,23 @@
       {:type db-type
        :name db-name})))
 
+(defn- connection-for
+  "Creates a connection for a URI"
+  [uri]
+  (let [{:keys [type name]} (parse-uri uri)]
+    (case type
+      "mem" (memory/new-connection name memory/empty-graph) 
+      "multi" (memory/new-connection name memory/empty-multi-graph) 
+      "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
+      (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
+
 (s/defn create-database :- s/Bool
   "Creates database specified by uri. Returns true if the
    database was created, false if it already exists."
   [uri :- s/Str]
   (boolean
    (if-not (@connections uri)
-     (let [{:keys [type name]} (parse-uri uri)]
-       (case type
-         "mem" (swap! connections assoc uri (memory/new-connection name memory/empty-graph)) 
-         "multi" (swap! connections assoc uri (memory/new-connection name memory/empty-multi-graph)) 
-         "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
-         (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))))
+     (swap! connections assoc uri (connection-for uri)))))
 
 (s/defn connect :- ConnectionType
   "Connects to the specified database, returning a Connection.
@@ -54,6 +59,20 @@
     (do
       (create-database uri)
       (@connections uri))))
+
+(s/defn delete-database :- s/Bool
+  "Deletes the database specified by the URI.
+   Returns true if the delete occurred."
+  [uri :- s/Str]
+  ;; retrieve the database from connections
+  (if-let [conn (@connections uri)]
+    (do
+      (swap! connections dissoc uri)
+      (storage/delete-database conn))
+    ;; database not in the connections
+    ;; connect to it to free its resources
+    (if-let [conn (connection-for uri)]
+      (storage/delete-database conn))))
 
 (s/defn as-connection :- ConnectionType
   "Creates a Database/Connection around an existing Graph.
