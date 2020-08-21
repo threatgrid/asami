@@ -1,7 +1,11 @@
 # Change Log
 
 ## [Unreleased]
-_Nothing yet_
+### Added
+- `delete-database` function.
+
+### Changed
+- Refactored Connections and Databases to sit behind a protocol for abstraction.
 
 ## [1.2.1] - 2020-08-21
 ### Fixed
