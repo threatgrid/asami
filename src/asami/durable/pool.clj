@@ -16,6 +16,8 @@
 (declare new-file-data-pool)
 
 ;; tx-id: offset for the current transaction, in monotonically increasing order
+;; root: Block ID for the root of the index tree in the current transaction
+;; tail: offset of the end of the raw data file
 ;; index: The index object, with the root provided as an ID
 ;; data-writer: append-only file handle to write data
 ;; data-reader: random access handle to read data
