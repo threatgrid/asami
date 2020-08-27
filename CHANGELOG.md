@@ -1,6 +1,11 @@
 # Change Log
 
 ## [Unreleased]
+
+## [1.2.2] - 2020-08-27
+### Fixed
+- Fixed use of macro as a value in CLJS
+
 ### Added
 - `delete-database` function.
 
@@ -53,6 +58,7 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.1...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.2...HEAD
+[1.2.2]: https://github.com/threatgrid/asami/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/threatgrid/asami/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/threatgrid/asami/compare/1.1.0...1.2.0

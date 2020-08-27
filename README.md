@@ -28,7 +28,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "1.2.1"}
+    org.clojars.quoll/asami {:mvn/version "1.2.2"}
   }
 }
 ```
