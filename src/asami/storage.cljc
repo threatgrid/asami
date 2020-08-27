@@ -17,6 +17,6 @@
   (graph [this] "Returns the internal graph for the database")
   (entity [this id] "Returns an entity for an identifier"))
 
-(def DatabaseType (s/pred (partial satisfies? Database)))
-(def ConnectionType (s/pred (partial satisfies? Connection)))
+(def DatabaseType (s/pred #(satisfies? Database %)))
+(def ConnectionType (s/pred #(satisfies? Connection %)))
 
