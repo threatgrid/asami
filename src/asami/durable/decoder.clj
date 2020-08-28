@@ -11,6 +11,9 @@
            [java.nio ByteBuffer]
            [java.nio.charset Charset]))
 
+
+;; TODO: change to using Paged files
+
 (def utf8 (Charset/forName ("UTF-8")))
 
 (defn decode-length
