@@ -11,7 +11,7 @@
            [java.nio ByteBuffer]
            [java.nio.charset Charset]))
 
-(def utf8 (Charset/forName ("UTF-8")))
+(def utf8 (Charset/forName "UTF-8"))
 
 (def type->code
   {Long (byte 0)

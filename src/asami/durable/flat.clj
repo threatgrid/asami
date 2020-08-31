@@ -1,17 +1,19 @@
 (ns ^{:doc "Manages a memory-mapped file that holds write once data"
       :author "Paula Gearon"}
     asami.durable.flat
-  (:require [asami.durable.pages :refer [Paged]])
-  (:import [java.io.RandomAccessFile]
+  (:require [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into]])
+  (:import [java.io RandomAccessFile]
            [java.nio.channels FileChannel FileChannel$MapMode]))
 
-(def ^:const read-only FileChannel$MapMode/READ_ONLY)
+(def read-only FileChannel$MapMode/READ_ONLY)
+
+(def ^:const default-region-size "Default region of 1GB" 0x40000000)
 
 ;; These functions do update the PagedFile state, but only to expand the mapped region.
 (defrecord PagedFile [^RandomAccessFile f regions region-size]
   Paged
   (refresh! [this]
-    (letfn [(remap [f mappings]
+    (letfn [(remap [mappings]
               (let [existing (or (if-let [tail (last mappings)]
                                    (if (< (.capacity tail) region-size)
                                      (butlast mappings)))
@@ -24,7 +26,7 @@
                                 (.map fchannel read-only offset (min region-size (- flength offset))))
                               (range unmapped-offset flength region-size))]
                 (into [] (concat existing new-maps))))]
-      (swap! regions remap f)))
+      (swap! regions remap)))
 
   (read-byte [this offset]
     ;; finds a byte in a region
@@ -59,23 +61,26 @@
         (when (>= region-offset region-size)
           (throw (ex-info "Accessing trailing data beyond the end of file"
                           {:region-size region-size :region-offset region-offset})))
-        (if (= region-offset (dec region-size))
+        (if (or (odd? region-offset) (= region-offset (dec region-size)))
           (short (bit-or (bit-shift-left (.get region region-offset) 8)
                          (read-byte this (inc offset))))
-          (.getShort region (bit-shift-right region-offset 1))))))
+          (.getShort region region-offset)))))
 
-  (read-bytes [this offset bytes]
+  (read-bytes [this offset len]
+    (read-bytes-into this offset (byte-array len)))
+
+  (read-bytes-into [this offset bytes]
     ;; when the bytes occur entirely in a region, then return a slice of the region
     ;; if the bytes straddle 2 regions, create a new buffer, and copy the bytes from both regions into it
     (let [region-nr (int (/ offset region-size))
           region-offset (mod offset region-size)
-          array-size (count bytes)]
+          array-len (count bytes)]
       ;; the requested data is not currently mapped, so refresh
       (when (>= region-nr (count @regions))
         (refresh! this))
-      (when (> array-size region-size)
+      (when (> array-len region-size)
         (throw (ex-info "Data size beyond size limit"
-                        {:requested array-size :limit region-size})))
+                        {:requested array-len :limit region-size})))
       (when (>= region-nr (count @regions))
         (throw (ex-info "Accessing data beyond the end of file"
                         {:max (count @regions) :region region-nr :offset offset})))
@@ -85,14 +90,15 @@
           (throw (ex-info "Accessing trailing data beyond the end of file"
                           {:region-size region-size :region-offset region-offset})))
         ;; check if the requested data is all in the same region
-        (if (> (+ region-offset array-size) region-size)
+        (if (> (+ region-offset array-len) region-size)
           (do     ;; data straddles 2 regions
             (when (>= (inc region-nr) (count @regions))
               (throw (ex-info "Accessing data beyond the end of file"
                               {:max (count @regions) :region region-nr :offset offset})))
             (let [nregion (nth @regions (inc region-nr))
                   fslice-size (- region-size region-offset)
-                  nslice-size (- array-size fslice-size)]
+                  nslice-size (- array-len fslice-size)
+                  bytes (byte-array array-len)]
               (when (> nslice-size (.capacity nregion))
                 (throw (ex-info "Accessing data beyond the end of file"
                                 {:size nslice-size :limit (.capacity nregion)})))
@@ -102,5 +108,14 @@
               (doto (.asReadOnlyBuffer nregion)
                 (.get bytes fslice-size nslice-size))))
           (doto (.asReadOnlyBuffer region)
+            (.position region-offset)
             (.get bytes)))
         bytes))))
+
+(defn paged-file
+  "Creates a paged file reader"
+  ([f] (paged-file f default-region-size))
+  ([f region-size]
+   (let [p (->PagedFile f (atom nil) region-size)]
+     (refresh! p)
+     p)))
