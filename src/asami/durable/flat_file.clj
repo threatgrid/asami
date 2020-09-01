@@ -1,6 +1,6 @@
 (ns ^{:doc "Manages a memory-mapped file that holds write once data"
       :author "Paula Gearon"}
-    asami.durable.flat
+    asami.durable.flat-file
   (:require [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into]])
   (:import [java.io RandomAccessFile]
            [java.nio.channels FileChannel FileChannel$MapMode]))
