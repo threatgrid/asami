@@ -1,9 +1,9 @@
 (ns ^{:doc "Encodes and decodes data for storage. Clojure implementation"
       :author "Paula Gearon"}
     asami.durable.decoder
-  (:require [clojure.string :as s])
+  (:require [clojure.string :as s]
+            [asami.durable.pages :refer [read-byte read-bytes read-short]])
   (:import [clojure.lang Keyword BigInt]
-           [java.io RandomAccessFile]
            [java.math BigInteger BigDecimal]
            [java.net URI]
            [java.time Instant]
@@ -12,94 +12,100 @@
            [java.nio.charset Charset]))
 
 
-;; TODO: change to using Paged files
-
 (def utf8 (Charset/forName ("UTF-8")))
 
 (defn decode-length
-  [^bool ext ^RandomAccessFile f]
+  [^bool ext paged-rdr ^long pos]
   (if ext
-    (let [len (.readShort f)]
+    (let [len (read-short paged-rdr pos)]
       (if (< len 0)
-        (let [len2 (.readUnsignedShort f)]
-          (bit-or
-           (bit-shift-left (int (bit-and 0x7FFF len)) len 16)
-           len2))
-        len))
-    (int (.readByte f))))
+        (let [len2 (read-short paged-rdr pos)]
+          [Integer/BYTES (bit-or
+                          (bit-shift-left (int (bit-and 0x7FFF len)) len Short/SIZE)
+                          len2)])
+        [Short/BYTES len]))
+    [Byte/BYTES (int (read-byte paged-rdr pos))]))
+
+;; Readers are given the length and a position. They then read data into a type
 
 (defn read-string
-  [^RandomAccessFile f ^long len]
-  (let [b (byte-array len)]
-    (.readFully f b)
-    b))
+  [paged-rdr ^long pos ^long len]
+  (String. (read-bytes f pos len) utf8))
 
 (defn read-uri
-  [^RandomAccessFile f ^long len]
-  (URI/create (read-string len)))
+  [paged-rdr ^long pos ^long len]
+  (URI/create (read-string paged-rdr pos len)))
 
 (defn read-keyword
-  [^RandomAccessFile f ^long len]
-  (keyword (read-string len)))
+  [paged-rdr ^long pos ^long len]
+  (keyword (read-string paged-rdr pos len)))
+
+;; decoders operate on the bytes following the initial type byte information
+;; if the data type has variable length, then this is decoded first
 
 (defn long-decoder
-  [^bool ext ^RandomAccessFile f]
-  (.readLong f))
+  [^bool ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
+    (.getLong b 0)))
 
 (defn double-decoder
-  [^bool ext ^RandomAccessFile f]
-  (.readDouble f))
+  [^bool ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
+    (.getDouble b 0)))
 
 (defn string-decoder
-  [^bool ext ^RandomAccessFile f]
-  (read-string f (decode-length ext f)))
+  [^bool ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)]
+    (read-string paged-rdr (+ pos i) len)))
 
 (defn uri-decoder
-  [^bool ext ^RandomAccessFile f]
-  (read-uri f (decode-length ext f)))
+  [^bool ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)]
+    (read-uri paged-rdr (+ pos i) len)))
 
 (defn bigint-decoder
-  [^bool ext ^RandomAccessFile f]
-  (let [len (decode-length ext f)
-        b (byte-array len)]
-    (.readFully f b)
+  [^bool ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)
+        b (read-bytes paged-rdr (+ i pos) len)]
     (bigint (BigInteger. b))))
 
 (defn bigdec-decoder
-  [^bool ext ^RandomAccessFile f]
-  (big-decimal (string-decoder ext f)))
+  [^bool ext paged-rdr ^long pos]
+  (big-decimal (string-decoder ext paged-rdr pos)))
 
 (defn date-decoder
-  [^bool ext ^RandomAccessFile f]
-  (Date. (.readLong f)))
+  [^bool ext paged-rdr ^long pos]
+  (Date. (long-decoder ext paged-rdr pos)))
 
 (defn instant-decoder
-  [^bool ext ^RandomAccessFile f]
-  (let [epoch (.readLong f)
-        sec (.readInt f)]
+  [^bool ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos #=(+ Long/BYTES Integer/BYTES)))
+        epoch (.getLong b 0)
+        sec (.getInt b Long/BYTES)]
     (Instant/ofEpochSecond epoch sec)))
 
 (defn keyword-decoder
-  [^bool ext ^RandomAccessFile f]
-  (read-keyword f (decode-length ext f)))
+  [^bool ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)]
+    (read-keyword paged-rdr (+ pos i) len)))
 
 (defn uuid-decoder
-  [^bool ext ^RandomAccessFile f]
-  (let [low (.readLong f)
-        high (.readLong f)]
+  [^bool ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos #=(* 2 Long/BYTES)))
+        low (.getLong b 0)
+        high (.getLong b Long/BYTES)]
     (UUID. high low)))
 
 (defn blob-decoder
-  [^bool ext ^RandomAccessFile f]
-  (let [b (byte-array (decode-length ext f))]
-    (.readFully f b)
-    b))
+  [^bool ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)]
+    (read-bytes paged-rdr (+ i pos) len)))
 
 (defn xsd-decoder
-  [^bool ext ^RandomAccessFile f]
-  (let [s (string-decoder ext f)
+  [^bool ext paged-rdr ^long pos]
+  (let [s (string-decoder ext paged-rdr pos)
         sp (s/index-of s \space)]
-    [(URI/create (subs s 0 sp)) (inc sp)]))
+    [(URI/create (subs s 0 sp)) (subs (inc sp))]))
 
 (def typecode->decoder
   "Map of type codes to decoder functions"
@@ -117,12 +123,13 @@
    13 xsd-decoder})
 
 (defn read-object
-  [^RandomAccessFile f ^long pos]
-  (.seek f pos)
-  (let [b0 (.readByte f)]
+  "Reads an object from a paged-reader, at id=pos"
+  [paged-rdr ^long pos]
+  (let [b0 (read-byte paged-rdr pos)
+        ipos (inc pos)]
     (cond
-      (zero? (bit-and 0x80 b0)) (read-string f b0)
-      (zero? (bit-and 0x40 b0)) (read-uri f (bit-and 0x3F b0))
-      (zero? (bit-and 0x20 b0)) (read-keyword f (bit-and 0x1F b0))
+      (zero? (bit-and 0x80 b0)) (read-string paged-rdr ipos b0)
+      (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
+      (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
       :default ((typecode->decoder (bit-and 0x0F b0) default-decoder)
-                (zero? (bit-and 0x10 b0)) f))))
+                (zero? (bit-and 0x10 b0)) paged-rdr ipos))))
