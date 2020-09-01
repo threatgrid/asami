@@ -26,12 +26,20 @@
    Keyword (byte 10)
    UUID (byte 11)
    :blob (byte 12)
-   :xsd (byte 13)})
+   :xsd (byte 13)
+   :pojo (byte 14)})
 
 (def
   registered-xsd-types
   "A map of types to encoding functions"
   (atom {}))
+
+(defn str-constructor?
+  "Tests if a class has a constructor that takes a string"
+  [c]
+  (try
+    (boolean (.getConstructor c (into-array Class [String])))
+    (catch Throwable _ false)))
 
 (defn type-code
   "Returns a code number for an object"
@@ -40,7 +48,9 @@
     [(type->code :blob) identity]
     (if-let [encoder (get @registered-xsd-types (type o))]
       [(type->code :xsd) encoder]
-      (throw (ex-info (str "Don't know how to encode a: " (type o)) {:object o})))))
+      (if (str-constructor? (type o))
+        [(type->code :pojo) (fn [obj] (.getBytes (str (.getName (type o)) " " obj) utf8))]
+        (throw (ex-info (str "Don't know how to encode a: " (type o)) {:object o}))))))
 
 (defn general-header
   "Takes a type number and a length, and encodes to the general header style.
@@ -113,14 +123,13 @@
 
   BigInt
   (header [this len]
-    (byte-array [(bit-or 0xE0 (type->code BigInt))]))
+    (general-header (type->code BigInt) len))
   (body [this]
     (.toByteArray (biginteger this)))
   
   BigDecimal
   (header [this len]
-    (assert (= len Long/BYTES))
-    (byte-array [(bit-or 0xE0 (type->code Long))]))
+    (general-header (type->code BigDecimal) len))
   (body [^BigDecimal this]
     (.getBytes (str this) utf8))
 

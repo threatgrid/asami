@@ -1,13 +1,19 @@
 (ns ^{:doc "Manages a memory-mapped file that holds write once data"
       :author "Paula Gearon"}
     asami.durable.flat-file
-  (:require [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into]])
+  (:require [clojure.java.io :as io]
+            [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into]]
+            [asami.durable.flat :refer [FlatStore write-object! get-object force!]]
+            [asami.durable.encoder :as encoder]
+            [asami.durable.decoder :as decoder])
   (:import [java.io RandomAccessFile]
            [java.nio.channels FileChannel FileChannel$MapMode]))
 
 (def read-only FileChannel$MapMode/READ_ONLY)
 
 (def ^:const default-region-size "Default region of 1GB" 0x40000000)
+
+(def file-name "raw.dat")
 
 ;; These functions do update the PagedFile state, but only to expand the mapped region.
 (defrecord PagedFile [^RandomAccessFile f regions region-size]
@@ -118,3 +124,32 @@
    (let [p (->PagedFile f (atom nil) region-size)]
      (refresh! p)
      p)))
+
+;; rfile: A file that will only be appended to
+;; paged: A paged reader for the file
+(defrecord FlatFile [rfile paged]
+  FlatStore
+  (write-object!
+    [this obj]
+    (let [id (.getFilePointer rfile)
+          [hdr data] (encoder/to-bytes obj)]
+      (.write rfile hdr)
+      (.write rfile data)
+      id))
+  (get-object
+    [this id]
+    (decoder/read-object paged id))
+  (force! [this]
+    (.force (.getChannel rfile true))))
+
+(defn flat-store
+  "Creates a flat file store. This wraps an append-only file and a paged reader."
+  [name]
+  (let [d (io/file name)
+        _ (.mkdirs d)
+        f (io/file name file-name)
+        raf (RandomAccessFile. f "rw")
+        file-length (.length raf)]
+    (when-not (zero? file-length)
+      (.seek raf file-length))
+    (->FlatFile raf (paged-file raf) file-length)))

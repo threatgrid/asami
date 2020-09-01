@@ -12,100 +12,120 @@
            [java.nio.charset Charset]))
 
 
-(def utf8 (Charset/forName ("UTF-8")))
+(def utf8 (Charset/forName "UTF-8"))
 
 (defn decode-length
-  [^bool ext paged-rdr ^long pos]
+  "Reads the header to determine length.
+  ext: if 0 then length is a byte, if 1 then length is in either a short or an int"
+  [ext paged-rdr ^long pos]
   (if ext
+    (let [raw (read-byte paged-rdr pos)]
+      [Byte/BYTES (bit-and 0xFF raw)])
     (let [len (read-short paged-rdr pos)]
       (if (< len 0)
         (let [len2 (read-short paged-rdr pos)]
           [Integer/BYTES (bit-or
-                          (bit-shift-left (int (bit-and 0x7FFF len)) len Short/SIZE)
+                          (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
                           len2)])
-        [Short/BYTES len]))
-    [Byte/BYTES (int (read-byte paged-rdr pos))]))
+        [Short/BYTES len]))))
 
 ;; Readers are given the length and a position. They then read data into a type
 
-(defn read-string
+(defn read-str
   [paged-rdr ^long pos ^long len]
-  (String. (read-bytes f pos len) utf8))
+  (String. (read-bytes paged-rdr pos len) utf8))
 
 (defn read-uri
   [paged-rdr ^long pos ^long len]
-  (URI/create (read-string paged-rdr pos len)))
+  (URI/create (read-str paged-rdr pos len)))
 
 (defn read-keyword
   [paged-rdr ^long pos ^long len]
-  (keyword (read-string paged-rdr pos len)))
+  (keyword (read-str paged-rdr pos len)))
 
 ;; decoders operate on the bytes following the initial type byte information
 ;; if the data type has variable length, then this is decoded first
 
 (defn long-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
     (.getLong b 0)))
 
 (defn double-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
     (.getDouble b 0)))
 
 (defn string-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
-    (read-string paged-rdr (+ pos i) len)))
+    (read-str paged-rdr (+ pos i) len)))
 
 (defn uri-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
     (read-uri paged-rdr (+ pos i) len)))
 
 (defn bigint-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)
         b (read-bytes paged-rdr (+ i pos) len)]
     (bigint (BigInteger. b))))
 
 (defn bigdec-decoder
-  [^bool ext paged-rdr ^long pos]
-  (big-decimal (string-decoder ext paged-rdr pos)))
+  [ext paged-rdr ^long pos]
+  (bigdec (string-decoder ext paged-rdr pos)))
 
 (defn date-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (Date. (long-decoder ext paged-rdr pos)))
 
+(def ^:const instant-length (+ Long/BYTES Integer/BYTES))
+
 (defn instant-decoder
-  [^bool ext paged-rdr ^long pos]
-  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos #=(+ Long/BYTES Integer/BYTES)))
+  [ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos instant-length))
         epoch (.getLong b 0)
         sec (.getInt b Long/BYTES)]
     (Instant/ofEpochSecond epoch sec)))
 
 (defn keyword-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
     (read-keyword paged-rdr (+ pos i) len)))
 
+(def ^:const uuid-length (* 2 Long/BYTES))
+
 (defn uuid-decoder
-  [^bool ext paged-rdr ^long pos]
-  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos #=(* 2 Long/BYTES)))
+  [ext paged-rdr ^long pos]
+  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos uuid-length))
         low (.getLong b 0)
         high (.getLong b Long/BYTES)]
     (UUID. high low)))
 
 (defn blob-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
     (read-bytes paged-rdr (+ i pos) len)))
 
 (defn xsd-decoder
-  [^bool ext paged-rdr ^long pos]
+  [ext paged-rdr ^long pos]
   (let [s (string-decoder ext paged-rdr pos)
         sp (s/index-of s \space)]
     [(URI/create (subs s 0 sp)) (subs (inc sp))]))
+
+(defn default-decoder
+  "This is a decoder for unsupported data that has a string constructor"
+  [ext paged-rdr ^long pos]
+  (let [s (string-decoder ext paged-rdr pos)
+        sp (s/index-of s \space)
+        class-name (subs s 0 sp)]
+    (try
+      (let [c (Class/forName class-name) 
+            cn (.getConstructor c (into-array Class [String]))]
+        (.newInstance cn (object-array [(subs s (inc sp))])))
+      (catch Exception e
+        (throw (ex-info (str "Unable to construct class: " class-name) {:class class-name}))))))
 
 (def typecode->decoder
   "Map of type codes to decoder functions"
@@ -128,7 +148,7 @@
   (let [b0 (read-byte paged-rdr pos)
         ipos (inc pos)]
     (cond
-      (zero? (bit-and 0x80 b0)) (read-string paged-rdr ipos b0)
+      (zero? (bit-and 0x80 b0)) (read-str paged-rdr ipos b0)
       (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
       (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
       :default ((typecode->decoder (bit-and 0x0F b0) default-decoder)

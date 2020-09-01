@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.test-pages
   (:require [asami.durable.encoder :refer [to-bytes]]
-            [asami.durable.pages :refer [refresh! read-byte read-short read-bytes]]
+            [asami.durable.pages :refer [read-byte read-short read-bytes]]
             [asami.durable.flat-file :refer [paged-file]]
             [clojure.test :refer [deftest is]])
   (:import [java.io RandomAccessFile File]))
@@ -114,13 +114,4 @@
             (is (= 0x5678 (read-short r (+ offset 14))))
             (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
             (is (= (+ 0xdef0 n) (s-as-long (read-short r (+ offset 18)))))))))
-    (.delete f)))
-
-#_(deftest test-types
-  (let [f (File. "test-types.dat")]
-    (.delete f)
-    (with-open [of (RandomAccessFile. f "rw")]
-      (doto of
-        (write-object )
-        ))
     (.delete f)))
