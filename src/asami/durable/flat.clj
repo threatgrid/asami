@@ -61,9 +61,9 @@
         (when (>= region-offset region-size)
           (throw (ex-info "Accessing trailing data beyond the end of file"
                           {:region-size region-size :region-offset region-offset})))
-        (if (or (odd? region-offset) (= region-offset (dec region-size)))
+        (if (= region-offset (dec region-size))
           (short (bit-or (bit-shift-left (.get region region-offset) 8)
-                         (read-byte this (inc offset))))
+                         (bit-and 0xFF (read-byte this (inc offset)))))
           (.getShort region region-offset)))))
 
   (read-bytes [this offset len]
@@ -97,8 +97,7 @@
                               {:max (count @regions) :region region-nr :offset offset})))
             (let [nregion (nth @regions (inc region-nr))
                   fslice-size (- region-size region-offset)
-                  nslice-size (- array-len fslice-size)
-                  bytes (byte-array array-len)]
+                  nslice-size (- array-len fslice-size)]
               (when (> nslice-size (.capacity nregion))
                 (throw (ex-info "Accessing data beyond the end of file"
                                 {:size nslice-size :limit (.capacity nregion)})))
