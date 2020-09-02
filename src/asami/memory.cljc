@@ -78,16 +78,6 @@
 (def empty-multi-graph multi/empty-multi-graph)
 
 
-(defn- add-to-graph
-  "Adds triples to the graph"
-  [graph data]
-  (reduce (fn [acc d] (apply gr/graph-add acc d)) graph data))
-
-(defn- delete-from-graph
-  "Removes triples from the graph"
-  [graph data]
-  (reduce (fn [acc d] (apply gr/graph-delete acc d)) graph data))
-
 (defn new-connection
   "Creates a memory Connection object"
   [name gr]
@@ -159,9 +149,7 @@
    Updates the connection to the new graph."
   [conn asserts retracts]
   (let [{:keys [graph history] :as db-before} (db* conn)
-        next-graph (-> graph
-                       (delete-from-graph retracts)
-                       (add-to-graph asserts))
+        next-graph (gr/graph-transact graph (count history) asserts retracts)
         db-after (->MemoryDatabase next-graph (conj history db-before) (now))]
     (reset! (:state conn) {:db db-after :history (conj (:history db-after) db-after)})
     [db-before db-after]))

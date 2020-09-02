@@ -117,6 +117,10 @@ allow rules to successfully use this graph type."
     (if-let [idx (multi-delete spo subj pred obj)]
       (assoc this :spo idx :pos (multi-delete pos pred obj subj) :osp (multi-delete osp obj subj pred))
       this))
+  (graph-transact [this tx-id assertions retractions]
+    (as-> this graph
+      (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
+      (reduce (fn [acc [s p o]] (graph-add acc s p o)) graph assertions)))
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]

@@ -5,7 +5,7 @@
             [asami.query :as q :refer [pattern-left-join outer-product
                                        create-binding create-bindings minus left-join disjunction
                                        result-label aggregate-over aggregate-query]]
-            [asami.graph :refer [Graph resolve-triple]]
+            [asami.graph :refer [Graph resolve-triple graph-transact]]
             [asami.index :refer [empty-graph]]
             [asami.internal :as internal]
             [zuko.util :as u]
@@ -20,7 +20,9 @@
 
 (use-fixtures :once st/validate-schemas)
 
-(def assert-data "Access to private function" #'asami.memory/add-to-graph)
+(defn assert-data
+  [graph data]
+  (graph-transact graph 0 data nil))
 
 (deftest var-mapping
   (let [m1 (matching-vars `[?a :rel ?c] `[?a ?b ?c] )
