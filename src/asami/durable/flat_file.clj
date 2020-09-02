@@ -15,6 +15,9 @@
 
 (def file-name "raw.dat")
 
+(defprotocol Clearable
+  (clear! [this] "Clears out any resources which may be held"))
+
 ;; These functions do update the PagedFile state, but only to expand the mapped region.
 (defrecord PagedFile [^RandomAccessFile f regions region-size]
   Paged
@@ -115,7 +118,9 @@
           (doto (.asReadOnlyBuffer region)
             (.position region-offset)
             (.get bytes)))
-        bytes))))
+        bytes)))
+  Clearable
+  (clear! [this] (reset! regions nil)))
 
 (defn paged-file
   "Creates a paged file reader"
@@ -127,7 +132,7 @@
 
 ;; rfile: A file that will only be appended to
 ;; paged: A paged reader for the file
-(defrecord FlatFile [rfile paged]
+(defrecord FlatFile [^RandomAccessFile rfile paged]
   FlatStore
   (write-object!
     [this obj]
@@ -140,7 +145,10 @@
     [this id]
     (decoder/read-object paged id))
   (force! [this]
-    (.force (.getChannel rfile true))))
+    (.force (.getChannel rfile) true))
+  (close [this]
+    (clear! paged)
+    (.close rfile)))
 
 (defn flat-store
   "Creates a flat file store. This wraps an append-only file and a paged reader."
@@ -152,4 +160,4 @@
         file-length (.length raf)]
     (when-not (zero? file-length)
       (.seek raf file-length))
-    (->FlatFile raf (paged-file raf) file-length)))
+    (->FlatFile raf (paged-file raf))))
