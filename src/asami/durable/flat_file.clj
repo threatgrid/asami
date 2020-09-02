@@ -41,19 +41,31 @@
   (read-byte [this offset]
     ;; finds a byte in a region
     (let [region-nr (int (/ offset region-size))
-          region-offset (mod offset region-size)]
-      ;; the requested byte is not currently mapped, so refresh
-      (when (>= region-nr (count @regions))
-        (refresh! this))
-      (when (>= region-nr (count @regions))
-        (throw (ex-info "Accessing data beyond the end of file"
-                        {:max (count @regions) :region region-nr :offset offset})))
-      (let [region (nth @regions region-nr)
-            region-size (.capacity region)]
-        (when (>= region-offset region-size)
-          (throw (ex-info "Accessing trailing data beyond the end of file"
-                          {:region-size region-size :region-offset region-offset})))
-        (.get region region-offset))))
+          region-offset (mod offset region-size)
+          region-count (count @regions)
+          region (if (>= region-nr region-count) ;; region not mapped
+                   (do
+                     (refresh! this)
+                     (when (>= region-nr (count @regions))
+                       (throw (ex-info "Accessing data beyond the end of file"
+                                       {:max (count @regions) :region region-nr :offset offset})))
+                     (nth @regions region-nr))
+                   (let [dregion-count (dec region-count)]
+                     (if (= region-nr dregion-count) ;; referencing final region
+                       (let [last-region (nth @regions dregion-count)]
+                         (if (>= region-offset (.capacity last-region))
+                           (do
+                             (refresh! this)
+                             (let [refreshed-region (nth @regions dregion-count)]
+                               (when (>= region-offset (.capacity refreshed-region))
+                                 (throw (ex-info "Accessing data beyond the end of mapped file"
+                                                 {:region-offset region-offset
+                                                  :region region-nr
+                                                  :offset offset})))
+                               refreshed-region))
+                           last-region))
+                       (nth @regions region-nr))))]
+      (.get region region-offset)))
 
   (read-short [this offset]
     ;; when the 2 bytes occur in the same region, read a short
@@ -101,7 +113,7 @@
                           {:region-size region-size :region-offset region-offset})))
         ;; check if the requested data is all in the same region
         (if (> (+ region-offset array-len) region-size)
-          (do     ;; data straddles 2 regions
+          (do ;; data straddles 2 regions
             (when (>= (inc region-nr) (count @regions))
               (throw (ex-info "Accessing data beyond the end of file"
                               {:max (count @regions) :region region-nr :offset offset})))
