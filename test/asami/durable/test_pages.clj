@@ -84,34 +84,38 @@
 (deftest test-expansion
   (let [f (File. "test-expand.dat")]
     (.delete f)
-    (with-open [of (RandomAccessFile. f "rw")]
-      (let [r (paged-file of 13)
-            buffer (byte-array 10)]
-        (doseq [n (range 10)]
-          (doto of
-            (write-object (format "123456789%x" n))   ;; 1 + 10
-            (write-object (+ 0x123456789abcdef0 n)))) ;; 1 + 8
-        (doseq [n (range 10)]
-          (let [offset (* n 20)]
-            (is (= 0xa (read-byte r offset)))
-            (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")))
-            (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
-            (is (= 0x1234 (read-short r (+ offset 12))))
-            (is (= 0x5678 (read-short r (+ offset 14))))
-            (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
-            (is (= (+ 0xdef0 n) (s-as-long (read-short r (+ offset 18)))))))
+    (try
+      (with-open [of (RandomAccessFile. f "rw")]
+        (let [r (paged-file of 13)
+              buffer (byte-array 10)]
+          (doseq [n (range 10)]
+            (doto of
+              (write-object (format "123456789%x" n))   ;; 1 + 10
+              (write-object (+ 0x123456789abcdef0 n)))) ;; 1 + 8
+          (doseq [n (range 10)]
+            (let [offset (* n 20)]
+              (is (= 0xa (read-byte r offset)))
+              (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")))
+              (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
+              (is (= 0x1234 (read-short r (+ offset 12))))
+              (is (= 0x5678 (read-short r (+ offset 14))))
+              (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
+              (is (= (+ 0xdef0 n) (s-as-long (read-short r (+ offset 18)))))))
+          (is (= 200 (.length of)))
 
-        (doseq [n (range 10 16)]
-          (doto of
-            (write-object (format "123456789%x" n))   ;; 1 + 10
-            (write-object (+ 0x123456789abcdef0 n)))) ;; 1 + 8
-        (doseq [n (shuffle (range 16))]
-          (let [offset (* n 20)]
-            (is (= 0xa (read-byte r offset)))
-            (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")))
-            (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
-            (is (= 0x1234 (read-short r (+ offset 12))))
-            (is (= 0x5678 (read-short r (+ offset 14))))
-            (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
-            (is (= (+ 0xdef0 n) (s-as-long (read-short r (+ offset 18)))))))))
-    (.delete f)))
+          (doseq [n (range 10 16)]
+            (doto of
+              (write-object (format "123456789%x" n))   ;; 1 + 10
+              (write-object (+ 0x123456789abcdef0 n)))) ;; 1 + 8
+          (is (= 320 (.length of)))
+          (doseq [n (shuffle (range 16))]
+            (let [offset (* n 20)]
+              (is (= 0xa (read-byte r offset)) (str "Failed for n=" n))
+              (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")) (str "Failed for n=" n))
+              (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
+              (is (= 0x1234 (read-short r (+ offset 12))))
+              (is (= 0x5678 (read-short r (+ offset 14))))
+              (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
+              (is (= (+ 0xdef0 n) (s-as-long (read-short r (+ offset 18)))))))))
+      (finally
+        (.delete f)))))

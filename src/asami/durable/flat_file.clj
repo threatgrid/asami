@@ -28,8 +28,9 @@
                                      (butlast mappings)))
                                  mappings)
                     unmapped-offset (* region-size (count existing))
-                    flength (.length f)
                     ^FileChannel fchannel (.getChannel f)
+                    _ (.force fchannel true)
+                    flength (.length f)
                     new-maps (map
                               (fn [offset]
                                 (.map fchannel read-only offset (min region-size (- flength offset))))
