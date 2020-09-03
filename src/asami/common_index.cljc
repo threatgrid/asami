@@ -9,22 +9,6 @@ and multigraph implementations."
                :cljs [schema.core :as s :include-macros true]))
   #?(:clj (:import [clojure.lang ITransientCollection])))
 
-(defn tr
-  "Converts collections to transients"
-  [x]
-  (if (or (map? x) (set? x)) (transient x) x))
-
-(defn transient?
-  "Tests if a value is a transient collection"
-  [x]
-  #?(:clj (instance? ITransientCollection x)
-     :cljs (implements? ITransientCollection x)))
-
-(defn pt!
-  "Converts transient collections back to persistent collections"
-  [x]
-  (if (transient? x) (persistent! x) x))
-
 (defprotocol NestedIndex
   (lowest-level-fn [this] "Returns a function for handling the lowest index level retrieval")
   (lowest-level-sets-fn [this] "Returns a function retrieving all lowest level values as sets")
