@@ -37,7 +37,7 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "1.2.1"]
+[org.clojars.quoll/asami "1.2.2"]
 ```
 
 ### Running
