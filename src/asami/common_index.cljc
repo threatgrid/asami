@@ -6,7 +6,24 @@ and multigraph implementations."
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
-               :cljs [schema.core :as s :include-macros true])))
+               :cljs [schema.core :as s :include-macros true]))
+  #?(:clj (:import [clojure.lang ITransientCollection])))
+
+(defn tr
+  "Converts collections to transients"
+  [x]
+  (if (or (map? x) (set? x)) (transient x) x))
+
+(defn transient?
+  "Tests if a value is a transient collection"
+  [x]
+  #?(:clj (instance? ITransientCollection x)
+     :cljs (implements? ITransientCollection x)))
+
+(defn pt!
+  "Converts transient collections back to persistent collections"
+  [x]
+  (if (transient? x) (persistent! x) x))
 
 (defprotocol NestedIndex
   (lowest-level-fn [this] "Returns a function for handling the lowest index level retrieval")

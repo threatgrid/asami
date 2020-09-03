@@ -10,6 +10,7 @@
   (new-graph [this] "Creates an empty graph of the same type")
   (graph-add [this subj pred obj] "Adds triples to the graph")
   (graph-delete [this subj pred obj] "Removes triples from the graph")
+  (graph-transact [this tx-id assertions retractions] "Bulk operation to add and remove multiple statements in a single operation")
   (graph-diff [this other] "Returns all subjects that have changed in this graph, compared to other")
   (resolve-triple [this subj pred obj] "Resolves patterns from the graph, and returns unbound columns only")
   (count-triple [this subj pred obj] "Resolves patterns from the graph, and returns the size of the resolution"))

@@ -1,7 +1,7 @@
 (ns asami.test-core-query
   "Tests the public query functionality"
   (:require [asami.core :refer [q]]
-            [asami.graph :refer [new-node]]
+            [asami.graph :refer [new-node graph-transact]]
             [asami.query :refer [*env*]]
             [asami.index :refer [empty-graph]]
             [schema.core :as s]
@@ -11,7 +11,9 @@
                :cljs [schema.test :as st :refer-macros [deftest]]))
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
-(def assert-data "Access to private function" #'asami.memory/add-to-graph)
+(defn assert-data
+  [graph data]
+  (graph-transact graph 0 data nil))
 
 (def nn new-node)
 
