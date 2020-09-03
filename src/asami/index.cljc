@@ -72,11 +72,12 @@
     (count (common/get-transitive-from-index graph tag s p o))))
 
 (defn graph-add! [{:keys [spo pos osp] :as graph} subj pred obj]
-  (when-let [new-spo (index-add! spo subj pred obj)]
-    (assoc graph
-           :spo new-spo
-           :pos (index-add! pos pred obj subj)
-           :osp (index-add! osp obj subj pred))))
+  (if-let [new-spo (index-add! spo subj pred obj)]
+    (-> graph
+        (assoc! :spo new-spo)
+        (assoc! :pos (index-add! pos pred obj subj))
+        (assoc! :osp (index-add! osp obj subj pred)))
+    graph))
 
 (declare empty-graph)
 
@@ -106,15 +107,10 @@
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
-      (assoc graph
-             :spo (postwalk tr (:spo graph))
-             :pos (postwalk tr (:pos graph))
-             :osp (postwalk tr (:osp graph)))
+      (postwalk tr (into {} graph))
       (reduce (fn [acc [s p o]] (graph-add! acc s p o)) graph assertions)
-      (assoc graph
-             :spo (prewalk pt! (:spo graph))
-             :pos (prewalk pt! (:pos graph))
-             :osp (prewalk pt! (:osp graph)))))
+      (prewalk pt! graph)
+      (map->GraphIndexed graph)))
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]
