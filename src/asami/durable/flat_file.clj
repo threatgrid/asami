@@ -106,32 +106,46 @@
       (when (>= region-nr (count @regions))
         (throw (ex-info "Accessing data beyond the end of file"
                         {:max (count @regions) :region region-nr :offset offset})))
-      (let [region (nth @regions region-nr)
-            region-size (.capacity region)]
-        (when (>= region-offset region-size)
-          (throw (ex-info "Accessing trailing data beyond the end of file"
-                          {:region-size region-size :region-offset region-offset})))
-        ;; check if the requested data is all in the same region
-        (if (> (+ region-offset array-len) region-size)
-          (do ;; data straddles 2 regions
-            (when (>= (inc region-nr) (count @regions))
-              (throw (ex-info "Accessing data beyond the end of file"
-                              {:max (count @regions) :region region-nr :offset offset})))
-            (let [nregion (nth @regions (inc region-nr))
-                  fslice-size (- region-size region-offset)
-                  nslice-size (- array-len fslice-size)]
-              (when (> nslice-size (.capacity nregion))
-                (throw (ex-info "Accessing data beyond the end of file"
-                                {:size nslice-size :limit (.capacity nregion)})))
-              (doto (.asReadOnlyBuffer region)
-                (.position region-offset)
-                (.get bytes 0 fslice-size))
-              (doto (.asReadOnlyBuffer nregion)
-                (.get bytes fslice-size nslice-size))))
-          (doto (.asReadOnlyBuffer region)
-            (.position region-offset)
-            (.get bytes)))
-        bytes)))
+      (letfn [(read-bytes [attempt]
+                (let [region (nth @regions region-nr)
+                      region-size (.capacity region)]
+                  (if (>= region-offset region-size)
+                    (if (< attempt 1)
+                      (do
+                        (refresh! this)
+                        (recur 1))
+                      (throw (ex-info "Accessing trailing data beyond the end of file"
+                                      {:region-size region-size :region-offset region-offset})))
+                    
+                    ;; check if the requested data is all in the same region
+                    (if (> (+ region-offset array-len) region-size)
+                      (do ;; data straddles 2 regions
+                        (when (>= (inc region-nr) (count @regions))
+                          (throw (ex-info "Accessing data beyond the end of file"
+                                          {:max (count @regions) :region region-nr :offset offset})))
+                        (let [nregion (nth @regions (inc region-nr))
+                              fslice-size (- region-size region-offset)
+                              nslice-size (- array-len fslice-size)]
+                          (if (> nslice-size (.capacity nregion))
+                            (if (< attempt 1)
+                              (do
+                                (refresh! this)
+                                (recur 1))
+                              (throw (ex-info "Accessing data beyond the end of file"
+                                              {:size nslice-size :limit (.capacity nregion)})))
+                            (do
+                              (doto (.asReadOnlyBuffer region)
+                                (.position region-offset)
+                                (.get bytes 0 fslice-size))
+                              (doto (.asReadOnlyBuffer nregion)
+                                (.get bytes fslice-size nslice-size))
+                              bytes))))
+                      (do
+                        (doto (.asReadOnlyBuffer region)
+                          (.position region-offset)
+                          (.get bytes))
+                        bytes)))))]
+        (read-bytes 0))))
   Clearable
   (clear! [this] (reset! regions nil)))
 
