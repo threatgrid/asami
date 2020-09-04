@@ -7,7 +7,6 @@
               [asami.query :as query]
               [asami.internal :as internal]
               [asami.datom :as datom :refer [->Datom]]
-              [naga.store :as store :refer [Storage StorageType]]
               [asami.graph :as gr]
               [zuko.util :as util]
               [zuko.node :as node]
@@ -277,7 +276,14 @@
 (defn- graphs-of
   "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
   [inputs]
-  (map #(if (satisfies? storage/Database %) (storage/graph %) %) inputs))
+  (map (fn [d]
+         (if (satisfies? storage/Database d)
+           (storage/graph d)
+           (if (not (satisfies? gr/Graph d))
+             (let [g (:graph d)]
+               (if (satisfies? gr/Graph g) g d))
+             d)))
+       inputs))
 
 (defn q
   "Execute a query against the provided inputs.
