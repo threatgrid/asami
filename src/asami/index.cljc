@@ -5,7 +5,6 @@
             [asami.common-index :as common :refer [? NestedIndex tr pt!]]
             [asami.analytics :as analytics]
             [zuko.node :refer [NodeAPI]]
-            [clojure.walk :refer [prewalk postwalk]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
@@ -106,15 +105,8 @@
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
-      (assoc graph
-             :spo (postwalk tr (:spo graph))
-             :pos (postwalk tr (:pos graph))
-             :osp (postwalk tr (:osp graph)))
-      (reduce (fn [acc [s p o]] (graph-add! acc s p o)) graph assertions)
-      (assoc graph
-             :spo (prewalk pt! (:spo graph))
-             :pos (prewalk pt! (:pos graph))
-             :osp (prewalk pt! (:osp graph)))))
+      (reduce (fn [acc [s p o]] (graph-add acc s p o)) graph assertions)))
+  
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]
@@ -137,3 +129,4 @@
   (find-triple [this [e a v]] (resolve-triple this e a v)))
 
 (def empty-graph (->GraphIndexed {} {} {}))
+

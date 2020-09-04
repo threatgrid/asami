@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2020-09-03
+### Added
+- Supporting empty arrays in entities (via Zuko update)
+
+### Changed
+- Change to internal APIs for improved transactions
+
 ## [1.2.2] - 2020-08-27
 ### Fixed
 - Fixed use of macro as a value in CLJS
@@ -58,7 +65,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.2...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.3...HEAD
+[1.2.3]: https://github.com/threatgrid/asami/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/threatgrid/asami/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/threatgrid/asami/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/threatgrid/asami/compare/1.1.0...1.2.0
