@@ -5,6 +5,7 @@
 ## [1.2.4] - 2020-09-04
 ### Added
 - Allowing naga.store/Storage to be used in a query.
+- Added support for nil entries, via Zuko.
 
 ### Fixed
 - Changing to Zuko 0.3.1 for bugfix.
