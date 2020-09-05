@@ -165,8 +165,24 @@
     (is (= {:name  #{"Peter" "Pete" "Petrov"}
             :age   25
             :aka ["Peter the Great" ["Petey" "Petie"]]}
-           (entity d three)))
-    ))
+           (entity d three)))))
+
+(deftest test-entity-arrays
+  (let [c (connect "asami:mem://test4")
+        data {:db/id -1
+              :db/ident :home
+              :name  "Home"
+              :address nil
+              :rooms   ["Room 1" nil "Room 2" nil "Room 3"]}
+        {:keys [tempids tx-data] :as r} @(transact c [data])
+        one (tempids -1)
+        d (db c)]
+    (is (= 19 (count tx-data)))
+    (is (= 2 (count (filter #(and (= :tg/first (nth % 1)) (= :tg/nil (nth % 2))) tx-data))))
+    (is (= {:name  "Home"
+            :address nil
+            :rooms   ["Room 1" nil "Room 2" nil "Room 3"]}
+           (entity d one)))))
 
 (defn sleep [msec]
   #?(:clj
