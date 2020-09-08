@@ -10,7 +10,7 @@
             [asami.internal :as internal]
             [zuko.util :as u]
             [zuko.schema :refer [vartest?]]
-            [naga.storage.store-util :refer [matching-vars project]]
+            [zuko.projection :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
