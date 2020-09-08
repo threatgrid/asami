@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.index
   (:require [asami.graph :as gr :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple]]
-            [asami.common-index :as common :refer [? NestedIndex tr pt!]]
+            [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
             [zuko.node :refer [NodeAPI]]
             #?(:clj  [schema.core :as s]
@@ -15,16 +15,6 @@
    b :- s/Any
    c :- s/Any]
   (update-in idx [a b] (fn [v] (if (seq v) (conj v c) #{c}))))
-
-(defn index-add!
-  "Add elements to a 3-level transient index. Returns a transient object, or nil when nothing was inserted"
-  [idx a b c]
-  (if-let [idx2 (get idx a)]
-    (if-let [idx3 (get idx2 b)]
-      (if-not (get idx3 c)
-        (assoc! idx a (assoc! idx2 b (conj! idx3 c))))
-      (assoc! idx a (assoc! idx2 b (transient #{c}))))
-    (assoc! idx a (transient {b (transient #{c})}))))
 
 (s/defn index-delete :- (s/maybe {s/Any {s/Any #{s/Any}}})
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -70,13 +60,6 @@
     (* (count (:spo graph)) (count (:osp graph)))
     (count (common/get-transitive-from-index graph tag s p o))))
 
-(defn graph-add! [{:keys [spo pos osp] :as graph} subj pred obj]
-  (when-let [new-spo (index-add! spo subj pred obj)]
-    (assoc graph
-           :spo new-spo
-           :pos (index-add! pos pred obj subj)
-           :osp (index-add! osp obj subj pred))))
-
 (declare empty-graph)
 
 (defrecord GraphIndexed [spo pos osp]
@@ -106,7 +89,6 @@
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
       (reduce (fn [acc [s p o]] (graph-add acc s p o)) graph assertions)))
-  
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]
