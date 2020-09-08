@@ -5,7 +5,6 @@
             [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
             [zuko.node :refer [NodeAPI]]
-            [clojure.walk :refer [prewalk postwalk]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
