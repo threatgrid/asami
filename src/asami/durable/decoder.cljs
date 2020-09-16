@@ -4,11 +4,7 @@
   (:require [clojure.string :as s]
             [asami.durable.pages :refer [read-byte read-bytes read-short]])
   (:import [goog.math Long Integer]
-           [goog Uri])
-  #_
-  (:import [clojure.lang Keyword BigInt]
-           [java.math BigInteger BigDecimal]
-           [java.nio ByteBuffer]))
+           [goog Uri]))
 
 (def ^{:private true}
   BYTE_BYTES 1)
@@ -73,7 +69,7 @@
 (defn bytes->long
   [bytes] ;; `bytes` is assumed to be a `js/Uint8Array`.
   (let [high-bits (bytes->int (.slice bytes 0 4))
-        low-bits (bytes->int (.slice bytes 4))]
+        low-bits (bytes->int (.slice bytes 4 8))]
     (.fromBits Long low-bits high-bits)))
 
 (defn long-decoder
@@ -115,20 +111,20 @@
 
 (def ^:const instant-length (+ LONG_BYTES INTEGER_BYTES))
 
-#_
 (defn instant-decoder
   [ext paged-rdr ^long pos]
-  (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos instant-length))
-        epoch (.getLong b 0)
-        sec (.getInt b Long/BYTES)]
-    (Instant/ofEpochSecond epoch sec)))
+  (let [b (read-bytes paged-rdr pos instant-length)
+        ;; epoch (.getLong b 0) ;; Ignored for now.
+        sec (bytes->long b)]
+    (js/Date. (* 1000 sec))))
 
 (defn keyword-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
     (read-keyword paged-rdr (+ pos i) len)))
 
-(def ^:const uuid-length (* 2 LONG_BYTES))
+(def ^:const uuid-length
+  (* 2 LONG_BYTES))
 
 (defn uuid-decoder
   [ext paged-rdr ^long pos]
@@ -171,21 +167,21 @@
       (catch Exception e
         (throw (ex-info (str "Unable to construct class: " class-name) {:class class-name}))))))
 
-#_
 (def typecode->decoder
   "Map of type codes to decoder functions"
   {0 long-decoder
-   1 double-decoder
+   ;; 1 double-decoder
    2 string-decoder
    3 uri-decoder
-   6 bigint-decoder
-   7 bigdec-decoder
+   ;; 6 bigint-decoder
+   ;; 7 bigdec-decoder
    8 date-decoder
    9 instant-decoder
    10 keyword-decoder
    11 uuid-decoder
-   12 blob-decoder
-   13 xsd-decoder})
+   ;; 12 blob-decoder
+   ;; 13 xsd-decoder
+   })
 
 #_
 (defn read-object
