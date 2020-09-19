@@ -1,16 +1,16 @@
 (ns ^{:doc "Encodes and decodes data for storage. ClojureScript implementation"
       :author "Paula Gearon and Joel Holdbrooks"}
     asami.durable.encoder
+  (:require [clojure.string :as s])
   (:import [goog.math Long Integer]
-           [goog Uri])
-  (:require [clojure.string :as s]))
+           [goog Uri]))
 
 (def ^{:private true} LONG_BYTES 8)
 
 (defn byte-array [size-or-seq]
   (if (number? size-or-seq)
-    (js/Uint8Array. (js/ArrayBuffer. size-or-seq))
-    (.from js/Uint8Array size-or-seq)))
+    (js/Int8Array. (js/ArrayBuffer. size-or-seq))
+    (.from js/Int8Array size-or-seq)))
 
 (def type->code
   {Long (byte 0)
@@ -72,6 +72,12 @@
    (bit-and (bit-shift-right i 8) 0xFF)
    (bit-and (bit-shift-right i 0) 0xFF)])
 
+(defn long->bytes
+  {:private true}
+  [l]
+  (byte-array (concat (int->bytes (.getHighBits l))
+                      (int->bytes (.getLowBits l)))))
+
 (defn str->bytes
   {:private true}
   [s]
@@ -124,6 +130,10 @@
                  (int->bytes (.getLowBits least-significant-bits))
                  (int->bytes (.getHighBits most-significant-bits))
                  (int->bytes (.getLowBits most-significant-bits)))))))
+
+  number
+  (header [this len])
+  (body [this])
 
   object
   (header [this len]

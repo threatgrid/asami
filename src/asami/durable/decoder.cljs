@@ -59,7 +59,7 @@
 
 (defn bytes->int
   {:private true}
-  [bytes] ;; `bytes` is assumed to be a `js/Uint8Array`.
+  [bytes] ;; `bytes` is assumed to be a `js/Array` like object.
   (let [bytes (to-array bytes)]
     (bit-or (bit-shift-left (bit-and (aget bytes 0) 0xFF) 24)
             (bit-shift-left (bit-and (aget bytes 1) 0xFF) 16)
@@ -67,7 +67,7 @@
             (bit-shift-left (bit-and (aget bytes 3) 0xFF) 0))))
 
 (defn bytes->long
-  [bytes] ;; `bytes` is assumed to be a `js/Uint8Array`.
+  [bytes] ;; `bytes` is assumed to be an `js/Array` like object.
   (let [high-bits (bytes->int (.slice bytes 0 4))
         low-bits (bytes->int (.slice bytes 4 8))]
     (.fromBits Long low-bits high-bits)))
@@ -153,10 +153,11 @@
         sp (s/index-of s \space)]
     [(URI/create (subs s 0 sp)) (subs (inc sp))]))
 
-#_
 (defn default-decoder
   "This is a decoder for unsupported data that has a string constructor"
   [ext paged-rdr ^long pos]
+  (throw (ex-info "Not implemented" {}))
+  #_
   (let [s (string-decoder ext paged-rdr pos)
         sp (s/index-of s \space)
         class-name (subs s 0 sp)]
@@ -183,7 +184,6 @@
    ;; 13 xsd-decoder
    })
 
-#_
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"
   [paged-rdr ^long pos]
