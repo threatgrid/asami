@@ -4,7 +4,7 @@
   (:require [clojure.java.io :as io]
             [asami.durable.block.block-api :refer [BlockManager copy-over!]]
             [asami.durable.block.bufferblock :refer [create-block]]
-            [tree.file.voodoo :as voodoo])
+            [asami.durable.block.file.voodoo :as voodoo])
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer IntBuffer LongBuffer MappedByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]))
@@ -26,14 +26,10 @@
 ;; - raf is the RandomAccessFile for the file
 ;; - fc is the FileChannel of the raf
 
-(defrecord BlockFile [nr-blocks block-size nr-mapped-regions
+(defrecord BlockFile [nr-blocks
+                      block-size nr-mapped-regions
                       mapped-byte-buffers stride
-                      file raf fc]
-  BlockManager
-  (allocate-blog [this])
-  (rewind! [this])
-  (commit! [this])
-  (close! [this]))
+                      file raf fc])
 
 (declare set-nr-blocks!)
 
@@ -45,9 +41,10 @@
   (let [file (io/file file)
         raf (RandomAccessFile. file "rw")
         fc (.getChannel raf)
-        nr-blocks (long (/ (.size fc) block-size))]
-    {:block-file (set-nr-blocks! (->BlockFile 0 block-size 0 [] region-size file raf fc) nr-blocks)
-     :file raf}))
+        nr-blocks (long (/ (.size fc) block-size))
+        slack (mod region-size block-size)
+        stride (if (zero? slack) region-size (+ region-size (- block-size slack)))]
+    (set-nr-blocks! (->BlockFile 0 block-size 0 [] stride file raf fc) nr-blocks)))
 
 (defn- system-cleanup
   "Prompt the system to clean up outstanding objects, thereby releasing unique resources
@@ -93,7 +90,7 @@
   [{:keys [fc stride] :as block-file} region-nr]
   (retry-loop
    (fn []
-     (let [mbb (.map fc FileChannel$MapMode/READ_WRITE (* region-nr stride) region-size)]
+     (let [mbb (.map fc FileChannel$MapMode/READ_WRITE (* region-nr stride) stride)]
        (-> block-file
            (update-in [:mapped-byte-buffers] conj mbb)
            (assoc :nr-mapped-regions (inc region-nr)))))
@@ -104,9 +101,9 @@
   "Expands a block-file to one that is mapped to the required number of regions.
    Returns a new block-file with the required mappings."
   [{:keys [nr-mapped-regions stride mapped-byte-buffers fc] :as block-file} regions]
-  (let [mapped-size (if (> nr-mapped-regions 0) (+ (* (dec nr-mapped-regions) stride) region-size) 0)
+  (let [mapped-size (if (> nr-mapped-regions 0) (+ (* (dec nr-mapped-regions) stride) stride) 0)
         current-file-size (file-size block-file)
-        new-file-size (+ (* (dec regions) stride) region-size)
+        new-file-size (+ (* (dec regions) stride) stride)
         _ (when (< current-file-size mapped-size)
             (throw (ex-info (str "File has shrunk: " (:file block-file)))))
         block-file (if (> current-file-size new-file-size)
@@ -151,7 +148,7 @@
   (let [file-offset (* block-id block-size)
         region-nr (int (/ file-offset stride))
         offset (mod file-offset stride)]
-    (block/create-block block-size offset (nth mapped-byte-buffers region-nr))))
+    (block/create-block block-id block-size offset (nth mapped-byte-buffers region-nr))))
 
 (defn copy-block
   "Allocates a new block with a copy of the original block."
@@ -179,3 +176,60 @@
   (set-length! block-file 0)
   (->BlockFile 0 block-size 0 [] stride file raf fc))
 
+(def LN2 (Math/log 2))
+
+(defn log2 [x] (/ (Math/log x) LN2))
+
+(defn pow2
+  "Raise 2 to the power of x, with a floor value of 1."
+  [x]
+  (if (<= x 0) 1 (bit-shift-left 1 x)))
+
+(def power-increment
+  "Defines how many bits behind the region magnitude to increment the number of regions by.
+   4 bits behind means that it starts at incrementing by 1, until size 32. Then 2 until 64.
+   Then 4 until 128, and so on."
+  4)
+
+(defn next-size-increment
+  "Determine the next number of blocks that the file should move up to.
+   The size increment of the file increases as the size of the file increases"
+  [block-file]
+  (let [blocks-per-region (long (/ stride block-size))
+        current-size (:nr-blocks block-file)
+        full-regions (long (/ current-size blocks-per-region))
+        new-regions (pow2 (- (long (log2 full-regions)) power-increment))]
+    (* blocks-per-region (+ full-regions new-regions))))
+
+
+(defrecord ManagedBlockFile [block-file next-id commit-point]
+  BlockManager
+  (allocate-block [this]
+    (let [block-id (vswap! next-id inc)]
+      (when (>= block-id (:nr-blocks @block-file))
+        (let [next-size (next-size-increment @block-file)]
+          (vswap! block-file set-nr-blocks! next-size))
+        (block-for block-file block-id))))
+
+  (copy-block [this block]
+    (let [new-block (allocate-block this)]
+      (copy-over! new-block block 0)))
+  
+  (rewind! [this]
+    (vreset! next-id @commit-point)
+    this)
+
+  (commit! [this]
+    (vreset commit-point @next-id)
+    (force-file @block-file)
+    this)
+
+  (close [this]
+    (unmap this)
+    (close raf)))
+
+(defn create-managed-block-file
+  [filename block-size]
+  (let [block-file (open-block-file filename block-size)
+        next-id (dec (:nr-blocks block-file))]
+    (->ManagedBlockFile block-file (volatile! next-id) (volatile! next-id))))

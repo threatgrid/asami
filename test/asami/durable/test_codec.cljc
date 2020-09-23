@@ -136,7 +136,8 @@
     (.getShort b offset))
 
   (read-bytes [this offset len]
-    (read-bytes-into this offset (js/Int8Array. (byte-array len))))
+    #?(:clj (read-bytes-into this offset (byte-array len))
+       :cljs (read-bytes-into this offset (js/Int8Array. (byte-array len)))))
 
   (read-bytes-into [this offset bytes]
     (.get (.position (.asReadOnlyBuffer b) offset) bytes 0 (byte-length bytes))
