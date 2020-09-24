@@ -214,6 +214,9 @@
   (copy-block [this block]
     (let [new-block (allocate-block this)]
       (copy-over! new-block block 0)))
+
+  ;; this operation is a no-op
+  (write-block! [this block] this)
   
   (rewind! [this]
     (vreset! next-id @commit-point)

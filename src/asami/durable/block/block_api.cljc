@@ -26,6 +26,7 @@
   "A mutating object for allocating blocks"
   (allocate-block! [this] "Allocate a new block from the manager's resources.")
   (copy-block! [this block] "Allocates a new block, initialized with a copy of another block.")
+  (write-block! [this block] "Writes a block into the managed resources. Flushing is not expected.")
   (rewind! [this] "Revert to the last commit point. Any blocks allocated since the last commit will be invalid.")
   (commit! [this] "Commits all blocks allocated since the last commit. These blocks are now read-only.")
   (close [this] "Releases all resources currently in use by this manager."))
