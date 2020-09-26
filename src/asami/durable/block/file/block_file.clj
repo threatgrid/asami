@@ -217,6 +217,9 @@
 
   ;; this operation is a no-op
   (write-block! [this block] this)
+
+  (get-block [this id]
+    (block-for block-file id))
   
   (rewind! [this]
     (vreset! next-id @commit-point)
@@ -228,7 +231,7 @@
     this)
 
   (close [this]
-    (unmap this)
+    (unmap block-file)
     (close raf)))
 
 (defn create-managed-block-file
