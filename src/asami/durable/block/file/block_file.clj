@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
   asami.durable.block.file.block-file
   (:require [clojure.java.io :as io]
-            [asami.durable.block.block-api :refer [BlockManager copy-over!]]
+            [asami.durable.block.block-api :refer [BlockManager copy-over! allocate-block!]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo])
   (:import [java.io RandomAccessFile]
@@ -148,7 +148,7 @@
   (let [file-offset (* block-id block-size)
         region-nr (int (/ file-offset stride))
         offset (mod file-offset stride)]
-    (block/create-block block-id block-size offset (nth mapped-byte-buffers region-nr))))
+    (create-block block-id block-size offset (nth mapped-byte-buffers region-nr))))
 
 (defn copy-block
   "Allocates a new block with a copy of the original block."
@@ -161,14 +161,15 @@
     (.position ro byte-offset)
     (.position new-buffer new-byte-offset)
     (.put new-buffer ro)
-    (block/create-block block-size new-byte-offset new-buffer)))
+    (create-block block-size new-byte-offset new-buffer)))
 
 (defn unmap
   "Throw away mappings. This is dangerous, as it invalidates all instances.
   Only to be used when closing the file for good."
-  [{:keys [mapped-byte-buffers block-size nr-blocks] :as block-file}]
+  [{:keys [mapped-byte-buffers block-size nr-blocks raf] :as block-file}]
   (set-length! block-file (* block-size nr-blocks))
-  (voodoo/release mapped-byte-buffers))
+  (voodoo/release mapped-byte-buffers)
+  (.close raf))
 
 (defn clear!
   [{:keys [block-size stride mapped-byte-buffers file raf fc] :as block-file}]
@@ -194,25 +195,24 @@
 (defn next-size-increment
   "Determine the next number of blocks that the file should move up to.
    The size increment of the file increases as the size of the file increases"
-  [block-file]
+  [{:keys [nr-blocks block-size stride] :as block-file}]
   (let [blocks-per-region (long (/ stride block-size))
-        current-size (:nr-blocks block-file)
-        full-regions (long (/ current-size blocks-per-region))
+        full-regions (long (/ nr-blocks blocks-per-region))
         new-regions (pow2 (- (long (log2 full-regions)) power-increment))]
     (* blocks-per-region (+ full-regions new-regions))))
 
 
 (defrecord ManagedBlockFile [block-file next-id commit-point]
   BlockManager
-  (allocate-block [this]
+  (allocate-block! [this]
     (let [block-id (vswap! next-id inc)]
       (when (>= block-id (:nr-blocks @block-file))
         (let [next-size (next-size-increment @block-file)]
           (vswap! block-file set-nr-blocks! next-size))
         (block-for block-file block-id))))
 
-  (copy-block [this block]
-    (let [new-block (allocate-block this)]
+  (copy-block! [this block]
+    (let [new-block (allocate-block! this)]
       (copy-over! new-block block 0)))
 
   ;; this operation is a no-op
@@ -226,13 +226,12 @@
     this)
 
   (commit! [this]
-    (vreset commit-point @next-id)
+    (vreset! commit-point @next-id)
     (force-file @block-file)
     this)
 
   (close [this]
-    (unmap block-file)
-    (close raf)))
+    (unmap block-file)))
 
 (defn create-managed-block-file
   [filename block-size]
