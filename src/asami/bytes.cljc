@@ -43,21 +43,7 @@
   "true if `x` is a byte array, false otherwise."
   [x]
   #?(:clj (clojure/bytes? x)
-     :cljs
-     (or (instance? js/ArrayBuffer x)
-         (instance? js/Int8Array x)
-         (instance? js/Uint8Array x)
-         (instance? js/Int8Array x)
-         (instance? js/Uint8Array x)
-         (instance? js/Uint8ClampedArray x)
-         (instance? js/Int16Array x)
-         (instance? js/Uint16Array x)
-         (instance? js/Int32Array x)
-         (instance? js/Uint32Array x)
-         (instance? js/Float32Array x)
-         (instance? js/Float64Array x)
-         #_(instance? js/BigInt64Array x)
-         #_(instance? js/BigUint64Array x))))
+     :cljs (instance? js/ArrayBuffer x)))
 
 #?(:cljs
    (deftype ByteBuffer [^js/DataView __dataView __position __limit __readOnly]
