@@ -55,8 +55,8 @@
 
 (deftest test-allocate
   (let [filename (util/temp-file "ualloc")
-        {:keys [block-file file]} (open-block-file filename test-block-size)]
-    (set-nr-blocks! block-file 1)
+        block-file (open-block-file filename test-block-size)
+        block-file (set-nr-blocks! block-file 1)]
     (try
       (let [blk (block-for block-file 0)]
         (is (not (nil? blk))))
@@ -68,7 +68,7 @@
 (deftest test-write
   (let [file-str "bftest"
         filename (util/temp-file file-str)
-        {:keys [block-file file]} (open-block-file filename test-block-size)
+        block-file (open-block-file filename test-block-size)
         bf (set-nr-blocks! block-file 4)
         b (block-for bf 0)
         _ (put-string! b str0)
@@ -89,7 +89,7 @@
     (unmap bf)
     (cleanup)
 
-    (let [{:keys [block-file file]} (open-block-file filename test-block-size)]
+    (let [block-file (open-block-file filename test-block-size)]
       
       ;; did it persist
       
@@ -107,8 +107,8 @@
 (deftest test-performance
   (let [file-str "perftest"
         filename (util/temp-file file-str)
-        {:keys [block-file file]} (open-block-file filename test-block-size)
-        _ (clear! block-file)
+        block-file (open-block-file filename test-block-size)
+        block-file (clear! block-file)
         nr-blocks 100000
         bf (set-nr-blocks! block-file nr-blocks)]
 

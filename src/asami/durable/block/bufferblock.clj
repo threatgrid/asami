@@ -7,11 +7,15 @@
 ;; An implementation of Block that can have multiple readers,
 ;; but only a single writing thread
 (defrecord BufferBlock
-    [^ByteBuffer bb ^IntBuffer ib ^LongBuffer lb
+    [id
+     ^ByteBuffer bb ^IntBuffer ib ^LongBuffer lb
      ^ByteBuffer ro
+     size
      byte-offset int-offset long-offset]
 
     Block
+    (get-id [this] id)
+
     (get-byte [this offset]
       (.get bb (+ byte-offset offset)))
 
@@ -100,21 +104,21 @@
 (defn- new-block
   "Internal implementation for creating a BufferBlock using a set of buffers.
    If lb is nil, then ib must also be nil"
-  [bb ib lb ro byte-offset]
+  [id bb ib lb ro size byte-offset]
   (assert (or (and ib lb) (not (or ib lb))) "int and long buffers must be provided or excluded together")
   (let [ib (or ib (-> bb .rewind .asIntBuffer))
         lb (or lb (-> bb .asLongBuffer))
         ro (or ro (.asReadOnlyBuffer bb))
         int-offset (bit-shift-right byte-offset 2)
         long-offset (bit-shift-right byte-offset 3)]
-    (->BufferBlock bb ib lb ro byte-offset int-offset long-offset)))
+    (->BufferBlock id bb ib lb ro size byte-offset int-offset long-offset)))
 
 (defn ^BufferBlock create-block
   "Wraps provided buffers as a block"
-  ([size byte-offset byte-buffer ro-byte-buffer int-buffer long-buffer]
-   (new-block byte-buffer int-buffer long-buffer ro-byte-buffer size byte-offset))
-  ([size byte-offset byte-buffer]
-   (new-block byte-buffer nil nil nil size byte-offset)))
+  ([id size byte-offset byte-buffer ro-byte-buffer int-buffer long-buffer]
+   (new-block id byte-buffer int-buffer long-buffer ro-byte-buffer size byte-offset))
+  ([id size byte-offset byte-buffer]
+   (new-block id byte-buffer nil nil nil size byte-offset)))
 
 
 ;; The following functions are ByteBuffer specfic,
