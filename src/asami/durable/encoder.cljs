@@ -11,7 +11,7 @@
 
 (def type->code
   {Long (byte 0)
-   ;; Double (byte 1)
+   js/Number (byte 1)
    js/String (byte 2)
    Uri (byte 3)  ;; 4 & 5 are reserved for http and https URLs
    ;; BigInt (byte 6)
@@ -137,8 +137,10 @@
       b))
 
   number
-  (header [this len])
-  (body [this])
+  (header [this len]
+    (bytes/byte-array [(bit-or 0xE0 (type->code js/Number))]))
+  (body [this]
+    (bytes/from-number this))
 
   object
   (header [this len]
@@ -156,3 +158,6 @@
   [o]
   (let [b (body o)]
     [(header o (.-length b)) b]))
+
+
+
