@@ -40,7 +40,7 @@
   [file block-size]
   (let [file (io/file file)
         raf (RandomAccessFile. file "rw")
-        fc (.getChannel raf)
+        ^FileChannel fc (.getChannel raf)
         nr-blocks (long (/ (.size fc) block-size))
         slack (mod region-size block-size)
         stride (if (zero? slack) region-size (+ region-size (- block-size slack)))]
@@ -76,7 +76,7 @@
 (defn- file-size
   "Gets the size of a block-file. Returns a size."
   [{fc :fc}]
-  (.size fc))
+  (.size ^FileChannel fc))
 
 (defn- set-length!
   "Sets the length of a block-file.
@@ -90,7 +90,7 @@
   [{:keys [fc stride] :as block-file} region-nr]
   (retry-loop
    (fn []
-     (let [mbb (.map fc FileChannel$MapMode/READ_WRITE (* region-nr stride) stride)]
+     (let [mbb (.map ^FileChannel fc FileChannel$MapMode/READ_WRITE (* region-nr stride) stride)]
        (-> block-file
            (update-in [:mapped-byte-buffers] conj mbb)
            (assoc :nr-mapped-regions (inc region-nr)))))
@@ -100,7 +100,7 @@
 (defn map-file!
   "Expands a block-file to one that is mapped to the required number of regions.
    Returns a new block-file with the required mappings."
-  [{:keys [nr-mapped-regions stride mapped-byte-buffers fc] :as block-file} regions]
+  [{:keys [nr-mapped-regions stride mapped-byte-buffers] :as block-file} regions]
   (let [mapped-size (if (> nr-mapped-regions 0) (+ (* (dec nr-mapped-regions) stride) stride) 0)
         current-file-size (file-size block-file)
         new-file-size (+ (* (dec regions) stride) stride)

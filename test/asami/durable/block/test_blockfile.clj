@@ -85,7 +85,6 @@
     (is (= str3 (get-string (block-for bf 3))))
     
     ;; close all, and start again
-    (clear! bf)
     (unmap bf)
     (cleanup)
 
