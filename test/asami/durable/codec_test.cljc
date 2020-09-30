@@ -1,6 +1,6 @@
 (ns ^{:doc "Tests the encoding/decoding operations"
       :author "Paula Gearon"}
-    asami.durable.test-codec
+    asami.durable.codec-test
   (:require [asami.durable.encoder :as encoder :refer [to-bytes]]
             [asami.durable.decoder :as decoder :refer [read-object]]
             [asami.durable.pages :as pages :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into]]

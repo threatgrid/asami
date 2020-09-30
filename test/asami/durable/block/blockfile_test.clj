@@ -1,6 +1,6 @@
 (ns ^{:doc "Tests for the BlockFile implementation"
       :author "Paula Gearon"}
-    asami.durable.block.test-blockfile
+    asami.durable.block.blockfile-test
   (:require [clojure.test :refer :all]
             [asami.durable.block.block-api :refer :all]
             [asami.durable.block.file.block-file :refer :all]

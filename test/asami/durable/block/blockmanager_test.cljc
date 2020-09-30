@@ -1,6 +1,6 @@
 (ns ^{:doc "Tests for the ManagedBlockFile implementation"
       :author "Paula Gearon"}
-    asami.durable.block.test-blockmanager
+    asami.durable.block.blockmanager-test
   (:require [clojure.test :refer :all]
             [asami.durable.block.block-api :refer :all]
             [asami.durable.block.block-file :refer :all]

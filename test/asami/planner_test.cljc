@@ -1,4 +1,4 @@
-(ns asami.test-planner
+(ns asami.planner-test
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [bindings-chain first-group min-join-path
                                    plan-path merge-operations Bindings
