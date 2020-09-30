@@ -1,6 +1,6 @@
 (ns asami.bytes
   "Utilities for working with bytes."
-  (:refer-clojure :exclude [byte-array bytes? concat])
+  (:refer-clojure :exclude [byte-array bytes?])
   (:require [clojure.core :as clojure])
   #?(:clj (:import [java.nio ByteBuffer])
      :cljs (:import [goog.math Long])))
