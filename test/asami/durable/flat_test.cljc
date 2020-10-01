@@ -1,6 +1,6 @@
 (ns ^{:doc "Tests flat store functionality, saving and retrieving data"
       :author "Paula Gearon"}
-    asami.durable.test-flat
+    asami.durable.flat-test
   (:require [asami.durable.flat :refer [write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :as ff])
             #?(:clj [clojure.java.io :as io])

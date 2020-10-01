@@ -1,4 +1,4 @@
-(ns asami.test-api
+(ns asami.api-test
   "Tests the public query functionality"
   (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since]]
             [asami.index :as i]

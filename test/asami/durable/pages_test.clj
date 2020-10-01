@@ -1,6 +1,6 @@
 (ns ^{:doc "Tests the paging mechanism for reading flat files"
       :author "Paula Gearon"}
-    asami.durable.test-pages
+    asami.durable.pages-test
   (:require [asami.durable.encoder :refer [to-bytes]]
             [asami.durable.pages :refer [read-byte read-short read-bytes]]
             [asami.durable.flat-file :refer [paged-file]]

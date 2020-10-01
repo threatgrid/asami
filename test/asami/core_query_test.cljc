@@ -1,4 +1,4 @@
-(ns asami.test-core-query
+(ns asami.core-query-test
   "Tests the public query functionality"
   (:require [asami.core :refer [q]]
             [asami.graph :refer [new-node graph-transact]]

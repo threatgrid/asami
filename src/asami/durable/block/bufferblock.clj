@@ -1,17 +1,21 @@
 (ns ^{:doc "Abstraction for blocks of raw data, keyed by ID. IDs represent the offset of the block."
       :author "Paula Gearon"}
   asami.durable.block.bufferblock
-  (:require [asami.durable.block.block-api :refer Block])
+  (:require [asami.durable.block.block-api :refer [Block put-block!]])
   (:import [java.nio ByteBuffer IntBuffer LongBuffer]))
 
 ;; An implementation of Block that can have multiple readers,
 ;; but only a single writing thread
 (defrecord BufferBlock
-    [^ByteBuffer bb ^IntBuffer ib ^LongBuffer lb
+    [id
+     ^ByteBuffer bb ^IntBuffer ib ^LongBuffer lb
      ^ByteBuffer ro
+     size
      byte-offset int-offset long-offset]
 
     Block
+    (get-id [this] id)
+
     (get-byte [this offset]
       (.get bb (+ byte-offset offset)))
 
@@ -53,62 +57,68 @@
 
     (put-byte! [this offset v]
       (.put bb (+ byte-offset offset) v)
-      b)
+      this)
 
     (put-int! [this offset v]
       (.put ib (+ int-offset offset) v)
-      b)
+      this)
 
     (put-long! [this offset v]
       (.put lb (+ long-offset offset) v)
-      b)
+      this)
 
     ;; a single writer allows for position/put
 
-    (put-bytes! [this offset ^bytes the-bytes]
-      (doto bb (.position (+ byte-offset offset)) (.put the-bytes))
-      b)
+    (put-bytes! [this offset len the-bytes]
+      (doto bb (.position (+ byte-offset offset)) (.put the-bytes 0 len))
+      this)
 
-    (put-ints! [this offset ^ints the-ints]
-      (doto ib (.position (+ int-offset offset)) (.put the-ints))
-      b)
+    (put-ints! [this offset len the-ints]
+      (doto ib (.position (+ int-offset offset)) (.put the-ints 0 len))
+      this)
 
-    (put-longs! [this offset ^longs the-longs]
-      (doto lb (.position (+ long-offset offset)) (.put the-longs))
-      b)
+    (put-longs! [this offset len the-longs]
+      (doto lb (.position (+ long-offset offset)) (.put the-longs 0 len))
+      this)
 
     (put-block!
-      ([this offset ^BufferBlock src]
-       (put-block! b offset src 0 (.capacity ^ByteBuffer (:bb src))))
-      ([this offset ^BufferBlock src src-offset length]
-       (doto bb
-         (.position (+ byte-offset offset))
-         (.put (get-source-buffer src src-offset length)))
-       b))
+      [this offset src src-offset length]
+      (let [sbb (:bb src)]
+        (doto sbb
+          (.position src-offset)
+          (.limit (+ src-offset length)))
+        (doto bb
+          (.position (+ byte-offset offset))
+          (.put sbb src-offset length)))
+      this)
+
+    (put-block!
+      [this offset src]
+      (put-block! this offset src 0 (.capacity ^ByteBuffer (:bb src))))
 
     (copy-over!
-      [dest ^BufferBlock src offset]
+      [dest src offset]
       (put-block! dest 0 src offset (.capacity bb))))
 
 
 (defn- new-block
   "Internal implementation for creating a BufferBlock using a set of buffers.
    If lb is nil, then ib must also be nil"
-  [bb ib lb ro byte-offset]
+  [id bb ib lb ro size byte-offset]
   (assert (or (and ib lb) (not (or ib lb))) "int and long buffers must be provided or excluded together")
   (let [ib (or ib (-> bb .rewind .asIntBuffer))
         lb (or lb (-> bb .asLongBuffer))
         ro (or ro (.asReadOnlyBuffer bb))
         int-offset (bit-shift-right byte-offset 2)
         long-offset (bit-shift-right byte-offset 3)]
-    (->BufferBlock bb ib lb ro byte-offset int-offset long-offset)))
+    (->BufferBlock id bb ib lb ro size byte-offset int-offset long-offset)))
 
 (defn ^BufferBlock create-block
   "Wraps provided buffers as a block"
-  ([size byte-offset byte-buffer ro-byte-buffer int-buffer long-buffer]
-   (new-block byte-buffer int-buffer long-buffer ro-byte-buffer size byte-offset))
-  ([size byte-offset byte-buffer]
-   (new-block byte-buffer nil nil nil size byte-offset)))
+  ([id size byte-offset byte-buffer ro-byte-buffer int-buffer long-buffer]
+   (new-block id byte-buffer int-buffer long-buffer ro-byte-buffer size byte-offset))
+  ([id size byte-offset byte-buffer]
+   (new-block id byte-buffer nil nil nil size byte-offset)))
 
 
 ;; The following functions are ByteBuffer specfic,

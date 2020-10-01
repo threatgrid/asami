@@ -1,12 +1,22 @@
 (ns ^{:doc "Tests for the BlockFile implementation"
       :author "Paula Gearon"}
-    asami.durable.block.test-blockfile
+    asami.durable.block.blockfile-test
   (:require [clojure.test :refer :all]
             [asami.durable.block.block-api :refer :all]
-            [asami.durable.block.block-file :refer :all]
-            [asami.durable.block.file.voodoo :refer [windows?]]))
+            [asami.durable.block.file.block-file :refer :all]
+            [asami.durable.block.file.voodoo :as voodoo]
+            [asami.durable.block.file.util :as util])
+  (:import [java.nio.charset Charset]))
 
 (def test-block-size 256)
+
+(def str0 "String in block 0.")
+
+(def str1 "String in block 1.")
+
+(def str2 "String in block 2.")
+
+(def str3 "String in block 3.")
 
 (defn cleanup
   []
@@ -22,7 +32,7 @@
       (f file block-file)
       (finally
         (clear! block-file)
-        (.close file)
+        (unmap block-file)
         (cleanup)))))
 
 (defmacro with-block-file
@@ -33,9 +43,10 @@
 (def utf8 (Charset/forName "UTF-8"))
 
 (defn put-string! [b s]
-  (let [^bytes bytes (.getBytes s utf8)]
-    (put-byte! b 0 (count bytes))
-    (put-bytes! b 1 bytes)))
+  (let [^bytes bytes (.getBytes s utf8)
+        len (count bytes)]
+    (put-byte! b 0 len)
+    (put-bytes! b 1 len bytes)))
 
 (defn get-string [b]
   (let [l (get-byte b 0)
@@ -44,45 +55,40 @@
 
 (deftest test-allocate
   (let [filename (util/temp-file "ualloc")
-        {:keys [block-file file]} (open-block-file filename test-block-size)]
-    (set-nr-blocks! block-file 1)
+        block-file (open-block-file filename test-block-size)
+        block-file (set-nr-blocks! block-file 1)]
     (try
       (let [blk (block-for block-file 0)]
         (is (not (nil? blk))))
       (finally
         (clear! block-file)
-        (.close file)
+        (unmap block-file)
         (cleanup)))))
 
 (deftest test-write
   (let [file-str "bftest"
         filename (util/temp-file file-str)
-        {:keys [block-file file]} (open-block-file filename test-block-size)
-        bf (set-nr-blocks! block-file 4)]
-    (try
-      (let [b (block-for bf 0)
-            _ (put-string! b str0)
-            b (block-for bf 3)
-            _ (put-string! b str3)
-            b (block-for bf 2)
-            _ (put-string! b str2)
-            b (block-for bf 1)
-            _ (put-string! b str1)]
-        
-        (is (= str2 (get-string (block-for bf 2))))
-        (is (= str0 (get-string (block-for bf 0))))
-        (is (= str1 (get-string (block-for bf 1))))
-        (is (= str3 (get-string (block-for bf 3)))))
-      (finally
-        (clear! bf)
-        (.close file)
-        (cleanup)))
+        block-file (open-block-file filename test-block-size)
+        bf (set-nr-blocks! block-file 4)
+        b (block-for bf 0)
+        _ (put-string! b str0)
+        b (block-for bf 3)
+        _ (put-string! b str3)
+        b (block-for bf 2)
+        _ (put-string! b str2)
+        b (block-for bf 1)
+        _ (put-string! b str1)]
+    
+    (is (= str2 (get-string (block-for bf 2))))
+    (is (= str0 (get-string (block-for bf 0))))
+    (is (= str1 (get-string (block-for bf 1))))
+    (is (= str3 (get-string (block-for bf 3))))
     
     ;; close all, and start again
     (unmap bf)
-    (.close file)
     (cleanup)
-    (let [{:keys [block-file file]} (open-block-file filename test-block-size)]
+
+    (let [block-file (open-block-file filename test-block-size)]
       
       ;; did it persist
       
@@ -91,13 +97,17 @@
       (is (= str2 (get-string (block-for block-file 2))))
       (is (= str0 (get-string (block-for block-file 0))))
       (is (= str1 (get-string (block-for block-file 1))))
-      (is (= str3 (get-string (block-for block-file 3)))))))
+      (is (= str3 (get-string (block-for block-file 3))))
+
+      (clear! block-file)
+      (unmap block-file)
+      (cleanup))))
 
 (deftest test-performance
   (let [file-str "perftest"
         filename (util/temp-file file-str)
-        {:keys [block-file file]} (open-block-file filename test-block-size)
-        _ (clear! block-file)
+        block-file (open-block-file filename test-block-size)
+        block-file (clear! block-file)
         nr-blocks 100000
         bf (set-nr-blocks! block-file nr-blocks)]
 
@@ -120,6 +130,6 @@
 
       (finally
         (clear! bf)
-        (.close file)
+        (unmap bf)
         (cleanup)))))
 
