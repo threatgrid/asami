@@ -82,7 +82,7 @@
   (let [{:keys [name]} (parse-uri uri)
         c (memory/new-connection name graph)]
     (swap! connections assoc uri c)
-    (storage/db c)))
+    c))
 
 (defn ^:private annotated-attribute?
   "Checks if an attribute has been annotated with a character"
