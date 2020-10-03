@@ -179,7 +179,7 @@
 
 (def LN2 (Math/log 2))
 
-(defn log2 [x] (/ (Math/log x) LN2))
+(defn log2 [x] (max 0 (/ (Math/log x) LN2)))
 
 (defn pow2
   "Raise 2 to the power of x, with a floor value of 1."
@@ -208,8 +208,8 @@
     (let [block-id (vswap! next-id inc)]
       (when (>= block-id (:nr-blocks @block-file))
         (let [next-size (next-size-increment @block-file)]
-          (vswap! block-file set-nr-blocks! next-size))
-        (block-for block-file block-id))))
+          (vswap! block-file set-nr-blocks! next-size)))
+      (block-for @block-file block-id)))
 
   (copy-block! [this block]
     (let [new-block (allocate-block! this)]
@@ -219,7 +219,7 @@
   (write-block! [this block] this)
 
   (get-block [this id]
-    (block-for block-file id))
+    (block-for @block-file id))
   
   (rewind! [this]
     (vreset! next-id @commit-point)
@@ -231,10 +231,10 @@
     this)
 
   (close [this]
-    (unmap block-file)))
+    (unmap (assoc @block-file :nr-blocks (inc @next-id)))))
 
 (defn create-managed-block-file
   [filename block-size]
   (let [block-file (open-block-file filename block-size)
         next-id (dec (:nr-blocks block-file))]
-    (->ManagedBlockFile block-file (volatile! next-id) (volatile! next-id))))
+    (->ManagedBlockFile (volatile! block-file) (volatile! next-id) (volatile! next-id))))

@@ -3,23 +3,28 @@
     asami.durable.block.blockmanager-test
   (:require [clojure.test :refer :all]
             [asami.durable.block.block-api :refer :all]
-            [asami.durable.block.block-file :refer :all]
-            [asami.durable.block.file.voodoo :refer [windows?]]))
+            [asami.durable.block.file.block-file :refer :all]
+            [asami.durable.block.file.voodoo :as voodoo]
+            [asami.durable.block.file.util :as util]
+            [asami.durable.block.blockfile-test :refer [put-string! get-string str0 str1 str2 str3]])
+  #?(:clj (:import [java.io File])))
 
 (def test-block-size 256)
 
 (defn cleanup
+  "A windows hack that attempts to prompt the JVM into unmapping unreferenced files"
   []
-  (when voodoo/windows?
-    (System/gc)
-    (System/runFinalization)))
+  #?(:clj
+     (when voodoo/windows?
+       (System/gc)
+       (System/runFinalization))))
 
 (defn get-filename
   "Returns the resource for creating a manager.
   For Java, this is a java.io.File. On JS this is a string."
   [s]
   #?(:clj (let [f (util/temp-file s)]
-            (.delete d))
+            (doto ^File f .delete))
      :cljs s))
 
 (defn create-block-manager
@@ -36,37 +41,38 @@
   [f sz]
   #?(:clj (create-managed-block-file f sz)))
 
-(defn remove
+(defn remove-file
   "Remove block manager resources."
   [f]
   #?(:clj (.delete f)))
 
+
 (deftest test-allocate
   (let [[filename mbf] (create-block-manager "alloc" test-block-size)]
     (try
-      (let [blk (allocate-block mbf)]
+      (let [blk (allocate-block! mbf)]
         (is (not (nil? blk))))
       (finally
         (close mbf)
         (cleanup)
-        (remove filename)))))
+        (remove-file filename)))))
 
 (deftest test-write
   (let [[filename mbf] (create-block-manager "mbwrite" test-block-size)
         ids (volatile! nil)]
     (try
-      (let [b0 (allocate-block mbf)
+      (let [b0 (allocate-block! mbf)
             id0 (get-id b0)
             _ (put-string! b0 str0)
-            b3 (allocate-block mbf)
+            b3 (allocate-block! mbf)
             id3 (get-id b3)
             _ (put-string! b3 str3)
-            b2 (allocate-block mbf)
+            b2 (allocate-block! mbf)
             id2 (get-id b2)
             _ (put-string! b2 str2)
-            b1 (allocate-block mbf)
+            b1 (allocate-block! mbf)
             id1 (get-id b1)
-            _ (put-string! b str1)]
+            _ (put-string! b1 str1)]
         (vreset! ids [id0 id1 id2 id3])
         
         (is (= str2 (get-string (get-block mbf id2))))
@@ -82,18 +88,20 @@
       (let [[id0 id1 id2 id3] @ids
             mbf2 (recreate-block-manager filename test-block-size)]
         
-        #?(:clj
-           ;; did it persist?
-           (is (= 4 (get-nr-blocks (:block-file mbf2)))))
-        
-        (is (= str2 (get-string (get-block mbf2 id2))))
-        (is (= str0 (get-string (get-block mbf2 id0))))
-        (is (= str1 (get-string (get-block mbf2 id1))))
-        (is (= str3 (get-string (get-block mbf2 id3)))))
+        (try
+          #?(:clj
+             ;; did it persist?
+             (is (= 4 (get-nr-blocks @(:block-file mbf2)))))
+          
+          (is (= str2 (get-string (get-block mbf2 id2))))
+          (is (= str0 (get-string (get-block mbf2 id0))))
+          (is (= str1 (get-string (get-block mbf2 id1))))
+          (is (= str3 (get-string (get-block mbf2 id3))))
+          (finally
+            (close mbf2))))
       (finally
-        (close mbf2)
         (cleanup)
-        (remove filename)))))
+        (remove-file filename)))))
 
 (deftest test-performance
   (let [[filename mbf] (create-block-manager "perftest" Long/BYTES)
@@ -103,7 +111,7 @@
     (try
       (let [rand-mem (reduce (fn [m i]
                                (let [n (long (rand nr-blocks))
-                                     b (alloc-block mbf)]
+                                     b (allocate-block! mbf)]
                                  (put-long! b 0 n)
                                  (write-block! mbf b)
                                  (assoc m (get-id b) n)))
@@ -113,7 +121,7 @@
             ;; put numbers in the next 100,000 blocks
             rand-mem2 (reduce (fn [m i]
                                 (let [n (long (rand nr-blocks))
-                                      b (alloc-block mbf)]
+                                      b (allocate-block! mbf)]
                                   (put-long! b 0 n)
                                   (write-block! mbf b)
                                   (assoc m (get-id b) n)))
@@ -128,7 +136,7 @@
         (let [mbf (rewind! mbf)
               rand-mem3 (reduce (fn [m i]
                                   (let [n (long (rand nr-blocks))
-                                        b (alloc-block mbf)]
+                                        b (allocate-block! mbf)]
                                     (put-long! b 0 n)
                                     (write-block! mbf b)
                                     (assoc m (get-id b) n)))
@@ -146,9 +154,9 @@
             (close mbf)
             #?(:clj
                ;; file ManagedBlockFile, did the file get truncated to the first 100,000?
-               (when (instance? ManagedBlockFile mbf)
+               (when (:block-file mbf)
                  (is (= (* nr-blocks Long/BYTES) (.length filename))))))))
 
       (finally
         (cleanup)
-        (remove filename)))))
+        (remove-file filename)))))
