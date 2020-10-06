@@ -91,7 +91,7 @@
         (try
           #?(:clj
              ;; did it persist?
-             (is (= 4 (get-nr-blocks @(:block-file mbf2)))))
+             (is (= 4 (get-nr-blocks (:block-file @(:state mbf2))))))
           
           (is (= str2 (get-string (get-block mbf2 id2))))
           (is (= str0 (get-string (get-block mbf2 id0))))
@@ -154,7 +154,7 @@
             (close mbf)
             #?(:clj
                ;; file ManagedBlockFile, did the file get truncated to the first 100,000?
-               (when (:block-file mbf)
+               (when (:block-file @(:state mbf))
                  (is (= (* nr-blocks Long/BYTES) (.length filename))))))))
 
       (finally
