@@ -78,7 +78,8 @@
   ;; Note: `.toNumber` may not be safe here.
   (js/Date. (.toNumber (long-decoder ext paged-rdr pos))))
 
-(def ^:const instant-length (+ bytes/LONG_BYTES bytes/INTEGER_BYTES))
+(def instant-length
+  (+ bytes/LONG_BYTES bytes/INTEGER_BYTES))
 
 (defn instant-decoder
   [ext paged-rdr ^long pos]
@@ -92,7 +93,7 @@
   (let [[i len] (decode-length ext paged-rdr pos)]
     (read-keyword paged-rdr (+ pos i) len)))
 
-(def ^:const uuid-length
+(def uuid-length
   (* 2 bytes/LONG_BYTES))
 
 (defn uuid-decoder
