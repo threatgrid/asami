@@ -63,7 +63,8 @@
       (finally
         (clear! block-file)
         (unmap block-file)
-        (cleanup)))))
+        (cleanup)
+        (.delete filename)))))
 
 (deftest test-write
   (let [file-str "bftest"
@@ -101,7 +102,8 @@
 
       (clear! block-file)
       (unmap block-file)
-      (cleanup))))
+      (cleanup))
+    (.delete filename)))
 
 (deftest test-performance
   (let [file-str "perftest"
@@ -131,5 +133,6 @@
       (finally
         (clear! bf)
         (unmap bf)
-        (cleanup)))))
+        (cleanup)
+        (.delete filename)))))
 
