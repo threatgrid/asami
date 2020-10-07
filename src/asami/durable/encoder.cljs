@@ -157,7 +157,7 @@
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [b (body o)]
-    [(header o (.-length b)) b]))
+    [(header o (bytes/byte-length b)) b]))
 
 
 
