@@ -98,8 +98,14 @@
        this)
 
      (put [this byte-or-bytes]
-       (if (seqable? byte-or-bytes)
+       (cond
+         (bytes? byte-or-bytes)
+         (.put this (js/Int8Array. byte-or-bytes) 0 (byte-length byte-or-bytes))
+
+         (or (array? byte-or-bytes) (seqable? byte-or-bytes))
          (.put this byte-or-bytes 0 (byte-length byte-or-bytes))
+
+         :else
          (do (.setInt8 __dataView __position byte-or-bytes)
              (set! (.-__position this) (inc __position))
              this)))
