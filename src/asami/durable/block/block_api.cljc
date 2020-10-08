@@ -30,4 +30,5 @@
   (get-block [this id] "Returns the block associated with an ID.")
   (rewind! [this] "Revert to the last commit point. Any blocks allocated since the last commit will be invalid.")
   (commit! [this] "Commits all blocks allocated since the last commit. These blocks are now read-only.")
+  (copy-to-tx [this block] "Returns a block that is in the current transaction, possibly returning the current block")
   (close [this] "Releases all resources currently in use by this manager."))

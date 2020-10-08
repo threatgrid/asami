@@ -229,6 +229,11 @@
     (force-file (:block-file @state))
     this)
 
+  (copy-to-tx [this block]
+    (if (<= (get-id block) (:commit-point @state))
+      (copy-block! this block)
+      block))
+
   (close [this]
     (let [{:keys [block-file next-id]} @state]
       (unmap (assoc block-file :nr-blocks (inc next-id))))))
