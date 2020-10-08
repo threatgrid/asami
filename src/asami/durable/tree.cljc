@@ -15,12 +15,13 @@
   (get-child [this block-manager side] "Gets the ID of the child on the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
-  (get-block [this] "Gets this node's underlying r/w block"))
+  (get-block [this] "Gets this node's underlying r/w block")
+  (copy-on-write [this block-manager] "Return a node that is writable in the current transaction"))
 
 (def ^:const left-offset "Offset of the left child, in longs" 0)
 (def ^:const right-offset "Offset of the right child, in longs" 1)
 
-(declare get-node)
+(declare get-node ->Node)
 
 (defrecord Node [block]
   (set-child!
@@ -53,7 +54,13 @@
   (get-balance [this]
     (bit-shift-right balance-bitshift (get-long block left-offset)))
 
-  (get-block [this] block))
+  (get-block [this] block)
+
+  (copy-on-write [this block-manager]
+    (let [new-block (copy-to-tx block-manager block)]
+      (if-not (identical? new-block block)
+        (->Node new-block)
+        this))))
 
 (defn get-node
   "Returns a node object for a given ID"
@@ -68,11 +75,6 @@
     (set-balance! node (+ side (get-balance node)))))
 
 (defn other [s] (if (= s left) right left))
-
-(defn rebalance-ss!
-  [bm node side]
-  (let [node-s (get-child node bm side)]
-    (set-child! node side (get-child node-s bm (other side)))))
 
 (defn rebalance!
   "Rebalance an AVL node"
@@ -103,7 +105,7 @@
                 (do
                   (set-balance! node 0)
                   (set-balance! node-s 0)))
-              (set-balance! node-so 0)))]
+              (set-balance! node-so 0)))] ;; return node-so
     (let [side (if (< balance 0) left right)]
       (if (= side (get-balance (get-child node block-manager side)))
         (rebalance-ss! side)
@@ -116,9 +118,10 @@
 
 (defn add-node
   "Adds a node to the tree, returning the new tree"
-  [{:keys [root comparator block-manager] :as tree} node]
+  [{:keys [root comparator block-manager] :as tree} node tx-id]
   (letfn [(insert-node! [tree-node new-node]
-            (let [side (if (neg? (comparator tree-node new-node)) left right)]
+            (let [side (if (neg? (comparator tree-node new-node)) left right)
+                  tree-node (copy-on-write tree-node block-manager)]
               (if-let [child (get-child block-manager side)]
                 (let [child-balance (balance child)
                       inserted-branch (insert-node! comparator child new-node)
@@ -141,3 +144,9 @@
           (assoc tree :root new-root)))
       (assoc tree :root node))))
 
+(defrecord BlockTree [root comparator block-manager])
+
+(defn new-block-tree
+  "Creates an empty block tree"
+  [comparator block-manager]
+  (->BlockTree nil comparator block-manager))
