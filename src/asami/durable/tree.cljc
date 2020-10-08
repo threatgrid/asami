@@ -3,8 +3,6 @@
     asami.durable.tree
   (:require [asami.durable.block.block-api]))
 
-(def ^:dynamic *block-manager* nil)
-
 (def ^:const left -1)
 (def ^:const right 1)
 (def ^:const null "Indicate an invalid node ID" 0)
@@ -14,7 +12,7 @@
 
 (defprotocol TreeNode
   (set-child! [this side child] "Sets the ID of the child for the given side")
-  (get-child [this side] "Gets the ID of the child on the given side")
+  (get-child [this block-manager side] "Gets the ID of the child on the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
   (get-block [this] "Gets this node's underlying r/w block"))
@@ -35,13 +33,13 @@
     this)
 
   (get-child
-    [this side]
+    [this block-manager side]
     (let [child-id (if (= left side)
                      (let [v (get-long block left-offset)]
                        (bit-and v left-mask))
                      (get-long block right-offset))]
       (if-not (= null child-id)
-        (get-node child-id))))
+        (get-node block-manager child-id))))
 
   (set-balance!
     [this balance]
@@ -49,7 +47,8 @@
       (set-long! block left-offset
                  (bit-or
                   left-child
-                  (bit-shift-left balance balance-bitshift)))))
+                  (bit-shift-left balance balance-bitshift)))
+      this))
 
   (get-balance [this]
     (bit-shift-right balance-bitshift (get-long block left-offset)))
@@ -58,19 +57,57 @@
 
 (defn get-node
   "Returns a node object for a given ID"
-  [id]
-  (->Node (get-block *block-manager* id)))
+  [block-manager id]
+  (->Node (get-block block-manager id)))
 
-(defrecord Tree [root comparator])
+(defrecord Tree [root comparator block-manager])
 
 (defn init-child!
   [node side child]
   (let [node (set-child! node side child)]
     (set-balance! node (+ side (get-balance node)))))
 
-(defn rebalance
+(defn other [s] (if (= s left) right left))
+
+(defn rebalance-ss!
+  [bm node side]
+  (let [node-s (get-child node bm side)]
+    (set-child! node side (get-child node-s bm (other side)))))
+
+(defn rebalance!
   "Rebalance an AVL node"
-  [node balance])
+  [block-manager node balance]
+  (letfn [(get-child [n s] (get-child n block-manager s))
+          (rebalance-ss! [side]
+            (let [node-s (get-child node side)
+                  other-side (other side)]
+              (set-child! node side (get-child node-s other-side))
+              (set-child! node-s other-side node)
+              (set-balance! node 0)
+              (set-balance! node-s 0)))  ;; return node-s
+          (rebalance-so! [side]
+            (let [other-side (other side)
+                  node-s (get-child node side)
+                  node-so (get-child node-s other-side)]
+              (set-child! node side (get-child node-so other-side))
+              (set-child! node-s other-side (get-child node-so side))
+              (set-child! node-so other-side node)
+              (set-child! node-so side node-s)
+              (condp = (get-balance node-so)
+                other-side (do
+                             (set-balance! node 0)
+                             (set-balance! node-s side))
+                side (do
+                       (set-balance! node other-side)
+                       (set-balance! node-s 0))
+                (do
+                  (set-balance! node 0)
+                  (set-balance! node-s 0)))
+              (set-balance! node-so 0)))]
+    (let [side (if (< balance 0) left right)]
+      (if (= side (get-balance (get-child node block-manager side)))
+        (rebalance-ss! side)
+        (rebalance-so! side)))))
 
 (defn abs
   "Returns the absolute value of the number n"
@@ -79,10 +116,10 @@
 
 (defn add-node
   "Adds a node to the tree, returning the new tree"
-  [{:keys [root comparator] :as tree} node]
+  [{:keys [root comparator block-manager] :as tree} node]
   (letfn [(insert-node! [tree-node new-node]
             (let [side (if (neg? (comparator tree-node new-node)) left right)]
-              (if-let [child (get-child side)]
+              (if-let [child (get-child block-manager side)]
                 (let [child-balance (balance child)
                       inserted-branch (insert-node! comparator child new-node)
                       tree-node (set-child! tree-node side inserted-branch)
@@ -94,7 +131,7 @@
                                                    [(set-balance! tree-node b) b])
                                                  [tree-node next-balance])]
                   (if (= 2 (abs next-balance))
-                    (rebalance tree-node next-balance)
+                    (rebalance! block-manager tree-node next-balance)
                     tree-node))
                 (init-child! tree-node side node))))]
     (if root
