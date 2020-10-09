@@ -10,12 +10,16 @@
 (def ^:const balance-mask -0x4000000000000000)  ;; literal value for 0xC000000000000000
 (def ^:const balance-bitshift 62)
 
+(def ^:const header-size (* 2 #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT)))
+
 (defprotocol TreeNode
+  (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
   (set-child! [this side child] "Sets the ID of the child for the given side")
   (get-child [this block-manager side] "Gets the ID of the child on the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
   (get-block [this] "Gets this node's underlying r/w block")
+  (write [this] "Persists the node to storage")
   (copy-on-write [this block-manager] "Return a node that is writable in the current transaction"))
 
 (def ^:const left-offset "Offset of the left child, in longs" 0)
@@ -23,7 +27,7 @@
 
 (declare get-node ->Node)
 
-(defrecord Node [block]
+(defrecord Node [block parent]
   (set-child!
     [this side child]
     (let [child-id (getid (:block child))]
@@ -40,7 +44,7 @@
                        (bit-and v left-mask))
                      (get-long block right-offset))]
       (if-not (= null child-id)
-        (get-node block-manager child-id))))
+        (get-node block-manager child-id this))))
 
   (set-balance!
     [this balance]
@@ -56,18 +60,36 @@
 
   (get-block [this] block)
 
+  (write [this block-manager]
+    (write-block block-manager block)
+    this)
+
   (copy-on-write [this block-manager]
     (let [new-block (copy-to-tx block-manager block)]
       (if-not (identical? new-block block)
-        (->Node new-block)
+        (->Node new-block this)
         this))))
+
+(defrecord Tree [root comparator node-comparator block-manager])
 
 (defn get-node
   "Returns a node object for a given ID"
-  [block-manager id]
-  (->Node (get-block block-manager id)))
+  ([block-manager id]
+   (get-node id nil))
+  ([block-manager id parent]
+   (->Node (get-block block-manager id) parent)))
 
-(defrecord Tree [root comparator block-manager])
+(defn new-node
+  "Returns a new node object"
+  ([block-manager]
+   (new-node block-manager nil nil))
+  ([block-manager data]
+   (new-node block-manager data nil))
+  ([block-manager data parent]
+   (let [block (allocate-block! block-manager)]
+     (when data
+       (put-bytes! block header-size (count data) data))
+     (->Node block parent))))
 
 (defn init-child!
   [node side child]
@@ -77,15 +99,16 @@
 (defn other [s] (if (= s left) right left))
 
 (defn rebalance!
-  "Rebalance an AVL node"
+  "Rebalance an AVL node. The root of the rebalance is returned unwritten, but all subnodes are written."
   [block-manager node balance]
-  (letfn [(get-child [n s] (get-child n block-manager s))
+  (letfn [(write [n] (write n block-manager))
+          (get-child [n s] (get-child n block-manager s))
           (rebalance-ss! [side]
             (let [node-s (get-child node side)
                   other-side (other side)]
               (set-child! node side (get-child node-s other-side))
               (set-child! node-s other-side node)
-              (set-balance! node 0)
+              (write (set-balance! node 0))
               (set-balance! node-s 0)))  ;; return node-s
           (rebalance-so! [side]
             (let [other-side (other side)
@@ -105,6 +128,8 @@
                 (do
                   (set-balance! node 0)
                   (set-balance! node-s 0)))
+              (write node)
+              (write node-s)
               (set-balance! node-so 0)))] ;; return node-so
     (let [side (if (< balance 0) left right)]
       (if (= side (get-balance (get-child node block-manager side)))
@@ -118,11 +143,12 @@
 
 (defn add-node
   "Adds a node to the tree, returning the new tree"
-  [{:keys [root comparator block-manager] :as tree} node tx-id]
-  (letfn [(insert-node! [tree-node new-node]
-            (let [side (if (neg? (comparator tree-node new-node)) left right)
+  [{:keys [root node-comparator block-manager] :as tree} node]
+  (letfn [(write [n] (write n block-manager))
+          (insert-node! [tree-node new-node]
+            (let [side (if (neg? (node-comparator tree-node new-node)) left right)
                   tree-node (copy-on-write tree-node block-manager)]
-              (if-let [child (get-child block-manager side)]
+              (if-let [child (get-child tree-node block-manager side)]
                 (let [child-balance (balance child)
                       inserted-branch (insert-node! comparator child new-node)
                       tree-node (set-child! tree-node side inserted-branch)
@@ -134,19 +160,56 @@
                                                    [(set-balance! tree-node b) b])
                                                  [tree-node next-balance])]
                   (if (= 2 (abs next-balance))
-                    (rebalance! block-manager tree-node next-balance)
+                    (rebalance! block-manager tree-node next-balance) ;; rebalanceed nodes will be written
                     tree-node))
                 (init-child! tree-node side node))))]
+    (write node)
     (if root
-      (let [new-root (insert-node! comparator root node)]
+      (let [new-root (write (insert-node! comparator root node))]
         (if (= new-root root)
           tree
           (assoc tree :root new-root)))
       (assoc tree :root node))))
 
-(defrecord BlockTree [root comparator block-manager])
+(defn add
+  "Adds data to the tree, where the data is a byte array"
+  [{:keys [root comparator block-manager :as tree]} b]
+  (add-node (new-node block-manager b)))
+
+(defn previous-node
+  "Find the next node in the tree"
+  [n]
+  ;; TODO
+  )
+
+(defn next-node
+  "Find the next node in the tree"
+  [n]
+  ;; TODO
+  )
+
+(defn find
+  "Finds a node in the tree using a key"
+  [{:keys [root comparator block-manager :as tree]} key]
+  (letfn [(compare-node [n] (comparator key (get-bytes (get-block n) header-size data-size)))
+          (find [n]
+            (let [c (compare-node n)]
+              (if (zero? c)
+                n
+                (let [side (if (< c 0) left right)]
+                  (if-let [child (get-child n block-manager side)]
+                    (find child)
+                    ;; between this node, and the next/previous
+                    (if (= side left)
+                      [(previous-node n) n]
+                      [n (next-node n)]))))))]
+    (find root)))
 
 (defn new-block-tree
   "Creates an empty block tree"
   [comparator block-manager]
-  (->BlockTree nil comparator block-manager))
+  (let [data-size (- (get-block-size block-manager) header-size)
+        node-comparator (fn [a b]
+                          (comparator (get-bytes (get-block a) header-size data-size)
+                                      (get-bytes (get-block b) header-size data-size)))]
+    (->Tree nil comparator node-comparator block-manager)))
