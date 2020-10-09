@@ -215,7 +215,7 @@
       (copy-over! new-block block 0)))
 
   ;; this operation is a no-op
-  (write-block! [this block] this)
+  (write-block [this block] this)
 
   (get-block [this id]
     (block-for (:block-file @state) id))
