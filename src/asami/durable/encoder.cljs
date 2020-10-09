@@ -23,6 +23,7 @@
    UUID (byte 11)
    :blob (byte 12)
    ;; :xsd (byte 13)
+   js/Object (byte 14)
    :pojo (byte 14)})
 
 (def registered-xsd-types
@@ -145,19 +146,14 @@
   object
   (header [this len]
     (let [tc (or (type->code (type this))
-                 (first (type-code this)))]
-      (general-header tc len)))
+                 (first (this type-code)))]
+      (bytes/byte-array [tc len])))
   (body [this]
-    (if-let [tc (type->code (type this))]
-      (bytes/from-string (str this))
-      (if-let [[_ encoder] (type-code this)]
-        (encoder this)))))
+    (if-let [[_ encoder] (type-code this)]
+      (encoder this))))
 
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [b (body o)]
     [(header o (bytes/byte-length b)) b]))
-
-
-
