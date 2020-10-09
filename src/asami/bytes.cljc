@@ -63,7 +63,8 @@
 
      (get [this number-or-destination]
        (if (number? number-or-destination)
-         (.getInt8 __dataView number-or-destination)
+         (do (set! (.-__position this) number-or-destination)
+             (.get this))
          (.get this number-or-destination 0 (byte-length number-or-destination))))
 
      (get [this destination offset length]
