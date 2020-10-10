@@ -14,8 +14,8 @@
 
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
+  (get-child [this block-manager side] "Gets the Node of the child on the given side")
   (set-child! [this side child] "Sets the ID of the child for the given side")
-  (get-child [this block-manager side] "Gets the ID of the child on the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
   (get-block [this] "Gets this node's underlying r/w block")
@@ -28,6 +28,10 @@
 (declare get-node ->Node)
 
 (defrecord Node [block parent]
+  (get-parent
+    [this]
+    parent)
+ 
   (set-child!
     [this side child]
     (let [child-id (getid (:block child))]
@@ -44,7 +48,7 @@
                        (bit-and v left-mask))
                      (get-long block right-offset))]
       (if-not (= null child-id)
-        (get-node block-manager child-id this))))
+        (assoc (get-node block-manager child-id this) :side side))))
 
   (set-balance!
     [this balance]
@@ -67,7 +71,7 @@
   (copy-on-write [this block-manager]
     (let [new-block (copy-to-tx block-manager block)]
       (if-not (identical? new-block block)
-        (->Node new-block this)
+        (->Node new-block (get-parent this))
         this))))
 
 (defrecord Tree [root comparator node-comparator block-manager])
@@ -141,57 +145,15 @@
   [^long n]
   (if (> 0 n) (- n) n))
 
-(defn add-node
-  "Adds a node to the tree, returning the new tree"
-  [{:keys [root node-comparator block-manager] :as tree} node]
-  (letfn [(write [n] (write n block-manager))
-          (insert-node! [tree-node new-node]
-            (let [side (if (neg? (node-comparator tree-node new-node)) left right)
-                  tree-node (copy-on-write tree-node block-manager)]
-              (if-let [child (get-child tree-node block-manager side)]
-                (let [child-balance (balance child)
-                      inserted-branch (insert-node! comparator child new-node)
-                      tree-node (set-child! tree-node side inserted-branch)
-                      next-balance (get-balance tree-node)
-                      ;; did the child balance change from 0? Then it's deeper
-                      [tree-node next-balance] (if (and (zero? child-balance)
-                                                        (not= 0 (get-balance inserted-branch)))
-                                                 (let [b (+ next-balance side)]
-                                                   [(set-balance! tree-node b) b])
-                                                 [tree-node next-balance])]
-                  (if (= 2 (abs next-balance))
-                    (rebalance! block-manager tree-node next-balance) ;; rebalanceed nodes will be written
-                    tree-node))
-                (init-child! tree-node side node))))]
-    (write node)
-    (if root
-      (let [new-root (write (insert-node! comparator root node))]
-        (if (= new-root root)
-          tree
-          (assoc tree :root new-root)))
-      (assoc tree :root node))))
-
-(defn add
-  "Adds data to the tree, where the data is a byte array"
-  [{:keys [root comparator block-manager :as tree]} b]
-  (add-node (new-node block-manager b)))
-
-(defn previous-node
-  "Find the next node in the tree"
-  [n]
-  ;; TODO
-  )
-
-(defn next-node
-  "Find the next node in the tree"
-  [n]
-  ;; TODO
-  )
-
 (defn find
-  "Finds a node in the tree using a key"
+  "Finds a node in the tree using a key.
+  returns one of:
+  null: an empty tree
+  node: the data was found
+  vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
+  The other (unneeded) node is represented by nil."
   [{:keys [root comparator block-manager :as tree]} key]
-  (letfn [(compare-node [n] (comparator key (get-bytes (get-block n) header-size data-size)))
+  (letfn [(compare-node [n] (block-comparator key (get-block n)))
           (find [n]
             (let [c (compare-node n)]
               (if (zero? c)
@@ -201,15 +163,58 @@
                     (find child)
                     ;; between this node, and the next/previous
                     (if (= side left)
-                      [(previous-node n) n]
-                      [n (next-node n)]))))))]
-    (find root)))
+                      [nil n]
+                      [n nil]))))))]
+    (and root (find root))))
+
+(defn add-to-root
+  "Runs back up a branch to update and balance the branch for the transaction.
+   node argument is a fully written branch of the tree.
+   Returns the root of the tree."
+  [block-manager node deeper?]
+  (if-let [oparent (get-parent node)]
+    (let [side (:side node) ;; these were set during the find operation
+          obalance (get-balance oparent)
+          parent (-> (copy-on-write oparent)
+                     (set-child! side node))
+          [parent next-balance] (if deeper?
+                                  (let [b (+ obalance side)]
+                                    [(set-balance! parent b) b])
+                                  [parent obalance])
+          [new-branch ndeeper?] (if (= 2 (abs next-balance))
+                                  [(rebalance! block-manager parent next-balance) false]
+                                  [parent (and (zero? obalance) (not (zero? next-balance)))])]
+      (write new-branch block-manager)
+      ;; check if there was change at this level
+      (if (= (get-id new-branch) (get-id oparent))
+        (loop [n parent] (if-let [pn (get-parent n)] (recur pn) n)) ;; no change. Short circuit to the root
+        (recur block-manager parent ndeeper?)))
+    node))
+
+(defn add
+  "Adds data to the tree"
+  [{:keys [root block-manager :as tree]} data]
+  (if-let [location (find tree data)]
+    (if (vector? location)
+      (let [fl (first location)
+            [side leaf-node] (if fl [right fl] [left (second location)])
+            node (write (new-node block-manager data leaf-node) block-manager)
+            parent-node (copy-on-write block-manager leaf-node)
+            pre-balance (get-balance parent-node)
+            parent-node (write (init-child! parent-node side node) block-manager)]
+        (assoc tree :root (add-to-root block-manager parent-node (zero? pre-balance))))
+      tree)
+    (assoc tree :root (write (new-node block-manager data)))))
 
 (defn new-block-tree
   "Creates an empty block tree"
-  [comparator block-manager]
+  ([block-manager comparator]
+   (new-block-tree block-manager comparator block-comparator))
+  [block-manager comparator block-comparator]
   (let [data-size (- (get-block-size block-manager) header-size)
-        node-comparator (fn [a b]
-                          (comparator (get-bytes (get-block a) header-size data-size)
-                                      (get-bytes (get-block b) header-size data-size)))]
+        block-comparator (or block-comparator
+                             (fn [data-a block-b]
+                               (comparator data-a (get-bytes block-b header-size data-size))))
+        node-comparator (fn [node-a node-b]
+                          (block-comparator (get-block node-a) (get-block node-b)))]
     (->Tree nil comparator node-comparator block-manager)))
