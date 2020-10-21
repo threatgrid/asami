@@ -73,16 +73,27 @@
     (if-let [conn (connection-for uri)]
       (storage/delete-database conn))))
 
+(def Graphable (s/cond-pre GraphType {:graph GraphType}))
+
+(defn ^:private as-graph
+  "Converts the d argument to a Graph. Leaves it alone if it can't be converted."
+  [d]
+  (if (not (satisfies? gr/Graph d))
+    (let [g (:graph d)]
+      (if (satisfies? gr/Graph g) g d))
+      d))
+
 (s/defn as-connection :- ConnectionType
   "Creates a Database/Connection around an existing Graph.
-   graph: The graph to build a database around.
+   graph: The graph or graph wrapper to build a database around.
    uri: The uri of the database."
-  [graph :- GraphType
-   uri :- s/Str]
-  (let [{:keys [name]} (parse-uri uri)
-        c (memory/new-connection name graph)]
-    (swap! connections assoc uri c)
-    c))
+  ([graph :- Graphable] (as-connection graph (gensym "internal:graph")))
+  ([graph :- Graphable
+    uri :- s/Str]
+   (let [{:keys [name]} (parse-uri uri)
+         c (memory/new-connection name (as-graph graph))]
+     (swap! connections assoc uri c)
+     c)))
 
 (defn ^:private annotated-attribute?
   "Checks if an attribute has been annotated with a character"
@@ -279,10 +290,7 @@
   (map (fn [d]
          (if (satisfies? storage/Database d)
            (storage/graph d)
-           (if (not (satisfies? gr/Graph d))
-             (let [g (:graph d)]
-               (if (satisfies? gr/Graph g) g d))
-             d)))
+           (as-graph d)))
        inputs))
 
 (defn q
