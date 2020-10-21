@@ -123,7 +123,13 @@
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
                 (map (partial take 3))
-                set)))))
+                set))))
+
+  (let [c (connect "asami:mem://test4")
+        r (transact c {:tx-triples [[:mem/node-1 :property "value"]
+                                    [:mem/node-2 :property "other"]]})]
+
+    (is (= 2 (count (:tx-data @r))))))
 
 (deftest test-entity
   (let [c (connect "asami:mem://test4")
