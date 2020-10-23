@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
   asami.durable.block.file.block-file
   (:require [clojure.java.io :as io]
-            [asami.durable.block.block-api :refer [BlockManager copy-over! allocate-block!]]
+            [asami.durable.block.block-api :refer [BlockManager copy-over! copy-block! allocate-block! get-id]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo])
   (:import [java.io RandomAccessFile]
@@ -219,6 +219,9 @@
 
   (get-block [this id]
     (block-for (:block-file @state) id))
+
+  (get-block-size [this]
+    (:block-size (:block-file @state)))
   
   (rewind! [this]
     (vswap! state #(assoc % :next-id (:commit-point %)))

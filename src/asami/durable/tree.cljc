@@ -1,7 +1,9 @@
 (ns ^{:doc "This namespace provides the basic mechanisms for AVL trees"
       :author "Paula Gearon"}
     asami.durable.tree
-  (:require [asami.durable.block.block-api]))
+  (:require [asami.durable.block.block-api :refer [get-id get-long put-long! put-bytes! get-bytes
+                                                   allocate-block! get-block get-block-size
+                                                   write-block copy-to-tx]]))
 
 (def ^:const left -1)
 (def ^:const right 1)
@@ -18,8 +20,8 @@
   (set-child! [this side child] "Sets the ID of the child for the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
-  (get-block [this] "Gets this node's underlying r/w block")
-  (write [this] "Persists the node to storage")
+  (get-node-block [this] "Gets this node's underlying r/w block")
+  (write [this block-manager] "Persists the node to storage")
   (copy-on-write [this block-manager] "Return a node that is writable in the current transaction"))
 
 (def ^:const left-offset "Offset of the left child, in longs" 0)
@@ -28,13 +30,14 @@
 (declare get-node ->Node)
 
 (defrecord Node [block parent]
+  TreeNode
   (get-parent
     [this]
     parent)
  
   (set-child!
     [this side child]
-    (let [child-id (getid (:block child))]
+    (let [child-id (get-id (:block child))]
       (if (= left side)
         (let [balance-bits (bit-and balance-mask (get-long block left-offset))]
           (put-long! block left-offset (bit-or balance-bits child-id)))
@@ -53,7 +56,7 @@
   (set-balance!
     [this balance]
     (let [left-child (bit-and left-mask (get-long block left-offset))]
-      (set-long! block left-offset
+      (put-long! block left-offset
                  (bit-or
                   left-child
                   (bit-shift-left balance balance-bitshift)))
@@ -62,7 +65,7 @@
   (get-balance [this]
     (bit-shift-right balance-bitshift (get-long block left-offset)))
 
-  (get-block [this] block)
+  (get-node-block [this] block)
 
   (write [this block-manager]
     (write-block block-manager block)
@@ -74,7 +77,7 @@
         (->Node new-block (get-parent this))
         this))))
 
-(defrecord Tree [root comparator node-comparator block-manager])
+(defrecord Tree [root block-comparator node-comparator block-manager])
 
 (defn get-node
   "Returns a node object for a given ID"
@@ -145,27 +148,27 @@
   [^long n]
   (if (> 0 n) (- n) n))
 
-(defn find
+(defn nfind
   "Finds a node in the tree using a key.
   returns one of:
   null: an empty tree
   node: the data was found
   vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
   The other (unneeded) node is represented by nil."
-  [{:keys [root comparator block-manager :as tree]} key]
-  (letfn [(compare-node [n] (block-comparator key (get-block n)))
-          (find [n]
+  [{:keys [root block-comparator block-manager :as tree]} key]
+  (letfn [(compare-node [n] (block-comparator key (get-node-block n)))
+          (nfind [n]
             (let [c (compare-node n)]
               (if (zero? c)
                 n
                 (let [side (if (< c 0) left right)]
                   (if-let [child (get-child n block-manager side)]
-                    (find child)
+                    (nfind child)
                     ;; between this node, and the next/previous
                     (if (= side left)
                       [nil n]
                       [n nil]))))))]
-    (and root (find root))))
+    (and root (nfind root))))
 
 (defn add-to-root
   "Runs back up a branch to update and balance the branch for the transaction.
@@ -175,7 +178,7 @@
   (if-let [oparent (get-parent node)]
     (let [side (:side node) ;; these were set during the find operation
           obalance (get-balance oparent)
-          parent (-> (copy-on-write oparent)
+          parent (-> (copy-on-write oparent block-manager)
                      (set-child! side node))
           [parent next-balance] (if deeper?
                                   (let [b (+ obalance side)]
@@ -194,27 +197,27 @@
 (defn add
   "Adds data to the tree"
   [{:keys [root block-manager :as tree]} data]
-  (if-let [location (find tree data)]
+  (if-let [location (nfind tree data)]
     (if (vector? location)
       (let [fl (first location)
             [side leaf-node] (if fl [right fl] [left (second location)])
             node (write (new-node block-manager data leaf-node) block-manager)
-            parent-node (copy-on-write block-manager leaf-node)
+            parent-node (copy-on-write leaf-node block-manager)
             pre-balance (get-balance parent-node)
             parent-node (write (init-child! parent-node side node) block-manager)]
         (assoc tree :root (add-to-root block-manager parent-node (zero? pre-balance))))
       tree)
-    (assoc tree :root (write (new-node block-manager data)))))
+    (assoc tree :root (write (new-node block-manager data) block-manager))))
 
 (defn new-block-tree
   "Creates an empty block tree"
   ([block-manager comparator]
-   (new-block-tree block-manager comparator block-comparator))
-  [block-manager comparator block-comparator]
-  (let [data-size (- (get-block-size block-manager) header-size)
-        block-comparator (or block-comparator
-                             (fn [data-a block-b]
-                               (comparator data-a (get-bytes block-b header-size data-size))))
-        node-comparator (fn [node-a node-b]
-                          (block-comparator (get-block node-a) (get-block node-b)))]
-    (->Tree nil comparator node-comparator block-manager)))
+   (new-block-tree block-manager comparator nil))
+  ([block-manager comparator block-comparator]
+   (let [data-size (- (get-block-size block-manager) header-size)
+         block-comparator (or block-comparator
+                              (fn [data-a block-b]
+                                (comparator data-a (get-bytes block-b header-size data-size))))
+         node-comparator (fn [node-a node-b]
+                           (block-comparator (get-node-block node-a) (get-node-block node-b)))]
+     (->Tree nil block-comparator node-comparator block-manager))))
