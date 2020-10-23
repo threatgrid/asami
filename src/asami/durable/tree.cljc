@@ -89,13 +89,15 @@
 (defn new-node
   "Returns a new node object"
   ([block-manager]
-   (new-node block-manager nil nil))
-  ([block-manager data]
-   (new-node block-manager data nil))
-  ([block-manager data parent]
+   (new-node block-manager nil nil nil))
+  ([block-manager data writer]
+   (new-node block-manager data nil writer))
+  ([block-manager data parent writer]
    (let [block (allocate-block! block-manager)]
      (when data
-       (put-bytes! block header-size (count data) data))
+       (if writer
+         (writer block header-size data)
+         (put-bytes! block header-size (count data) data)))
      (->Node block parent))))
 
 (defn init-child!
@@ -148,27 +150,27 @@
   [^long n]
   (if (> 0 n) (- n) n))
 
-(defn nfind
+(defn find-node
   "Finds a node in the tree using a key.
   returns one of:
   null: an empty tree
   node: the data was found
   vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
   The other (unneeded) node is represented by nil."
-  [{:keys [root block-comparator block-manager :as tree]} key]
+  [{:keys [root block-comparator block-manager] :as tree} key]
   (letfn [(compare-node [n] (block-comparator key (get-node-block n)))
-          (nfind [n]
+          (find-node [n]
             (let [c (compare-node n)]
               (if (zero? c)
                 n
                 (let [side (if (< c 0) left right)]
                   (if-let [child (get-child n block-manager side)]
-                    (nfind child)
+                    (find-node child)
                     ;; between this node, and the next/previous
                     (if (= side left)
                       [nil n]
                       [n nil]))))))]
-    (and root (nfind root))))
+    (and root (find-node root))))
 
 (defn add-to-root
   "Runs back up a branch to update and balance the branch for the transaction.
@@ -196,18 +198,18 @@
 
 (defn add
   "Adds data to the tree"
-  [{:keys [root block-manager :as tree]} data]
-  (if-let [location (nfind tree data)]
+  [{:keys [root block-manager] :as tree} data & [writer]]
+  (if-let [location (find-node tree data)]
     (if (vector? location)
       (let [fl (first location)
             [side leaf-node] (if fl [right fl] [left (second location)])
-            node (write (new-node block-manager data leaf-node) block-manager)
+            node (write (new-node block-manager data leaf-node writer) block-manager)
             parent-node (copy-on-write leaf-node block-manager)
             pre-balance (get-balance parent-node)
             parent-node (write (init-child! parent-node side node) block-manager)]
         (assoc tree :root (add-to-root block-manager parent-node (zero? pre-balance))))
       tree)
-    (assoc tree :root (write (new-node block-manager data) block-manager))))
+    (assoc tree :root (write (new-node block-manager data writer) block-manager))))
 
 (defn new-block-tree
   "Creates an empty block tree"
