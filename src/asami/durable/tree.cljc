@@ -37,7 +37,7 @@
  
   (set-child!
     [this side child]
-    (let [child-id (get-id (:block child))]
+    (let [child-id (if child (get-id (:block child)) null)]
       (if (= left side)
         (let [balance-bits (bit-and balance-mask (get-long block left-offset))]
           (put-long! block left-offset (bit-or balance-bits child-id)))
@@ -63,7 +63,7 @@
       this))
 
   (get-balance [this]
-    (bit-shift-right balance-bitshift (get-long block left-offset)))
+    (bit-shift-right (get-long block left-offset) balance-bitshift))
 
   (get-node-block [this] block)
 
@@ -85,6 +85,10 @@
    (get-node id nil))
   ([block-manager id parent]
    (->Node (get-block block-manager id) parent)))
+
+(defn get-node-id
+  [node]
+  (get-id (get-node-block node)))
 
 (defn new-node
   "Returns a new node object"
@@ -110,21 +114,21 @@
 (defn rebalance!
   "Rebalance an AVL node. The root of the rebalance is returned unwritten, but all subnodes are written."
   [block-manager node balance]
-  (letfn [(write [n] (write n block-manager))
-          (get-child [n s] (get-child n block-manager s))
+  (letfn [(rwrite [n] (write n block-manager))
+          (rget-child [n s] (get-child n block-manager s))
           (rebalance-ss! [side]
-            (let [node-s (get-child node side)
+            (let [node-s (rget-child node side)
                   other-side (other side)]
-              (set-child! node side (get-child node-s other-side))
+              (set-child! node side (rget-child node-s other-side))
               (set-child! node-s other-side node)
-              (write (set-balance! node 0))
-              (set-balance! node-s 0)))  ;; return node-s
+              (rwrite (set-balance! node 0))
+              (set-balance! node-s 0))) ;; return node-s
           (rebalance-so! [side]
             (let [other-side (other side)
-                  node-s (get-child node side)
-                  node-so (get-child node-s other-side)]
-              (set-child! node side (get-child node-so other-side))
-              (set-child! node-s other-side (get-child node-so side))
+                  node-s (rget-child node side)
+                  node-so (rget-child node-s other-side)]
+              (set-child! node side (rget-child node-so other-side))
+              (set-child! node-s other-side (rget-child node-so side))
               (set-child! node-so other-side node)
               (set-child! node-so side node-s)
               (condp = (get-balance node-so)
@@ -137,13 +141,15 @@
                 (do
                   (set-balance! node 0)
                   (set-balance! node-s 0)))
-              (write node)
-              (write node-s)
+              (rwrite node)
+              (rwrite node-s)
               (set-balance! node-so 0)))] ;; return node-so
-    (let [side (if (< balance 0) left right)]
-      (if (= side (get-balance (get-child node block-manager side)))
-        (rebalance-ss! side)
-        (rebalance-so! side)))))
+    (let [parent (get-parent node)
+          side (if (< balance 0) left right)
+          new-balance-root (if (= side (get-balance (rget-child node side)))
+                             (rebalance-ss! side)
+                             (rebalance-so! side))]
+      (assoc new-balance-root :parent parent))))
 
 (defn abs
   "Returns the absolute value of the number n"
@@ -191,9 +197,9 @@
                                   [parent (and (zero? obalance) (not (zero? next-balance)))])]
       (write new-branch block-manager)
       ;; check if there was change at this level
-      (if (= (get-id new-branch) (get-id oparent))
+      (if (= (get-node-id new-branch) (get-node-id oparent))
         (loop [n parent] (if-let [pn (get-parent n)] (recur pn) n)) ;; no change. Short circuit to the root
-        (recur block-manager parent ndeeper?)))
+        (recur block-manager new-branch ndeeper?)))
     node))
 
 (defn add
@@ -216,6 +222,8 @@
   ([block-manager comparator]
    (new-block-tree block-manager comparator nil))
   ([block-manager comparator block-comparator]
+   (if-not (get-block block-manager null)
+     (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
    (let [data-size (- (get-block-size block-manager) header-size)
          block-comparator (or block-comparator
                               (fn [data-a block-b]

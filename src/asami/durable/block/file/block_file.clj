@@ -13,6 +13,8 @@
 
 (def retries 3)
 
+(def ^:const null 0)
+
 ;; Each mapping is called a region, and will contain multiple blocks.
 ;; Blocks are expected to evenly divide into a region, though slack
 ;; space at the end of a region is permissible. The slack space will
@@ -218,7 +220,9 @@
   (write-block [this block] this)
 
   (get-block [this id]
-    (block-for (:block-file @state) id))
+    (if (and (= null id) (= (:next-id @state) -1))  ;; asking for the null block on an empty file
+      (allocate-block! this)
+      (block-for (:block-file @state) id)))
 
   (get-block-size [this]
     (:block-size (:block-file @state)))
