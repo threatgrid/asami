@@ -16,6 +16,7 @@
 
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
+  (get-child-id [this side] "Gets the Node ID of the child on the given side")
   (get-child [this block-manager side] "Gets the Node of the child on the given side")
   (set-child! [this side child] "Sets the ID of the child for the given side")
   (set-balance! [this balance] "Sets the balance of the node")
@@ -44,12 +45,16 @@
         (put-long! block right-offset child-id)))
     this)
 
+  (get-child-id
+    [this side]
+    (if (= left side)
+      (let [v (get-long block left-offset)]
+        (bit-and v left-mask))
+      (get-long block right-offset)))
+
   (get-child
     [this block-manager side]
-    (let [child-id (if (= left side)
-                     (let [v (get-long block left-offset)]
-                       (bit-and v left-mask))
-                     (get-long block right-offset))]
+    (let [child-id (get-child-id this side)]
       (if-not (= null child-id)
         (assoc (get-node block-manager child-id this) :side side))))
 
@@ -111,6 +116,9 @@
 
 (defn other [s] (if (= s left) right left))
 
+;; TODO REMOVE
+(defn get-data [node] (get-long (get-node-block node) header-size))
+
 (defn rebalance!
   "Rebalance an AVL node. The root of the rebalance is returned unwritten, but all subnodes are written."
   [block-manager node balance]
@@ -145,16 +153,39 @@
               (rwrite node-s)
               (set-balance! node-so 0)))] ;; return node-so
     (let [parent (get-parent node)
+          parent-side (:side node)
           side (if (< balance 0) left right)
           new-balance-root (if (= side (get-balance (rget-child node side)))
                              (rebalance-ss! side)
                              (rebalance-so! side))]
-      (assoc new-balance-root :parent parent))))
+      (assoc new-balance-root :parent parent :side parent-side))))
 
 (defn abs
   "Returns the absolute value of the number n"
   [^long n]
   (if (> 0 n) (- n) n))
+
+(defn neighbor-node
+  [side block-manager node]
+  (if-let [child (get-child node block-manager side)]
+    (let [other-side (other side)]
+      (loop [n child]
+        (if-let [nchild (get-child n block-manager other-side)]
+          (recur nchild)
+          n)))
+    (loop [n node]
+      (if-let [parent (get-parent n)]
+        (if (= (:side n) side)
+          (recur parent)
+          parent)))))
+
+(def next-node (partial neighbor-node right))
+(def prev-node (partial neighbor-node left))
+
+(defn node-seq
+  [block-manager node]
+  (when node
+    (cons node (lazy-seq (node-seq (next-node block-manager node))))))
 
 (defn find-node
   "Finds a node in the tree using a key.
@@ -166,16 +197,20 @@
   [{:keys [root block-comparator block-manager] :as tree} key]
   (letfn [(compare-node [n] (block-comparator key (get-node-block n)))
           (find-node [n]
+            #_(println (str "Node: " (get-long (get-node-block n) header-size) "[id:" (get-node-id n) "]"))
             (let [c (compare-node n)]
+              #_(println "Compare: " c)
               (if (zero? c)
                 n
                 (let [side (if (< c 0) left right)]
+                  #_(println (if (= side left) "  <<<<" "      >>>>"))
                   (if-let [child (get-child n block-manager side)]
-                    (find-node child)
+                    (recur child)
                     ;; between this node, and the next/previous
                     (if (= side left)
-                      [nil n]
-                      [n nil]))))))]
+                      [(prev-node block-manager n) n]
+                      [n (next-node block-manager n)]))))))]
+    ;(println key " *****************************************************************")
     (and root (find-node root))))
 
 (defn add-to-root
@@ -207,8 +242,11 @@
   [{:keys [root block-manager] :as tree} data & [writer]]
   (if-let [location (find-node tree data)]
     (if (vector? location)
-      (let [fl (first location)
-            [side leaf-node] (if fl [right fl] [left (second location)])
+      ;; one of the pair is a leaf node. Attach to the correct side of that node
+      (let [[fl sl] location
+            [side leaf-node] (if (or (nil? sl) (not= null (get-child-id sl left)))
+                               [right fl]
+                               [left sl])
             node (write (new-node block-manager data leaf-node writer) block-manager)
             parent-node (copy-on-write leaf-node block-manager)
             pre-balance (get-balance parent-node)
