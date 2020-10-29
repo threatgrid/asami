@@ -12,6 +12,8 @@
 
 (def ^:const tx-name "Name of the transaction file" "tx.bin")
 
+(def ^:const tx-size "Size of the transaction records: timestamp/tree-root" (* 2 Long/BYTES))
+
 (declare avl-file)
 (declare new-file-data-pool)
 
@@ -41,8 +43,8 @@
 
 (defn new-file-data-pool
   [tx-id index data-writer data-reader tx-writer tx-reader]
-  (let [root _
-        tail _]
+  (let [root 1  ;; TODO
+        tail 2] ;; TODO
     (->FileDataPool tx-id root tail index data-writer data-reader tx-writer tx-reader)))
 
 (defn open-pool

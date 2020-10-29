@@ -14,6 +14,7 @@
             Duplicated because that cache is not available for ClojureScript
             and the namespace includes JVM specific functionality."
       :author "Paula Gearon"}
+    asami.durable.cache
     (:require
      #?(:clj [clojure.data.priority-map :as priority-map]
         :cljs [tailrecursion.priority-map :as priority-map])))
