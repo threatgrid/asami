@@ -17,13 +17,13 @@
     (get-id [this] id)
 
     (get-byte [this offset]
-      (.get bb (+ byte-offset offset)))
+      (.get ^ByteBuffer bb (+ byte-offset offset)))
 
     (get-int [this offset]
-      (.get ib (+ int-offset offset)))
+      (.get ^IntBuffer ib (+ int-offset offset)))
 
     (get-long [this offset]
-      (.get lb (+ long-offset offset)))
+      (.get ^LongBuffer lb (+ long-offset offset)))
 
     (get-bytes [this offset len]
       (let [^ByteBuffer tbb (.duplicate bb)
@@ -56,38 +56,38 @@
         arr))
 
     (put-byte! [this offset v]
-      (.put bb (+ byte-offset offset) v)
+      (.put ^ByteBuffer bb (+ byte-offset offset) v)
       this)
 
     (put-int! [this offset v]
-      (.put ib (+ int-offset offset) v)
+      (.put ^IntBuffer ib (+ int-offset offset) v)
       this)
 
     (put-long! [this offset v]
-      (.put lb (+ long-offset offset) v)
+      (.put ^LongBuffer lb (+ long-offset offset) v)
       this)
 
     ;; a single writer allows for position/put
 
     (put-bytes! [this offset len the-bytes]
-      (doto bb (.position (+ byte-offset offset)) (.put the-bytes 0 len))
+      (doto ^ByteBuffer bb (.position (+ byte-offset offset)) (.put the-bytes 0 len))
       this)
 
     (put-ints! [this offset len the-ints]
-      (doto ib (.position (+ int-offset offset)) (.put the-ints 0 len))
+      (doto ^IntBuffer ib (.position (+ int-offset offset)) (.put the-ints 0 len))
       this)
 
     (put-longs! [this offset len the-longs]
-      (doto lb (.position (+ long-offset offset)) (.put the-longs 0 len))
+      (doto ^LongBuffer lb (.position (+ long-offset offset)) (.put the-longs 0 len))
       this)
 
     (put-block!
       [this offset src src-offset length]
       (let [sbb (:bb src)]
-        (doto sbb
+        (doto ^ByteBuffer sbb
           (.position src-offset)
           (.limit (+ src-offset length)))
-        (doto bb
+        (doto ^ByteBuffer bb
           (.position (+ byte-offset offset))
           (.put sbb src-offset length)))
       this)
@@ -98,7 +98,7 @@
 
     (copy-over!
       [dest src offset]
-      (put-block! dest 0 src offset (.capacity bb))))
+      (put-block! dest 0 src offset (.capacity ^ByteBuffer bb))))
 
 
 (defn- new-block

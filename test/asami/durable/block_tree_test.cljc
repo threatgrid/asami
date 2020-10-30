@@ -403,12 +403,16 @@
     (five-node-right-test bm [3 5 1 9 7])))
 
 
-(def pseudo-random (mapcat (fn [n] (take 256 (iterate (fn [x] (mod (+ n (* 53 (- x n))) 1024)) (+ n 113)))) (range 4)))
+(def pseudo-random (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113))))
 
-#_(deftest large-tree
+(deftest large-tree
   (let [bm (create-block-manager "large.avl" (+ header-size Long/BYTES))
         empty-tree (new-block-tree bm nil long-compare)
-        tree (reduce (fn [t v] (add t v long-writer)) empty-tree pseudo-random)
+        c (volatile! 0)
+        tree (reduce (fn [t v]
+                       (println (str "insert #" (vswap! c inc)))
+                       (add t v long-writer))
+                     empty-tree pseudo-random)
         _ (println "INSERTED")
         node0 (find-node tree 0)]
     (is (= (range 1024) (node-seq bm node0)))))

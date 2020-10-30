@@ -3,7 +3,8 @@
     asami.durable.tree
   (:require [asami.durable.block.block-api :refer [get-id get-long put-long! put-bytes! get-bytes
                                                    allocate-block! get-block get-block-size
-                                                   write-block copy-to-tx]]))
+                                                   write-block copy-to-tx]]
+            [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const left -1)
 (def ^:const right 1)
@@ -13,6 +14,8 @@
 (def ^:const balance-bitshift 62)
 
 (def ^:const header-size (* 2 #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT)))
+
+(def ^:const node-cache-size 1024)
 
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
@@ -89,7 +92,14 @@
   ([block-manager id]
    (get-node id nil))
   ([block-manager id parent]
-   (->Node (get-block block-manager id) parent)))
+   (let [cache (:node-cache block-manager)]
+     (if-let [node (lookup @cache id)]
+       (do
+         (swap! cache hit id)
+         node)
+       (let [node (->Node (get-block block-manager id) parent)]
+         (swap! cache miss id node)
+         node)))))
 
 (defn get-node-id
   [node]
@@ -268,4 +278,5 @@
                                 (comparator data-a (get-bytes block-b header-size data-size))))
          node-comparator (fn [node-a node-b]
                            (block-comparator (get-node-block node-a) (get-node-block node-b)))]
-     (->Tree nil block-comparator node-comparator block-manager))))
+     (->Tree nil block-comparator node-comparator
+             (assoc block-manager :node-cache (atom (lru-cache-factory {} :threshold node-cache-size)))))))

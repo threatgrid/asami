@@ -4,12 +4,16 @@
   (:require [clojure.java.io :as io]
             [asami.durable.block.block-api :refer [BlockManager copy-over! copy-block! allocate-block! get-id]]
             [asami.durable.block.bufferblock :refer [create-block]]
-            [asami.durable.block.file.voodoo :as voodoo])
+            [asami.durable.block.file.voodoo :as voodoo]
+            [asami.durable.cache :refer [lookup hit miss lru-cache-factory]])
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer IntBuffer LongBuffer MappedByteBuffer]
-           [java.nio.channels FileChannel FileChannel$MapMode]))
+           [java.nio.channels FileChannel FileChannel$MapMode]
+           [java.lang.ref SoftReference]))
 
 (def region-size (* 8 1024 1024))
+
+(def cache-size 1024)
 
 (def retries 3)
 
@@ -220,9 +224,19 @@
   (write-block [this block] this)
 
   (get-block [this id]
-    (if (and (= null id) (= (:next-id @state) -1))  ;; asking for the null block on an empty file
-      (allocate-block! this)
-      (block-for (:block-file @state) id)))
+    (let [s (deref state)]
+      (if (and (= null id) (= (:next-id s) -1)) ;; asking for the null block on an empty file
+        (allocate-block! this)
+        (let [^SoftReference block-ref (lookup (:block-cache s) id)]
+          (if-let [block (and block-ref
+                              (if-let [b (.get block-ref)]
+                                (do
+                                  (vswap! state update :block-cache hit id)
+                                  b)))]
+            block
+            (let [block (block-for (:block-file s) id)]
+              (vswap! state update :block-cache miss id (SoftReference. block))
+              block))))))
 
   (get-block-size [this]
     (:block-size (:block-file @state)))
@@ -251,4 +265,5 @@
         next-id (dec (:nr-blocks block-file))]
     (->ManagedBlockFile (volatile! {:block-file block-file
                                     :next-id next-id
-                                    :commit-point next-id}))))
+                                    :commit-point next-id
+                                    :block-cache (lru-cache-factory {} :threshold cache-size)}))))
