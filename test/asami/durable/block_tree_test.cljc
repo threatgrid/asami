@@ -2,8 +2,8 @@
       :author "Paula Gearon"}
     asami.durable.block-tree-test
   (:require [asami.durable.tree :refer [header-size left-offset right-offset left-mask null left right
-                                        new-block-tree find-node add get-node-block get-child node-seq
-                                        get-node-id get-balance]]
+                                        new-block-tree find-node add get-child node-seq node-str get-node
+                                        get-balance]]
             [asami.durable.test-utils :refer [get-filename]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
@@ -21,29 +21,29 @@
 
 (def cntr (atom nil))
 (defn long-compare
-  [a b-block]
+  [a node]
   #_(when @cntr
     (println (str "(compare " a " " (get-long b-block header-size) ") => " (compare a (get-long b-block header-size))))
     (if (> (swap! cntr inc) 10000)
       (throw (ex-info "Too deep" {}))))
-  (compare a (get-long b-block header-size)))
+  (compare a (get-long node 0)))
 
 (defn long-writer
-  [block hdr i]
-  (put-long! block hdr i))
+  [node hdr i]
+  (put-long! node (bit-shift-right hdr 3) i))
 
 ;; utilities for looking in blocks
 (defn get-left-id
   [node]
-  (bit-and left-mask (get-long (get-node-block node) left-offset)))
+  (bit-and left-mask (get-long (:block node) left-offset)))
 
 (defn get-right-id
   [node]
-  (get-long (get-node-block node) right-offset))
+  (get-long (:block node) right-offset))
 
 (defn get-data
   [node]
-  (get-long (get-node-block node) header-size))
+  (get-long node 0))
 
 (deftest create-tree
   (let [bm (create-block-manager "create.avl" (+ header-size Long/BYTES))
@@ -90,7 +90,7 @@
     (is (= f3 (:root tree)))
     (is (= 3 (get-data f3)))
     (is (= left (get-balance f3)))
-    (is (= (get-node-id f1) (get-left-id f3)))
+    (is (= (get-id f1) (get-left-id f3)))
     (is (= null (get-right-id f3)))
 
     (is (= [f3 nil] f4))))
@@ -124,8 +124,8 @@
     (is (= f3 (:root tree)))
     (is (= 3 (get-data f3)))
     (is (= 0 (get-balance f3)))
-    (is (= (get-node-id f1) (get-left-id f3)))
-    (is (= (get-node-id f5) (get-right-id f3)))
+    (is (= (get-id f1) (get-left-id f3)))
+    (is (= (get-id f5) (get-right-id f3)))
 
     (is (= [f3 f5] f4))
 
@@ -154,8 +154,8 @@
     (is (= f3 (:root tree)))
     (is (= 3 (get-data f3)))
     (is (= 0 (get-balance f3)))
-    (is (= (get-node-id f1) (get-left-id f3)))
-    (is (= (get-node-id f5) (get-right-id f3)))
+    (is (= (get-id f1) (get-left-id f3)))
+    (is (= (get-id f5) (get-right-id f3)))
 
     (is (= [f3 f5] f4))
 
@@ -228,8 +228,8 @@
 
     (is (= 3 (get-data f3)))
     (is (= 0 (get-balance f3)))
-    (is (= (get-node-id f1) (get-left-id f3)))
-    (is (= (get-node-id f5) (get-right-id f3)))
+    (is (= (get-id f1) (get-left-id f3)))
+    (is (= (get-id f5) (get-right-id f3)))
 
     (is (= [f3 f5] f4))
 
@@ -243,8 +243,8 @@
     (is (= f7 (:root tree)))
     (is (= 7 (get-data f7)))
     (is (= left (get-balance f7)))
-    (is (= (get-node-id f3) (get-left-id f7)))
-    (is (= (get-node-id f9) (get-right-id f7)))
+    (is (= (get-id f3) (get-left-id f7)))
+    (is (= (get-id f9) (get-right-id f7)))
 
     (is (= [f7 f9] f8))
     (is (= 9 (get-data f9)))
@@ -325,8 +325,8 @@
     (is (= f3 (:root tree)))
     (is (= 3 (get-data f3)))
     (is (= right (get-balance f3)))
-    (is (= (get-node-id f1) (get-left-id f3)))
-    (is (= (get-node-id f7) (get-right-id f3)))
+    (is (= (get-id f1) (get-left-id f3)))
+    (is (= (get-id f7) (get-right-id f3)))
 
     (is (= [f3 f5] f4))
 
@@ -339,8 +339,8 @@
 
     (is (= 7 (get-data f7)))
     (is (= 0 (get-balance f7)))
-    (is (= (get-node-id f5) (get-left-id f7)))
-    (is (= (get-node-id f9) (get-right-id f7)))
+    (is (= (get-id f5) (get-left-id f7)))
+    (is (= (get-id f9) (get-right-id f7)))
 
     (is (= [f7 f9] f8))
     (is (= 9 (get-data f9)))
@@ -403,42 +403,47 @@
     (five-node-right-test bm [3 5 1 9 7])))
 
 
-(def pseudo-random (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113))))
+(def pseudo-random (take 7 (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113)))))
+
+(defn print-structure
+  "This function is only used for debugging the tree structure"
+  [tree]
+  (letfn [(print-node [n]
+            (println ">>> ID:" (get-id n) " DATA:" (get-data n))
+            (let [l (get-left-id n)
+                  r (get-right-id n)]
+              (println "LEFT/RIGHT: " l "/" r)
+              (when-not (= null l)
+                (println "LEFT")
+                (print-node (get-child n tree left)))
+              (when-not (= null r)
+                (println "RIGHT")
+                (print-node (get-child n tree right)))
+              (println "----end" (get-id n))))]
+
+    (let [r (:root tree)]
+      (println "^^^^^^^^^")
+      (println "ROOT DATA: " (get-data r))
+      (println "ROOT ID: " (get-id r))
+      (println)
+      (print-node r))))
+
 
 (deftest large-tree
   (let [bm (create-block-manager "large.avl" (+ header-size Long/BYTES))
         empty-tree (new-block-tree bm nil long-compare)
         c (volatile! 0)
         tree (reduce (fn [t v]
+                       (when (> @c 3) (println "=============" (node-str (get-node t 3))))
                        (println (str "insert #" (vswap! c inc)))
                        (add t v long-writer))
                      empty-tree pseudo-random)
+        _ (println "=============" (node-str (get-node tree 3)))
         _ (println "INSERTED")
         node0 (find-node tree 0)]
-    (is (= (range 1024) (node-seq bm node0)))))
-
-(comment
-  (defn print-structure
-    "This function is only used for debugging the tree structure"
-    [tree bm]
-    (letfn [(print-node [n]
-              (println ">>> ID:" (get-node-id n) " DATA:" (get-data n))
-              (let [l (get-left-id n)
-                    r (get-right-id n)]
-                (println "LEFT/RIGHT: " l "/" r)
-                (when-not (= null l)
-                  (println "LEFT")
-                  (print-node (get-child n bm left)))
-                (when-not (= null r)
-                  (println "RIGHT")
-                  (print-node (get-child n bm right)))
-                (println "----end" (get-node-id n))))]
-
-      (let [r (:root tree)]
-        (println "^^^^^^^^^")
-        (println "ROOT DATA: " (get-data r))
-        (println "ROOT ID: " (get-node-id r))
-        (println)
-        (print-node r)))))
+    (print-structure tree)
+    #_(is (= (sort pseudo-random) (node-seq tree node0)))
+    #_(is (= (range 1024) (node-seq bm node0)))
+    ))
 
 

@@ -1,7 +1,12 @@
 (ns ^{:doc "This namespace provides the basic mechanisms for AVL trees"
       :author "Paula Gearon"}
     asami.durable.tree
-  (:require [asami.durable.block.block-api :refer [get-id get-long put-long! put-bytes! get-bytes
+  (:require [asami.durable.block.block-api :refer [Block
+                                                   get-id get-byte get-int get-long
+                                                   get-bytes get-ints get-longs
+                                                   put-byte! put-int! put-long!
+                                                   put-bytes! put-ints! put-longs!
+                                                   put-block! copy-over!
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
@@ -15,18 +20,21 @@
 
 (def ^:const header-size (* 2 #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT)))
 
+(def ^:const header-size-int (bit-shift-right header-size 2))
+
+(def ^:const header-size-long (bit-shift-right header-size 3))
+
 (def ^:const node-cache-size 1024)
 
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
   (get-child-id [this side] "Gets the Node ID of the child on the given side")
-  (get-child [this block-manager side] "Gets the Node of the child on the given side")
+  (get-child [this tree side] "Gets the Node of the child on the given side")
   (set-child! [this side child] "Sets the ID of the child for the given side")
   (set-balance! [this balance] "Sets the balance of the node")
   (get-balance [this] "Retrieves the balance of the node")
-  (get-node-block [this] "Gets this node's underlying r/w block")
-  (write [this block-manager] "Persists the node to storage")
-  (copy-on-write [this block-manager] "Return a node that is writable in the current transaction"))
+  (write [this tree] "Persists the node to storage")
+  (copy-on-write [this tree] "Return a node that is writable in the current transaction"))
 
 (def ^:const left-offset "Offset of the left child, in longs" 0)
 (def ^:const right-offset "Offset of the right child, in longs" 1)
@@ -56,10 +64,10 @@
       (get-long block right-offset)))
 
   (get-child
-    [this block-manager side]
+    [this tree side]
     (let [child-id (get-child-id this side)]
       (if-not (= null child-id)
-        (assoc (get-node block-manager child-id this) :side side))))
+        (assoc (get-node tree child-id this) :side side))))
 
   (set-balance!
     [this balance]
@@ -73,46 +81,90 @@
   (get-balance [this]
     (bit-shift-right (get-long block left-offset) balance-bitshift))
 
-  (get-node-block [this] block)
-
-  (write [this block-manager]
+  (write [this {block-manager :block-manager}]
     (write-block block-manager block)
     this)
 
-  (copy-on-write [this block-manager]
+  (copy-on-write [this {block-manager :block-manager}]
     (let [new-block (copy-to-tx block-manager block)]
       (if-not (identical? new-block block)
         (->Node new-block (get-parent this))
-        this))))
+        this)))
 
-(defrecord Tree [root block-comparator node-comparator block-manager])
+  Block
+  (get-id [this]
+    (get-id block))
+
+  (get-byte [this offset]
+    (get-byte block (+ header-size offset)))
+
+  (get-int [this offset]
+    (get-int block (+ header-size-int offset)))
+
+  (get-long [this offset]
+    (get-long block (+ header-size-long offset)))
+
+  (get-bytes [this offset len]
+    (get-bytes block (+ header-size offset) len))
+
+  (get-ints [this offset len]
+    (get-ints block (+ header-size-int offset) len))
+
+  (get-longs [this offset len]
+    (get-longs block (+ header-size-long offset) len))
+
+  (put-byte! [this offset value]
+    (put-byte! block (+ header-size offset) value))
+
+  (put-int! [this offset value]
+    (put-int! block (+ header-size-int offset) value))
+
+  (put-long! [this offset value]
+    (put-long! block (+ header-size-long offset) value))
+
+  (put-bytes! [this offset len values]
+    (put-bytes! block (+ header-size offset) len values))
+
+  (put-ints! [this offset len values]
+    (put-ints! block (+ header-size-int offset) len values))
+
+  (put-longs! [this offset len values]
+    (put-longs! block (+ header-size-long offset) len values))
+
+  (put-block! [this offset src]
+    (put-block! block (+ header-size offset) src))
+
+  (put-block! [this offset src src-offset length]
+    (put-block! block (+ header-size offset) src src-offset length))
+
+  (copy-over! [this src src-offset]
+    (throw (ex-info "Unsupported Operation" {}))))
+
+(defrecord Tree [root node-comparator block-manager node-cache])
 
 (defn get-node
   "Returns a node object for a given ID"
-  ([block-manager id]
-   (get-node id nil))
-  ([block-manager id parent]
-   (let [cache (:node-cache block-manager)]
-     (if-let [node (lookup @cache id)]
-       (do
-         (swap! cache hit id)
-         node)
-       (let [node (->Node (get-block block-manager id) parent)]
-         (swap! cache miss id node)
-         node)))))
-
-(defn get-node-id
-  [node]
-  (get-id (get-node-block node)))
+  ([tree id]
+   (get-node tree id nil))
+  ([{:keys [block-manager node-cache] :as tree} id parent]
+   (if-let [node (lookup @node-cache id)]
+     (do
+       (swap! node-cache hit id)
+       node)
+     (let [node (->Node (get-block block-manager id) parent)]
+       (swap! node-cache miss id node)
+       node))))
 
 (defn new-node
   "Returns a new node object"
-  ([block-manager]
-   (new-node block-manager nil nil nil))
-  ([block-manager data writer]
-   (new-node block-manager data nil writer))
-  ([block-manager data parent writer]
+  ([tree]
+   (new-node tree nil nil nil))
+  ([tree data writer]
+   (new-node tree data nil writer))
+  ([{block-manager :block-manager} data parent writer]
    (let [block (allocate-block! block-manager)]
+     (when (= data 533)
+       (println (get-long block 0) (get-long block 1) (get-long block 2)))
      (when data
        (if writer
          (writer block header-size data)
@@ -127,13 +179,22 @@
 (defn other [s] (if (= s left) right left))
 
 ;; TODO REMOVE
-(defn get-data [node] (get-long (get-node-block node) header-size))
+(defn get-data [node] (get-long node 0))
+
+(defn node-str
+  [node]
+  (if node
+    (str (get-data node) " [id:" (get-id node) "]  L:" (get-child-id node left) "  R:" (get-child-id node right)
+         "  balance: " (get-balance node))
+    "NULL"))
+
+(defn side-name [side] (case side 1 "right" -1 "left" side))
 
 (defn rebalance!
   "Rebalance an AVL node. The root of the rebalance is returned unwritten, but all subnodes are written."
-  [block-manager node balance]
-  (letfn [(rwrite [n] (write n block-manager))
-          (rget-child [n s] (get-child n block-manager s))
+  [tree node balance]
+  (letfn [(rwrite [n] (write n tree))
+          (rget-child [n s] (get-child n tree s))
           (rebalance-ss! [side]
             (let [node-s (rget-child node side)
                   other-side (other side)]
@@ -143,12 +204,21 @@
               (set-balance! node-s 0))) ;; return node-s
           (rebalance-so! [side]
             (let [other-side (other side)
+                  _ (println "*** Rebalancing ***" (side-name side) "(other:" (side-name other-side))
                   node-s (rget-child node side)
                   node-so (rget-child node-s other-side)]
+              (println "node: " (node-str node))
+              (println "node-s: " (node-str node-s))
+              (println "node-so: " (node-str node-so))
+              (println " .... node-so-child: " (node-str (rget-child node-so side)))
               (set-child! node side (rget-child node-so other-side))
               (set-child! node-s other-side (rget-child node-so side))
               (set-child! node-so other-side node)
               (set-child! node-so side node-s)
+              (println ">> set children >>")
+              (println ">> node: " (node-str node))
+              (println ">> node-s: " (node-str node-s))
+              (println ">> node-so: " (node-str node-so))
               (condp = (get-balance node-so)
                 other-side (do
                              (set-balance! node 0)
@@ -159,6 +229,10 @@
                 (do
                   (set-balance! node 0)
                   (set-balance! node-s 0)))
+              (println "-- rebalanced --")
+              (println "-- node: " (node-str node))
+              (println "-- node-s: " (node-str node-s))
+              (println "-- node-so: >>> 0")
               (rwrite node)
               (rwrite node-s)
               (set-balance! node-so 0)))] ;; return node-so
@@ -176,11 +250,11 @@
   (if (> 0 n) (- n) n))
 
 (defn neighbor-node
-  [side block-manager node]
-  (if-let [child (get-child node block-manager side)]
+  [side tree node]
+  (if-let [child (get-child node tree side)]
     (let [other-side (other side)]
       (loop [n child]
-        (if-let [nchild (get-child n block-manager other-side)]
+        (if-let [nchild (get-child n tree other-side)]
           (recur nchild)
           n)))
     (loop [n node]
@@ -193,9 +267,12 @@
 (def prev-node (partial neighbor-node left))
 
 (defn node-seq
-  [block-manager node]
-  (when node
-    (cons node (lazy-seq (node-seq (next-node block-manager node))))))
+  [tree node]
+  (let [node (if (vector? node) (second node) node)
+        tree-node-seq (fn tree-node-seq' [n]
+                      (cons node
+                            (lazy-seq (tree-node-seq' (next-node tree n)))))]
+    (when node (tree-node-seq node))))
 
 (defn find-node
   "Finds a node in the tree using a key.
@@ -204,22 +281,22 @@
   node: the data was found
   vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
   The other (unneeded) node is represented by nil."
-  [{:keys [root block-comparator block-manager] :as tree} key]
-  (letfn [(compare-node [n] (block-comparator key (get-node-block n)))
+  [{:keys [root node-comparator] :as tree} key]
+  (letfn [(compare-node [n] (node-comparator key n))
           (find-node [n]
-            #_(println (str "Node: " (get-long (get-node-block n) header-size) "[id:" (get-node-id n) "]"))
+            #_(println (str "Node: " (get-long n header-size) "[id:" (get-id n) "]"))
             (let [c (compare-node n)]
               #_(println "Compare: " c)
               (if (zero? c)
                 n
                 (let [side (if (< c 0) left right)]
                   #_(println (if (= side left) "  <<<<" "      >>>>"))
-                  (if-let [child (get-child n block-manager side)]
+                  (if-let [child (get-child n tree side)]
                     (recur child)
                     ;; between this node, and the next/previous
                     (if (= side left)
-                      [(prev-node block-manager n) n]
-                      [n (next-node block-manager n)]))))))]
+                      [(prev-node tree n) n]
+                      [n (next-node tree n)]))))))]
     ;(println key " *****************************************************************")
     (and root (find-node root))))
 
@@ -227,29 +304,30 @@
   "Runs back up a branch to update and balance the branch for the transaction.
    node argument is a fully written branch of the tree.
    Returns the root of the tree."
-  [block-manager node deeper?]
+  [tree node deeper?]
   (if-let [oparent (get-parent node)]
-    (let [side (:side node) ;; these were set during the find operation
+    (let [_ (println "Inserting: " (node-str node))
+          side (:side node) ;; these were set during the find operation
           obalance (get-balance oparent)
-          parent (-> (copy-on-write oparent block-manager)
+          parent (-> (copy-on-write oparent tree)
                      (set-child! side node))
           [parent next-balance] (if deeper?
                                   (let [b (+ obalance side)]
                                     [(set-balance! parent b) b])
                                   [parent obalance])
           [new-branch ndeeper?] (if (= 2 (abs next-balance))
-                                  [(rebalance! block-manager parent next-balance) false]
+                                  [(rebalance! tree parent next-balance) false]
                                   [parent (and (zero? obalance) (not (zero? next-balance)))])]
-      (write new-branch block-manager)
+      (write new-branch tree)
       ;; check if there was change at this level
-      (if (= (get-node-id new-branch) (get-node-id oparent))
+      (if (= (get-id new-branch) (get-id oparent))
         (loop [n parent] (if-let [pn (get-parent n)] (recur pn) n)) ;; no change. Short circuit to the root
-        (recur block-manager new-branch ndeeper?)))
+        (recur tree new-branch ndeeper?)))
     node))
 
 (defn add
   "Adds data to the tree"
-  [{:keys [root block-manager] :as tree} data & [writer]]
+  [{:keys [root] :as tree} data & [writer]]
   (if-let [location (find-node tree data)]
     (if (vector? location)
       ;; one of the pair is a leaf node. Attach to the correct side of that node
@@ -257,26 +335,26 @@
             [side leaf-node] (if (or (nil? sl) (not= null (get-child-id sl left)))
                                [right fl]
                                [left sl])
-            node (write (new-node block-manager data leaf-node writer) block-manager)
-            parent-node (copy-on-write leaf-node block-manager)
+            node (write (new-node tree data leaf-node writer) tree)
+            _ (println "---------------------------")
+            _ (println "adding node: " (node-str node))
+            parent-node (copy-on-write leaf-node tree)
             pre-balance (get-balance parent-node)
-            parent-node (write (init-child! parent-node side node) block-manager)]
-        (assoc tree :root (add-to-root block-manager parent-node (zero? pre-balance))))
+            parent-node (write (init-child! parent-node side node) tree)]
+        (assoc tree :root (add-to-root tree parent-node (zero? pre-balance))))
       tree)
-    (assoc tree :root (write (new-node block-manager data writer) block-manager))))
+    (assoc tree :root (write (new-node tree data writer) tree))))
 
 (defn new-block-tree
   "Creates an empty block tree"
   ([block-manager comparator]
    (new-block-tree block-manager comparator nil))
-  ([block-manager comparator block-comparator]
+  ([block-manager comparator node-comparator]
    (if-not (get-block block-manager null)
      (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
    (let [data-size (- (get-block-size block-manager) header-size)
-         block-comparator (or block-comparator
+         node-comparator (or node-comparator
                               (fn [data-a block-b]
-                                (comparator data-a (get-bytes block-b header-size data-size))))
-         node-comparator (fn [node-a node-b]
-                           (block-comparator (get-node-block node-a) (get-node-block node-b)))]
-     (->Tree nil block-comparator node-comparator
-             (assoc block-manager :node-cache (atom (lru-cache-factory {} :threshold node-cache-size)))))))
+                                (comparator data-a (get-bytes block-b header-size data-size))))]
+     (->Tree nil node-comparator block-manager
+             (atom (lru-cache-factory {} :threshold node-cache-size))))))
