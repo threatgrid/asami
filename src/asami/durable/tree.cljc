@@ -176,18 +176,6 @@
 
 (defn other [s] (if (= s left) right left))
 
-;; TODO REMOVE
-(defn get-data [node] (get-long node 0))
-
-(defn node-str
-  [node]
-  (if node
-    (str (get-data node) " [id:" (get-id node) "]  L:" (get-child-id node left) "  R:" (get-child-id node right)
-         "  balance: " (get-balance node) " parent: " (if-let [p (:parent node)] (str "id: " (get-id p)) "NULL"))
-    "NULL"))
-
-(defn side-name [side] (case side 1 "right" -1 "left" side))
-
 (defn rebalance!
   "Rebalance an AVL node. The root of the rebalance is returned unwritten, but all subnodes are written."
   [tree node balance]
@@ -326,14 +314,16 @@
 
 (defn new-block-tree
   "Creates an empty block tree"
-  ([block-manager comparator]
-   (new-block-tree block-manager comparator nil))
-  ([block-manager comparator node-comparator]
+  ([block-manager root-id comparator]
+   (new-block-tree block-manager root-id comparator nil))
+  ([block-manager root-id comparator node-comparator]
    (if-not (get-block block-manager null)
      (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
    (let [data-size (- (get-block-size block-manager) header-size)
          node-comparator (or node-comparator
                               (fn [data-a block-b]
-                                (comparator data-a (get-bytes block-b header-size data-size))))]
-     (->Tree nil node-comparator block-manager
+                                (comparator data-a (get-bytes block-b header-size data-size))))
+         root (if (and root-id (not= null root-id))
+                (->Node (get-block block-manager root-id) nil))]
+     (->Tree root node-comparator block-manager
              (atom (lru-cache-factory {} :threshold node-cache-size))))))
