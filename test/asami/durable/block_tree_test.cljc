@@ -417,6 +417,11 @@
     (five-node-right-test bm [3 5 1 9 7])))
 
 
+;; create 1024 distinct random-ish and repeatable numbers from 0 to 1023
+;; builds a cycle in a mod 4096 space using 2 primes.
+;; Because the low-order bits of the 2 primes are 2r01 then all numbers end in 2r01.
+;; This means that the cycle is 4096/4 = 1024.
+;; Truncate these bits to get our random stream.
 (def pseudo-random (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113))))
 
 (deftest large-tree
