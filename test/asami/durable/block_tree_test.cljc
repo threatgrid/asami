@@ -403,47 +403,40 @@
     (five-node-right-test bm [3 5 1 9 7])))
 
 
-(def pseudo-random (take 7 (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113)))))
-
-(defn print-structure
-  "This function is only used for debugging the tree structure"
-  [tree]
-  (letfn [(print-node [n]
-            (println ">>> ID:" (get-id n) " DATA:" (get-data n))
-            (let [l (get-left-id n)
-                  r (get-right-id n)]
-              (println "LEFT/RIGHT: " l "/" r)
-              (when-not (= null l)
-                (println "LEFT")
-                (print-node (get-child n tree left)))
-              (when-not (= null r)
-                (println "RIGHT")
-                (print-node (get-child n tree right)))
-              (println "----end" (get-id n))))]
-
-    (let [r (:root tree)]
-      (println "^^^^^^^^^")
-      (println "ROOT DATA: " (get-data r))
-      (println "ROOT ID: " (get-id r))
-      (println)
-      (print-node r))))
-
+(def pseudo-random (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113))))
 
 (deftest large-tree
   (let [bm (create-block-manager "large.avl" (+ header-size Long/BYTES))
         empty-tree (new-block-tree bm nil long-compare)
         c (volatile! 0)
         tree (reduce (fn [t v]
-                       (when (> @c 3) (println "=============" (node-str (get-node t 3))))
-                       (println (str "insert #" (vswap! c inc)))
                        (add t v long-writer))
                      empty-tree pseudo-random)
-        _ (println "=============" (node-str (get-node tree 3)))
-        _ (println "INSERTED")
         node0 (find-node tree 0)]
-    (print-structure tree)
-    #_(is (= (sort pseudo-random) (node-seq tree node0)))
-    #_(is (= (range 1024) (node-seq bm node0)))
-    ))
+    ;; (print-structure tree)
+    (is (= (range 1024) (map get-data (node-seq tree node0))))))
 
 
+(comment
+  (defn print-structure
+    "This function is only used for debugging the tree structure"
+    [tree]
+    (letfn [(print-node [n]
+              (println ">>> ID:" (get-id n) " DATA:" (get-data n))
+              (let [l (get-left-id n)
+                    r (get-right-id n)]
+                (println "LEFT/RIGHT: " l "/" r)
+                (when-not (= null l)
+                  (println "LEFT")
+                  (print-node (get-child n tree left)))
+                (when-not (= null r)
+                  (println "RIGHT")
+                  (print-node (get-child n tree right)))
+                (println "----end" (get-id n))))]
+
+      (let [r (:root tree)]
+        (println "^^^^^^^^^")
+        (println "ROOT DATA: " (get-data r))
+        (println "ROOT ID: " (get-id r))
+        (println)
+        (print-node r)))))

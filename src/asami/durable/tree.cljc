@@ -150,7 +150,7 @@
    (if-let [node (lookup @node-cache id)]
      (do
        (swap! node-cache hit id)
-       node)
+       (assoc node :parent parent))
      (let [node (->Node (get-block block-manager id) parent)]
        (swap! node-cache miss id node)
        node))))
@@ -163,8 +163,6 @@
    (new-node tree data nil writer))
   ([{block-manager :block-manager} data parent writer]
    (let [block (allocate-block! block-manager)]
-     (when (= data 533)
-       (println (get-long block 0) (get-long block 1) (get-long block 2)))
      (when data
        (if writer
          (writer block header-size data)
@@ -185,7 +183,7 @@
   [node]
   (if node
     (str (get-data node) " [id:" (get-id node) "]  L:" (get-child-id node left) "  R:" (get-child-id node right)
-         "  balance: " (get-balance node))
+         "  balance: " (get-balance node) " parent: " (if-let [p (:parent node)] (str "id: " (get-id p)) "NULL"))
     "NULL"))
 
 (defn side-name [side] (case side 1 "right" -1 "left" side))
@@ -204,21 +202,12 @@
               (set-balance! node-s 0))) ;; return node-s
           (rebalance-so! [side]
             (let [other-side (other side)
-                  _ (println "*** Rebalancing ***" (side-name side) "(other:" (side-name other-side))
                   node-s (rget-child node side)
                   node-so (rget-child node-s other-side)]
-              (println "node: " (node-str node))
-              (println "node-s: " (node-str node-s))
-              (println "node-so: " (node-str node-so))
-              (println " .... node-so-child: " (node-str (rget-child node-so side)))
               (set-child! node side (rget-child node-so other-side))
               (set-child! node-s other-side (rget-child node-so side))
               (set-child! node-so other-side node)
               (set-child! node-so side node-s)
-              (println ">> set children >>")
-              (println ">> node: " (node-str node))
-              (println ">> node-s: " (node-str node-s))
-              (println ">> node-so: " (node-str node-so))
               (condp = (get-balance node-so)
                 other-side (do
                              (set-balance! node 0)
@@ -229,10 +218,6 @@
                 (do
                   (set-balance! node 0)
                   (set-balance! node-s 0)))
-              (println "-- rebalanced --")
-              (println "-- node: " (node-str node))
-              (println "-- node-s: " (node-str node-s))
-              (println "-- node-so: >>> 0")
               (rwrite node)
               (rwrite node-s)
               (set-balance! node-so 0)))] ;; return node-so
@@ -270,8 +255,9 @@
   [tree node]
   (let [node (if (vector? node) (second node) node)
         tree-node-seq (fn tree-node-seq' [n]
-                      (cons node
-                            (lazy-seq (tree-node-seq' (next-node tree n)))))]
+                        (when n
+                          (cons n
+                                (lazy-seq (tree-node-seq' (next-node tree n))))))]
     (when node (tree-node-seq node))))
 
 (defn find-node
@@ -284,20 +270,16 @@
   [{:keys [root node-comparator] :as tree} key]
   (letfn [(compare-node [n] (node-comparator key n))
           (find-node [n]
-            #_(println (str "Node: " (get-long n header-size) "[id:" (get-id n) "]"))
             (let [c (compare-node n)]
-              #_(println "Compare: " c)
               (if (zero? c)
                 n
                 (let [side (if (< c 0) left right)]
-                  #_(println (if (= side left) "  <<<<" "      >>>>"))
                   (if-let [child (get-child n tree side)]
                     (recur child)
                     ;; between this node, and the next/previous
                     (if (= side left)
                       [(prev-node tree n) n]
                       [n (next-node tree n)]))))))]
-    ;(println key " *****************************************************************")
     (and root (find-node root))))
 
 (defn add-to-root
@@ -306,8 +288,7 @@
    Returns the root of the tree."
   [tree node deeper?]
   (if-let [oparent (get-parent node)]
-    (let [_ (println "Inserting: " (node-str node))
-          side (:side node) ;; these were set during the find operation
+    (let [side (:side node) ;; these were set during the find operation
           obalance (get-balance oparent)
           parent (-> (copy-on-write oparent tree)
                      (set-child! side node))
@@ -336,8 +317,6 @@
                                [right fl]
                                [left sl])
             node (write (new-node tree data leaf-node writer) tree)
-            _ (println "---------------------------")
-            _ (println "adding node: " (node-str node))
             parent-node (copy-on-write leaf-node tree)
             pre-balance (get-balance parent-node)
             parent-node (write (init-child! parent-node side node) tree)]
