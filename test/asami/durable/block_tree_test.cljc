@@ -19,13 +19,8 @@
      ;; TODO: create ClojureScript block manager
      ))
 
-(def cntr (atom nil))
 (defn long-compare
   [a node]
-  #_(when @cntr
-    (println (str "(compare " a " " (get-long b-block header-size) ") => " (compare a (get-long b-block header-size))))
-    (if (> (swap! cntr inc) 10000)
-      (throw (ex-info "Too deep" {}))))
   (compare a (get-long node 0)))
 
 (defn long-writer
@@ -408,7 +403,6 @@
 (deftest large-tree
   (let [bm (create-block-manager "large.avl" (+ header-size Long/BYTES))
         empty-tree (new-block-tree bm nil long-compare)
-        c (volatile! 0)
         tree (reduce (fn [t v]
                        (add t v long-writer))
                      empty-tree pseudo-random)
