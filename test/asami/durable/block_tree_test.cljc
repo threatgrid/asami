@@ -58,13 +58,13 @@
 
 (deftest create-tree
   (let [bm (create-block-manager "create.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm nil nil long-compare)
+        empty-tree (new-block-tree bm long-compare)
         f (find-node empty-tree 1)]
     (is (nil? f))))
 
 (deftest insert-node
   (let [bm (create-block-manager "one.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm nil nil long-compare)
+        empty-tree (new-block-tree bm long-compare)
         tree (add empty-tree 2 long-writer)
         f1 (find-node tree 1)
         f2 (find-node tree 2)
@@ -81,7 +81,7 @@
 ;; 1
 (deftest insert-left
   (let [bm (create-block-manager "two.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm nil nil long-compare)
+        empty-tree (new-block-tree bm long-compare)
         tree (add empty-tree 3 long-writer)
         tree (add tree 1 long-writer)
         f0 (find-node tree 0)
@@ -112,7 +112,7 @@
 ;; 1   5
 (deftest insert-nodes
   (let [bm (create-block-manager "three.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm nil nil long-compare)
+        empty-tree (new-block-tree bm long-compare)
         tree (add empty-tree 3 long-writer)
         tree (add tree 1 long-writer)
         tree (add tree 5 long-writer)
@@ -149,7 +149,7 @@
 
 (defn triple-node-test
   [bm vs]
-  (let [empty-tree (new-block-tree bm nil nil long-compare)
+  (let [empty-tree (new-block-tree bm long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6] (map (partial find-node tree) (range 7))]
 
@@ -225,7 +225,7 @@
 
 (defn five-node-left-test
   [bm vs]
-  (let [empty-tree (new-block-tree bm nil nil long-compare)
+  (let [empty-tree (new-block-tree bm long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -322,7 +322,7 @@
 
 (defn five-node-right-test
   [bm vs]
-  (let [empty-tree (new-block-tree bm nil nil long-compare)
+  (let [empty-tree (new-block-tree bm long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -426,7 +426,7 @@
 
 (deftest large-tree
   (let [bm (create-block-manager "large.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm nil nil long-compare)
+        empty-tree (new-block-tree bm long-compare)
         tree (reduce (fn [t v]
                        (add t v long-writer))
                      empty-tree pseudo-random)
@@ -441,7 +441,7 @@
     (is (= (* (inc (count pseudo-random)) 3 long-bytes) (.length block-file)))
 
     (let [bm2 (create-block-manager "large.avl" (+ header-size long-bytes) true)
-          new-tree (new-block-tree bm2 root-id nil long-compare)
+          new-tree (new-block-tree bm2 long-compare root-id)
           start-node (find-node new-tree 0)]
       (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node)))))))
 

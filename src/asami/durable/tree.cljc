@@ -163,12 +163,12 @@
    (new-node tree data nil writer))
   ([{:keys [block-manager node-cache]} data parent writer]
    (let [block (allocate-block! block-manager)]
-     (when data
-       (if writer
-         (writer block header-size data)
-         (put-bytes! block header-size (count data) data)))
      (let [node (->Node block parent)]
-       (swap! node-cache miss (get-id node) node)
+       (when data
+         (if writer
+           (writer node data)
+           (put-bytes! node 0 (count data) data)))
+       (swap! node-cache miss (get-id block) node)
        node))))
 
 (defn init-child!
@@ -316,15 +316,12 @@
 
 (defn new-block-tree
   "Creates an empty block tree"
-  ([block-manager root-id comparator]
-   (new-block-tree block-manager root-id comparator nil))
-  ([block-manager root-id comparator node-comparator]
+  ([block-manager node-comparator]
+   (new-block-tree block-manager node-comparator nil))
+  ([block-manager node-comparator root-id]
    (if-not (get-block block-manager null)
      (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
    (let [data-size (- (get-block-size block-manager) header-size)
-         node-comparator (or node-comparator
-                              (fn [data-a block-b]
-                                (comparator data-a (get-bytes block-b header-size data-size))))
          root (if (and root-id (not= null root-id))
                 (->Node (get-block block-manager root-id) nil))]
      (->Tree root node-comparator block-manager
