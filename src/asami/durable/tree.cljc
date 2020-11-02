@@ -161,13 +161,15 @@
    (new-node tree nil nil nil))
   ([tree data writer]
    (new-node tree data nil writer))
-  ([{block-manager :block-manager} data parent writer]
+  ([{:keys [block-manager node-cache]} data parent writer]
    (let [block (allocate-block! block-manager)]
      (when data
        (if writer
          (writer block header-size data)
          (put-bytes! block header-size (count data) data)))
-     (->Node block parent))))
+     (let [node (->Node block parent)]
+       (swap! node-cache miss (get-id node) node)
+       node))))
 
 (defn init-child!
   [node side child]
