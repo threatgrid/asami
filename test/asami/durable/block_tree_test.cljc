@@ -33,8 +33,8 @@
   (compare a (get-long node 0)))
 
 (defn long-writer
-  [node hdr i]
-  (put-long! node (bit-shift-right hdr 3) i))
+  [node i]
+  (put-long! node 0 i))
 
 ;; utilities for looking in blocks
 (defn get-left-id
