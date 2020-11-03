@@ -1,7 +1,8 @@
 (ns ^{:doc "This namespace provides the basic mechanisms for AVL trees"
       :author "Paula Gearon"}
     asami.durable.tree
-  (:require [asami.durable.block.block-api :refer [Block
+  (:require [asami.durable.block.block-api :as block-api
+                                           :refer [Block
                                                    get-id get-byte get-int get-long
                                                    get-bytes get-ints get-longs
                                                    put-byte! put-int! put-long!
@@ -9,6 +10,7 @@
                                                    put-block! copy-over!
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx]]
+            [asami.durable.transaction :refer [Transaction close]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const left -1)
@@ -140,7 +142,10 @@
   (copy-over! [this src src-offset]
     (throw (ex-info "Unsupported Operation" {}))))
 
-(defrecord Tree [root node-comparator block-manager node-cache])
+(defrecord Tree [root node-comparator block-manager node-cache]
+  Transaction
+  (close [this]
+    (block-api/close block-manager)))
 
 (defn get-node
   "Returns a node object for a given ID"
@@ -316,13 +321,14 @@
 
 (defn new-block-tree
   "Creates an empty block tree"
-  ([block-manager node-comparator]
-   (new-block-tree block-manager node-comparator nil))
-  ([block-manager node-comparator root-id]
-   (if-not (get-block block-manager null)
-     (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
-   (let [data-size (- (get-block-size block-manager) header-size)
-         root (if (and root-id (not= null root-id))
-                (->Node (get-block block-manager root-id) nil))]
-     (->Tree root node-comparator block-manager
-             (atom (lru-cache-factory {} :threshold node-cache-size))))))
+  ([block-manager-factory store-name data-size node-comparator]
+   (new-block-tree block-manager-factory store-name data-size node-comparator nil))
+  ([block-manager-factory store-name data-size node-comparator root-id]
+   (let [block-manager (block-manager-factory store-name (+ header-size data-size))]
+     (if-not (get-block block-manager null)
+       (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
+     (let [data-size (- (get-block-size block-manager) header-size)
+           root (if (and root-id (not= null root-id))
+                  (->Node (get-block block-manager root-id) nil))]
+       (->Tree root node-comparator block-manager
+               (atom (lru-cache-factory {} :threshold node-cache-size)))))))

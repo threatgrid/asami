@@ -6,7 +6,8 @@
                                         get-balance get-child-id]]
             [asami.durable.block.file.util :as util]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.block.block-api :refer [get-long put-long! get-id close]]
+            [asami.durable.transaction :refer [close]]
+            [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file]])))
 
@@ -27,6 +28,10 @@
      :cljs
      ;; TODO: create ClojureScript block manager
      ))
+
+(defn reopen-block-manager
+  [name block-size]
+  (create-block-manager name block-size true))
 
 (defn long-compare
   [a node]
@@ -57,14 +62,12 @@
     "NULL"))
 
 (deftest create-tree
-  (let [bm (create-block-manager "create.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm long-compare)
+  (let [empty-tree (new-block-tree create-block-manager "create.avl" long-bytes long-compare)
         f (find-node empty-tree 1)]
     (is (nil? f))))
 
 (deftest insert-node
-  (let [bm (create-block-manager "one.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm long-compare)
+  (let [empty-tree (new-block-tree create-block-manager "one.avl" long-bytes long-compare)
         tree (add empty-tree 2 long-writer)
         f1 (find-node tree 1)
         f2 (find-node tree 2)
@@ -80,8 +83,7 @@
 ;;  /
 ;; 1
 (deftest insert-left
-  (let [bm (create-block-manager "two.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm long-compare)
+  (let [empty-tree (new-block-tree create-block-manager "two.avl" long-bytes long-compare)
         tree (add empty-tree 3 long-writer)
         tree (add tree 1 long-writer)
         f0 (find-node tree 0)
@@ -111,8 +113,7 @@
 ;;  / \
 ;; 1   5
 (deftest insert-nodes
-  (let [bm (create-block-manager "three.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm long-compare)
+  (let [empty-tree (new-block-tree create-block-manager "three.avl" long-bytes long-compare)
         tree (add empty-tree 3 long-writer)
         tree (add tree 1 long-writer)
         tree (add tree 5 long-writer)
@@ -148,8 +149,8 @@
     (is (= [f5 nil] f6))))
 
 (defn triple-node-test
-  [bm vs]
-  (let [empty-tree (new-block-tree bm long-compare)
+  [nm vs]
+  (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6] (map (partial find-node tree) (range 7))]
 
@@ -175,8 +176,8 @@
     (is (= null (get-left-id f5)))
     (is (= null (get-right-id f5)))
 
-    (is (= [f5 nil] f6)))
-  (close bm))
+    (is (= [f5 nil] f6))
+    (close tree)))
 
 ;; build a tree of
 ;;     5
@@ -186,8 +187,7 @@
 ;; 1
 ;; This is LL heavy and rebalances with a Right Rotation
 (deftest rotate-right
-  (let [bm (create-block-manager "ll.avl" (+ header-size long-bytes))]
-    (triple-node-test bm [5 3 1])))
+  (triple-node-test "ll.avl" [5 3 1]))
 
 ;; build a tree of
 ;;     5
@@ -197,8 +197,7 @@
 ;;     3
 ;; This is LR heavy and rebalances with a Double Rotation
 (deftest double-rotate-right
-  (let [bm (create-block-manager "lr.avl" (+ header-size long-bytes))]
-    (triple-node-test bm [5 1 3])))
+  (triple-node-test "lr.avl" [5 1 3]))
 
 ;; build a tree of
 ;; 1
@@ -208,8 +207,7 @@
 ;;     5
 ;; This is RR heavy and rebalances with a Left Rotation
 (deftest rotate-left
-  (let [bm (create-block-manager "rr.avl" (+ header-size long-bytes))]
-    (triple-node-test bm [1 3 5])))
+  (triple-node-test "rr.avl" [1 3 5]))
 
 ;; build a tree of
 ;;     1
@@ -219,13 +217,12 @@
 ;;     3
 ;; This is RL heavy and rebalances with a Double Rotation
 (deftest double-rotate-left
-  (let [bm (create-block-manager "rl.avl" (+ header-size long-bytes))]
-    (triple-node-test bm [1 5 3])))
+  (triple-node-test "rl.avl" [1 5 3]))
 
 
 (defn five-node-left-test
-  [bm vs]
-  (let [empty-tree (new-block-tree bm long-compare)
+  [nm vs]
+  (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -264,8 +261,8 @@
     (is (= null (get-left-id f9)))
     (is (= null (get-right-id f9)))
 
-    (is (= [f9 nil] f10)))
-  (close bm))
+    (is (= [f9 nil] f10))
+    (close tree)))
 
 ;; build a tree of
 ;;       7
@@ -277,8 +274,7 @@
 ;; 1
 ;; This is LL heavy and rebalances with a Right Rotation
 (deftest left-deep-rotate-right
-  (let [bm (create-block-manager "ldll.avl" (+ header-size long-bytes))]
-    (five-node-left-test bm [7 9 5 3 1])))
+  (five-node-left-test "ldll.avl" [7 9 5 3 1]))
 
 ;; build a tree of
 ;;       7
@@ -290,8 +286,7 @@
 ;;         5
 ;; This is RR heavy and rebalances with a Left Rotation
 (deftest left-deep-rotate-left
-  (let [bm (create-block-manager "ldrr.avl" (+ header-size long-bytes))]
-    (five-node-left-test bm [7 9 1 3 5])))
+  (five-node-left-test "ldrr.avl" [7 9 1 3 5]))
 
 ;; build a tree of
 ;;       7
@@ -303,8 +298,7 @@
 ;;     3
 ;; This is LR heavy and rebalances with a double Rotation
 (deftest left-deep-double-rotate-right
-  (let [bm (create-block-manager "ldlr.avl" (+ header-size long-bytes))]
-    (five-node-left-test bm [7 9 5 1 3])))
+  (five-node-left-test "ldlr.avl" [7 9 5 1 3]))
 
 ;; build a tree of
 ;;       7
@@ -316,13 +310,12 @@
 ;;     3
 ;; This is RL heavy and rebalances with a double Rotation
 (deftest left-deep-double-rotate-left
-  (let [bm (create-block-manager "ldrl.avl" (+ header-size long-bytes))]
-    (five-node-left-test bm [7 9 1 5 3])))
+  (five-node-left-test "ldrl.avl" [7 9 1 5 3]))
 
 
 (defn five-node-right-test
-  [bm vs]
-  (let [empty-tree (new-block-tree bm long-compare)
+  [nm vs]
+  (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -361,8 +354,8 @@
     (is (= null (get-left-id f9)))
     (is (= null (get-right-id f9)))
 
-    (is (= [f9 nil] f10)))
-  (close bm))
+    (is (= [f9 nil] f10))
+    (close tree)))
 
 ;; build a tree of
 ;;       3
@@ -374,8 +367,7 @@
 ;;     5
 ;; This is LL heavy and rebalances with a Right Rotation
 (deftest right-deep-rotate-right
-  (let [bm (create-block-manager "rdll.avl" (+ header-size long-bytes))]
-    (five-node-right-test bm [3 1 9 7 5])))
+  (five-node-right-test "rdll.avl" [3 1 9 7 5]))
 
 ;; build a tree of
 ;;       3
@@ -387,8 +379,7 @@
 ;;             9
 ;; This is RR heavy and rebalances with a Left Rotation
 (deftest right-deep-rotate-left
-  (let [bm (create-block-manager "rdrr.avl" (+ header-size long-bytes))]
-    (five-node-right-test bm [3 1 5 7 9])))
+  (five-node-right-test "rdrr.avl" [3 1 5 7 9]))
 
 ;; build a tree of
 ;;       3
@@ -400,8 +391,7 @@
 ;;         7
 ;; This is LR heavy and rebalances with a double Rotation
 (deftest right-deep-double-rotate-right
-  (let [bm (create-block-manager "rdlr.avl" (+ header-size long-bytes))]
-    (five-node-right-test bm [3 9 1 5 7])))
+  (five-node-right-test "rdlr.avl" [3 9 1 5 7]))
 
 ;; build a tree of
 ;;       3
@@ -413,8 +403,7 @@
 ;;         7
 ;; This is RL heavy and rebalances with a double Rotation
 (deftest right-deep-double-rotate-left
-  (let [bm (create-block-manager "rdrl.avl" (+ header-size long-bytes))]
-    (five-node-right-test bm [3 5 1 9 7])))
+  (five-node-right-test "rdrl.avl" [3 5 1 9 7]))
 
 
 ;; create 1024 distinct random-ish and repeatable numbers from 0 to 1023
@@ -425,25 +414,24 @@
 (def pseudo-random (map #(bit-shift-right % 2) (take 1024 (iterate (fn [x] (mod (* 53 x) 4096)) 113))))
 
 (deftest large-tree
-  (let [bm (create-block-manager "large.avl" (+ header-size long-bytes))
-        empty-tree (new-block-tree bm long-compare)
+  (let [empty-tree (new-block-tree create-block-manager "large.avl" long-bytes long-compare)
         tree (reduce (fn [t v]
                        (add t v long-writer))
                      empty-tree pseudo-random)
         node0 (find-node tree 0)
         root-id (get-id (:root tree))
         ;; extract the file to check that it was truncated
-        block-file (:file (:block-file @(:state bm)))]
+        block-file (:file (:block-file @(:state (:block-manager tree))))]
     (is (= (range 1024) (map get-data (node-seq tree node0))))
 
-    (close bm)
+    (close tree)
     ;; check the truncated file length. Include the null node.
     (is (= (* (inc (count pseudo-random)) 3 long-bytes) (.length block-file)))
 
-    (let [bm2 (create-block-manager "large.avl" (+ header-size long-bytes) true)
-          new-tree (new-block-tree bm2 long-compare root-id)
+    (let [new-tree (new-block-tree reopen-block-manager "large.avl" long-bytes long-compare root-id)
           start-node (find-node new-tree 0)]
-      (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node)))))))
+      (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node))))
+      (close new-tree))))
 
 
 (comment
