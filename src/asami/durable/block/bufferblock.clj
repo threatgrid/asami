@@ -83,22 +83,22 @@
 
     (put-block!
       [this offset src src-offset length]
-      (let [sbb (:bb src)]
-        (doto ^ByteBuffer sbb
+      (let [sbb (.duplicate ^ByteBuffer (:bb src))]
+        (doto sbb
           (.position src-offset)
           (.limit (+ src-offset length)))
         (doto ^ByteBuffer bb
           (.position (+ byte-offset offset))
-          (.put sbb src-offset length)))
+          (.put sbb)))
       this)
 
     (put-block!
       [this offset src]
-      (put-block! this offset src 0 (.capacity ^ByteBuffer (:bb src))))
+      (put-block! this offset src 0 (:size src)))
 
     (copy-over!
       [dest src offset]
-      (put-block! dest 0 src offset (.capacity ^ByteBuffer bb))))
+      (put-block! dest 0 src offset size)))
 
 
 (defn- new-block

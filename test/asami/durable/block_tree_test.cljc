@@ -6,7 +6,7 @@
                                         get-balance get-child-id]]
             [asami.durable.block.file.util :as util]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.transaction :refer [close]]
+            [asami.durable.transaction :refer [close rewind! commit!]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file]])))
@@ -432,6 +432,21 @@
           start-node (find-node new-tree 0)]
       (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node))))
       (close new-tree))))
+
+(deftest test-tx
+  (let [empty-tree (new-block-tree create-block-manager "tx.avl" long-bytes long-compare)
+        add-all (partial reduce (fn [t v] (add t v long-writer)))
+        tree (add-all empty-tree (range 0 20 2)) 
+        tree (commit! tree)
+        node0 (find-node tree 0)
+        root-id (get-id (:root tree))
+        tree (add-all tree (range 1 21 2))
+        node-all0 (find-node tree 0)]
+    (is (= (range 0 20 2) (map get-data (node-seq tree node0))))
+    (is (= (range 20) (map get-data (node-seq tree node-all0))))
+
+    (close tree)))
+
 
 
 (comment

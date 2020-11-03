@@ -89,7 +89,7 @@
   (copy-on-write [this {block-manager :block-manager}]
     (let [new-block (copy-to-tx block-manager block)]
       (if-not (identical? new-block block)
-        (->Node new-block (get-parent this))
+        (assoc (->Node new-block (get-parent this)) :side (:side this))
         this)))
 
   Block
@@ -140,20 +140,6 @@
 
   (copy-over! [this src src-offset]
     (throw (ex-info "Unsupported Operation" {}))))
-
-(defrecord Tree [root rewind-root node-comparator block-manager node-cache]
-  Transaction
-
-  (rewind! [this]
-    (rewind! block-manager)
-    (assoc this :root rewind-root))
-
-  (commit! [this]
-    (commit! block-manager)
-    (assoc this :rewind-root root))
-  
-  (close [this]
-    (close block-manager)))
 
 (defn get-node
   "Returns a node object for a given ID"
@@ -263,28 +249,6 @@
                                 (lazy-seq (tree-node-seq' (next-node tree n))))))]
     (when node (tree-node-seq node))))
 
-(defn find-node
-  "Finds a node in the tree using a key.
-  returns one of:
-  null: an empty tree
-  node: the data was found
-  vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
-  The other (unneeded) node is represented by nil."
-  [{:keys [root node-comparator] :as tree} key]
-  (letfn [(compare-node [n] (node-comparator key n))
-          (find-node [n]
-            (let [c (compare-node n)]
-              (if (zero? c)
-                n
-                (let [side (if (< c 0) left right)]
-                  (if-let [child (get-child n tree side)]
-                    (recur child)
-                    ;; between this node, and the next/previous
-                    (if (= side left)
-                      [(prev-node tree n) n]
-                      [n (next-node tree n)]))))))]
-    (and root (find-node root))))
-
 (defn add-to-root
   "Runs back up a branch to update and balance the branch for the transaction.
    node argument is a fully written branch of the tree.
@@ -309,23 +273,62 @@
         (recur tree new-branch ndeeper?)))
     node))
 
-(defn add
-  "Adds data to the tree"
-  [{:keys [root] :as tree} data & [writer]]
-  (if-let [location (find-node tree data)]
-    (if (vector? location)
-      ;; one of the pair is a leaf node. Attach to the correct side of that node
-      (let [[fl sl] location
-            [side leaf-node] (if (or (nil? sl) (not= null (get-child-id sl left)))
-                               [right fl]
-                               [left sl])
-            node (write (new-node tree data leaf-node writer) tree)
-            parent-node (copy-on-write leaf-node tree)
-            pre-balance (get-balance parent-node)
-            parent-node (write (init-child! parent-node side node) tree)]
-        (assoc tree :root (add-to-root tree parent-node (zero? pre-balance))))
-      tree)
-    (assoc tree :root (write (new-node tree data writer) tree))))
+(defprotocol Tree
+  (find-node [this key]
+    "Finds a node in the tree using a key.
+    returns one of:
+    null: an empty tree
+    node: the data was found
+    vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
+    The other (unneeded) node is represented by nil.")
+  (add [this data writer]
+    "Adds data to the tree"))
+
+(defrecord TxTree [root rewind-root node-comparator block-manager node-cache]
+  Tree
+  (find-node [this key]
+    (letfn [(compare-node [n] (node-comparator key n))
+            (find-node [n]
+              (let [c (compare-node n)]
+                (if (zero? c)
+                  n
+                  (let [side (if (< c 0) left right)]
+                    (if-let [child (get-child n this side)]
+                      (recur child)
+                      ;; between this node, and the next/previous
+                      (if (= side left)
+                        [(prev-node this n) n]
+                        [n (next-node this n)]))))))]
+      (and root (find-node root))))
+
+  (add [this data writer]
+    (if-let [location (find-node this data)]
+      (if (vector? location)
+        ;; one of the pair is a leaf node. Attach to the correct side of that node
+        (let [[fl sl] location
+              [side leaf-node] (if (or (nil? sl) (not= null (get-child-id sl left)))
+                                 [right fl]
+                                 [left sl])
+              node (write (new-node this data leaf-node writer) this)
+              parent-node (copy-on-write leaf-node this)
+              pre-balance (get-balance parent-node)
+              parent-node (write (init-child! parent-node side node) this)]
+          (assoc this :root (add-to-root this parent-node (zero? pre-balance))))
+        this)
+      (assoc this :root (write (new-node this data writer) this))))
+
+  Transaction
+
+  (rewind! [this]
+    (rewind! block-manager)
+    (assoc this :root rewind-root))
+
+  (commit! [this]
+    (commit! block-manager)
+    (assoc this :rewind-root root))
+  
+  (close [this]
+    (close block-manager)))
 
 (defn new-block-tree
   "Creates an empty block tree"
@@ -338,5 +341,5 @@
      (let [data-size (- (get-block-size block-manager) header-size)
            root (if (and root-id (not= null root-id))
                   (->Node (get-block block-manager root-id) nil))]
-       (->Tree root root node-comparator block-manager
+       (->TxTree root root node-comparator block-manager
                (atom (lru-cache-factory {} :threshold node-cache-size)))))))
