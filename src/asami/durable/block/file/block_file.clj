@@ -2,6 +2,7 @@
       :author "Paula Gearon"}
   asami.durable.block.file.block-file
   (:require [clojure.java.io :as io]
+            [asami.durable.transaction :refer [Transaction rewind! commit! close]]
             [asami.durable.block.block-api :refer [BlockManager copy-over! copy-block! allocate-block! get-id]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo]
@@ -241,6 +242,12 @@
   (get-block-size [this]
     (:block-size (:block-file @state)))
   
+  (copy-to-tx [this block]
+    (if (<= (get-id block) (:commit-point @state))
+      (copy-block! this block)
+      block))
+
+  Transaction
   (rewind! [this]
     (vswap! state #(assoc % :next-id (:commit-point %)))
     this)
@@ -249,11 +256,6 @@
     (vswap! state #(assoc % :commit-point (:next-id %)))
     (force-file (:block-file @state))
     this)
-
-  (copy-to-tx [this block]
-    (if (<= (get-id block) (:commit-point @state))
-      (copy-block! this block)
-      block))
 
   (close [this]
     (let [{:keys [block-file next-id]} @state]

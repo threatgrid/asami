@@ -1,8 +1,7 @@
 (ns ^{:doc "This namespace provides the basic mechanisms for AVL trees"
       :author "Paula Gearon"}
     asami.durable.tree
-  (:require [asami.durable.block.block-api :as block-api
-                                           :refer [Block
+  (:require [asami.durable.block.block-api :refer [Block
                                                    get-id get-byte get-int get-long
                                                    get-bytes get-ints get-longs
                                                    put-byte! put-int! put-long!
@@ -10,7 +9,7 @@
                                                    put-block! copy-over!
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx]]
-            [asami.durable.transaction :refer [Transaction close]]
+            [asami.durable.transaction :refer [Transaction close rewind! commit!]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const left -1)
@@ -142,10 +141,19 @@
   (copy-over! [this src src-offset]
     (throw (ex-info "Unsupported Operation" {}))))
 
-(defrecord Tree [root node-comparator block-manager node-cache]
+(defrecord Tree [root rewind-root node-comparator block-manager node-cache]
   Transaction
+
+  (rewind! [this]
+    (rewind! block-manager)
+    (assoc this :root rewind-root))
+
+  (commit! [this]
+    (commit! block-manager)
+    (assoc this :rewind-root root))
+  
   (close [this]
-    (block-api/close block-manager)))
+    (close block-manager)))
 
 (defn get-node
   "Returns a node object for a given ID"
@@ -330,5 +338,5 @@
      (let [data-size (- (get-block-size block-manager) header-size)
            root (if (and root-id (not= null root-id))
                   (->Node (get-block block-manager root-id) nil))]
-       (->Tree root node-comparator block-manager
+       (->Tree root root node-comparator block-manager
                (atom (lru-cache-factory {} :threshold node-cache-size)))))))
