@@ -3,7 +3,7 @@
     asami.durable.block-tree-test
   (:require [asami.durable.tree :refer [header-size left-offset right-offset left-mask null left right
                                         new-block-tree find-node add get-child node-seq get-node
-                                        get-balance get-child-id]]
+                                        get-balance get-child-id at]]
             [asami.durable.block.file.util :as util]
             [asami.durable.test-utils :refer [get-filename]]
             [asami.durable.transaction :refer [close rewind! commit!]]
@@ -433,6 +433,8 @@
       (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node))))
       (close new-tree))))
 
+(declare print-structure)
+
 (deftest test-tx
   (let [empty-tree (new-block-tree create-block-manager "tx.avl" long-bytes long-compare)
         add-all (partial reduce (fn [t v] (add t v long-writer)))
@@ -441,34 +443,35 @@
         node0 (find-node tree 0)
         root-id (get-id (:root tree))
         tree (add-all tree (range 1 21 2))
-        node-all0 (find-node tree 0)]
+        node-all0 (find-node tree 0)
+        node0-again (find-node (at tree root-id) 0)]
     (is (= (range 0 20 2) (map get-data (node-seq tree node0))))
     (is (= (range 20) (map get-data (node-seq tree node-all0))))
+    (is (= (range 0 20 2) (map get-data (node-seq tree node0-again))))
 
     (close tree)))
 
 
 
-(comment
-  (defn print-structure
-    "This function is only used for debugging the tree structure"
-    [tree]
-    (letfn [(print-node [n]
-              (println ">>> ID:" (get-id n) " DATA:" (get-data n))
-              (let [l (get-left-id n)
-                    r (get-right-id n)]
-                (println "LEFT/RIGHT: " l "/" r)
-                (when-not (= null l)
-                  (println "LEFT")
-                  (print-node (get-child n tree left)))
-                (when-not (= null r)
-                  (println "RIGHT")
-                  (print-node (get-child n tree right)))
-                (println "----end" (get-id n))))]
+(defn print-structure
+  "This function is only used for debugging the tree structure"
+  [tree]
+  (letfn [(print-node [n]
+            (println ">>> ID:" (get-id n) " DATA:" (get-data n))
+            (let [l (get-left-id n)
+                  r (get-right-id n)]
+              (println "LEFT/RIGHT: " l "/" r)
+              (when-not (= null l)
+                (println "LEFT")
+                (print-node (get-child n tree left)))
+              (when-not (= null r)
+                (println "RIGHT")
+                (print-node (get-child n tree right)))
+              (println "----end" (get-id n))))]
 
-      (let [r (:root tree)]
-        (println "^^^^^^^^^")
-        (println "ROOT DATA: " (get-data r))
-        (println "ROOT ID: " (get-id r))
-        (println)
-        (print-node r)))))
+    (let [r (:root tree)]
+      (println "^^^^^^^^^^^^^^^^^^^^^^^")
+      (println "ROOT DATA: " (get-data r))
+      (println "ROOT ID: " (get-id r))
+      (println)
+      (print-node r))))

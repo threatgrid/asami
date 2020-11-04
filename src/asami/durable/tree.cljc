@@ -268,38 +268,48 @@
                                   [parent (and (zero? obalance) (not (zero? next-balance)))])]
       (write new-branch tree)
       ;; check if there was change at this level
-      (if (= (get-id new-branch) (get-id oparent))
+      (if (and (not ndeeper?) (= (get-id new-branch) (get-id oparent)))
         (loop [n parent] (if-let [pn (get-parent n)] (recur pn) n)) ;; no change. Short circuit to the root
         (recur tree new-branch ndeeper?)))
     node))
 
+(defn find-node*
+  "Finds a node in the tree using a key.
+  returns one of:
+  null: an empty tree
+  node: the data was found
+  vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
+  The other (unneeded) node is represented by nil."
+  [{:keys [root node-comparator] :as tree} key]
+  (letfn [(compare-node [n] (node-comparator key n))
+          (find-node [n]
+            (let [c (compare-node n)]
+              (if (zero? c)
+                n
+                (let [side (if (< c 0) left right)]
+                  (if-let [child (get-child n tree side)]
+                    (recur child)
+                    ;; between this node, and the next/previous
+                    (if (= side left)
+                      [(prev-node tree n) n]
+                      [n (next-node tree n)]))))))]
+    (and root (find-node root))))
+
 (defprotocol Tree
-  (find-node [this key]
-    "Finds a node in the tree using a key.
-    returns one of:
-    null: an empty tree
-    node: the data was found
-    vector: the data was not there, and is found between 2 nodes. The leaf node is in the vector.
-    The other (unneeded) node is represented by nil.")
-  (add [this data writer]
-    "Adds data to the tree"))
+  (find-node [this key] "Finds a node in the tree using a key.")
+  (add [this data writer] "Adds data to the tree")
+  (at [this new-root] "Returns a tree for a given transaction root"))
+
+(defrecord ReadOnlyTree [root node-comparator block-manager node-cache]
+  Tree
+  (find-node [this key] (find-node* this key))
+  (add [this data writer] (throw (ex-info "Read-only trees cannot be modified" {:add data})))
+  (at [this new-root-id] (assoc this :root (get-node this new-root-id nil))))
+
 
 (defrecord TxTree [root rewind-root node-comparator block-manager node-cache]
   Tree
-  (find-node [this key]
-    (letfn [(compare-node [n] (node-comparator key n))
-            (find-node [n]
-              (let [c (compare-node n)]
-                (if (zero? c)
-                  n
-                  (let [side (if (< c 0) left right)]
-                    (if-let [child (get-child n this side)]
-                      (recur child)
-                      ;; between this node, and the next/previous
-                      (if (= side left)
-                        [(prev-node this n) n]
-                        [n (next-node this n)]))))))]
-      (and root (find-node root))))
+  (find-node [this key] (find-node* this key))
 
   (add [this data writer]
     (if-let [location (find-node this data)]
@@ -317,8 +327,11 @@
         this)
       (assoc this :root (write (new-node this data writer) this))))
 
-  Transaction
+  (at [this new-root-id]
+    (let [new-root (get-node this new-root-id nil)]
+      (->ReadOnlyTree new-root node-comparator block-manager node-cache)))
 
+  Transaction
   (rewind! [this]
     (rewind! block-manager)
     (assoc this :root rewind-root))
@@ -329,6 +342,7 @@
   
   (close [this]
     (close block-manager)))
+
 
 (defn new-block-tree
   "Creates an empty block tree"

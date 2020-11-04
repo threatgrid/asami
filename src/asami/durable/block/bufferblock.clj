@@ -82,14 +82,15 @@
       this)
 
     (put-block!
-      [this offset src src-offset length]
-      (let [sbb (.duplicate ^ByteBuffer (:bb src))]
-        (doto sbb
-          (.position src-offset)
-          (.limit (+ src-offset length)))
-        (doto ^ByteBuffer bb
+      [this offset {sbb :bb sbyte-offset :byte-offset :as src} src-offset length]
+      (let [p (+ sbyte-offset src-offset)
+            rsbb (.asReadOnlyBuffer ^ByteBuffer sbb)]
+        (doto rsbb
+          (.position p)
+          (.limit (+ p length)))
+        (doto ^ByteBuffer (.duplicate ^ByteBuffer bb)
           (.position (+ byte-offset offset))
-          (.put sbb)))
+          (.put rsbb)))
       this)
 
     (put-block!
