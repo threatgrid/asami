@@ -433,8 +433,6 @@
       (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node))))
       (close new-tree))))
 
-(declare print-structure)
-
 (deftest test-tx
   (let [empty-tree (new-block-tree create-block-manager "tx.avl" long-bytes long-compare)
         add-all (partial reduce (fn [t v] (add t v long-writer)))
@@ -453,25 +451,26 @@
 
 
 
-(defn print-structure
-  "This function is only used for debugging the tree structure"
-  [tree]
-  (letfn [(print-node [n]
-            (println ">>> ID:" (get-id n) " DATA:" (get-data n))
-            (let [l (get-left-id n)
-                  r (get-right-id n)]
-              (println "LEFT/RIGHT: " l "/" r)
-              (when-not (= null l)
-                (println "LEFT")
-                (print-node (get-child n tree left)))
-              (when-not (= null r)
-                (println "RIGHT")
-                (print-node (get-child n tree right)))
-              (println "----end" (get-id n))))]
+(comment
+  (defn print-structure
+    "This function is only used for debugging the tree structure"
+    [tree]
+    (letfn [(print-node [n]
+              (println ">>> ID:" (get-id n) " DATA:" (get-data n))
+              (let [l (get-left-id n)
+                    r (get-right-id n)]
+                (println "LEFT/RIGHT: " l "/" r)
+                (when-not (= null l)
+                  (println "LEFT")
+                  (print-node (get-child n tree left)))
+                (when-not (= null r)
+                  (println "RIGHT")
+                  (print-node (get-child n tree right)))
+                (println "----end" (get-id n))))]
 
-    (let [r (:root tree)]
-      (println "^^^^^^^^^^^^^^^^^^^^^^^")
-      (println "ROOT DATA: " (get-data r))
-      (println "ROOT ID: " (get-id r))
-      (println)
-      (print-node r))))
+      (let [r (:root tree)]
+        (println "^^^^^^^^^^^^^^^^^^^^^^^")
+        (println "ROOT DATA: " (get-data r))
+        (println "ROOT ID: " (get-id r))
+        (println)
+        (print-node r)))))

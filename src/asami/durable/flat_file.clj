@@ -2,31 +2,62 @@
       :author "Paula Gearon"}
     asami.durable.flat-file
   (:require [clojure.java.io :as io]
-            [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into]]
+            [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into read-long]]
             [asami.durable.flat :refer [FlatStore write-object! get-object force!]]
             [asami.durable.encoder :as encoder]
-            [asami.durable.decoder :as decoder])
+            [asami.durable.decoder :as decoder]
+            [asami.durable.transaction :refer [TxStore Closeable get-tx tx-count]])
   (:import [java.io RandomAccessFile]
+           [java.nio ByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]))
 
 (def read-only FileChannel$MapMode/READ_ONLY)
 
 (def ^:const default-region-size "Default region of 1GB" 0x40000000)
 
+(def ^:const long-size Long/BYTES)
+
 (def file-name "raw.dat")
+
+(def tx-name "tx.dat")
 
 (defprotocol Clearable
   (clear! [this] "Clears out any resources which may be held"))
+
+(defn read-setup
+  [{:keys [regions region-size] :as paged-file} offset byte-count]
+  (let [region-nr (int (/ offset region-size))
+        region-offset (mod offset region-size)]
+    ;; the requested data is not currently mapped, so refresh
+    (when (>= region-nr (count @regions))
+      (refresh! paged-file))
+    (when (>= region-nr (count @regions))
+      (throw (ex-info "Accessing data beyond the end of file"
+                      {:max (count @regions) :region region-nr :offset offset})))
+    (let [region (nth @regions region-nr)
+          region-size (.capacity region)
+          end (+ byte-count region-offset)
+          [region region-size] (if (and (= (inc region-nr) (count @regions))
+                                        (>= end region-size))
+                                 (do
+                                   (refresh! paged-file)
+                                   (let [^ByteBuffer r (nth @regions region-nr)]
+                                     [r (.capacity r)]))
+                                 [region region-size])]
+      (when (> end region-size)
+        (throw (ex-info "Accessing trailing data beyond the end of file"
+                        {:region-size region-size :region-offset region-offset})))
+      [region region-offset])))
 
 ;; These functions do update the PagedFile state, but only to expand the mapped region.
 (defrecord PagedFile [^RandomAccessFile f regions region-size]
   Paged
   (refresh! [this]
     (letfn [(remap [mappings]
-              (let [existing (or (if-let [tail (last mappings)]
-                                   (if (< (.capacity tail) region-size)
-                                     (butlast mappings)))
-                                 mappings)
+              (let [existing (if-let [tail (last mappings)]
+                               (if (< (.capacity tail) region-size)
+                                 (butlast mappings)
+                                 mappings))
                     unmapped-offset (* region-size (count existing))
                     ^FileChannel fchannel (.getChannel f)
                     _ (.force fchannel true)
@@ -65,28 +96,21 @@
                                refreshed-region))
                            last-region))
                        (nth @regions region-nr))))]
-      (.get region region-offset)))
+      (.get ^ByteBuffer region region-offset)))
 
   (read-short [this offset]
     ;; when the 2 bytes occur in the same region, read a short
-    ;; if the bytes straddle regions, then read both byts and combine into a short
-    (let [region-nr (int (/ offset region-size))
-          region-offset (mod offset region-size)]
-      ;; the requested data is not currently mapped, so refresh
-      (when (>= region-nr (count @regions))
-        (refresh! this))
-      (when (>= region-nr (count @regions))
-        (throw (ex-info "Accessing data beyond the end of file"
-                        {:max (count @regions) :region region-nr :offset offset})))
-      (let [region (nth @regions region-nr)
-            region-size (.capacity region)]
-        (when (>= region-offset region-size)
-          (throw (ex-info "Accessing trailing data beyond the end of file"
-                          {:region-size region-size :region-offset region-offset})))
-        (if (= region-offset (dec region-size))
-          (short (bit-or (bit-shift-left (.get region region-offset) 8)
-                         (bit-and 0xFF (read-byte this (inc offset)))))
-          (.getShort region region-offset)))))
+    ;; if the bytes straddle regions, then read both bytes and combine into a short
+    (let [[region region-offset] (read-setup this offset 2)]
+      (if (= region-offset (dec region-size))
+        (short (bit-or (bit-shift-left (.get ^ByteBuffer region region-offset) 8)
+                       (bit-and 0xFF (read-byte this (inc offset)))))
+        (.getShort ^ByteBuffer region region-offset))))
+
+  (read-long [this offset]
+    ;; Unlike other types, a long is required to exist entirely in a region
+    (let [[region region-offset] (read-setup this offset long-size)]
+      (.getLong ^ByteBuffer region region-offset)))
 
   (read-bytes [this offset len]
     (read-bytes-into this offset (byte-array len)))
@@ -172,19 +196,95 @@
     [this id]
     (decoder/read-object paged id))
   (force! [this]
-    (.force (.getChannel rfile) true))
+    (.force (.getChannel ^RandomAccessFile rfile) true))
+
+  Closeable
   (close [this]
     (clear! paged)
     (.close rfile)))
 
-(defn flat-store
-  "Creates a flat file store. This wraps an append-only file and a paged reader."
-  [name]
+(def ^:const tx-size "Size of the transaction records: timestamp/tree-root"
+  (* 2 long-size))
+
+
+(defn file-size
+  [rfile]
+  (let [fsize (.getFilePointer rfile)]
+    (when-not (zero? (mod fsize tx-size))
+      (throw (ex-info "Corrupted transaction file" {:file-size fsize :tx-size tx-size})))
+    fsize))
+
+(defrecord TxFile [^RandomAccessFile rfile paged]
+  TxStore
+  (append!
+    [this {:keys [timestamp tx-data] :as tx}]
+    (let [sz (.getFilePointer rfile)]
+      (doto ^RandomAccessFile rfile
+        (.writeLong ^long timestamp)
+        (.writeLong ^long tx-data))
+      (long (/ sz tx-size))))
+
+  (get-tx
+    [this id]
+    (let [offset (* tx-size id)
+          timestamp (read-long paged offset)
+          tx-data (read-long paged (+ long-size offset))]
+      {:timestamp timestamp
+       :tx-data tx-data}))
+
+  (latest
+    [this]
+    (let [fsize (file-size rfile)
+          id (dec (long (/ fsize tx-size)))]
+      (when (<= 0 id)
+        (get-tx this id))))
+
+  (tx-count
+    [this]
+    (long (/ (file-size rfile) tx-size)))
+
+  (find-tx
+    [this timestamp]
+    (loop [low 0 high (tx-count this)]
+      (if (= (inc low) high)
+        low
+        (let [mid (long (/ (+ low high) 2))
+              mts (read-long paged (* tx-size mid))
+              c (compare mts timestamp)]
+          (cond
+            (zero? c) mid
+            (> 0 c) (recur mid high)
+            (< 0 c) (recur low mid))))))
+
+  (force! [this]
+    (.force (.getChannel rfile) true))
+
+  Closeable
+  (close [this]
+    (clear! paged)
+    (.close rfile)))
+
+(defn- file-store
+  "Creates and initializes an append-only file and a paged reader."
+  [name fname size]
   (let [d (io/file name)
         _ (.mkdirs d)
-        f (io/file name file-name)
+        f (io/file name fname)
         raf (RandomAccessFile. f "rw")
         file-length (.length raf)]
     (when-not (zero? file-length)
       (.seek raf file-length))
-    (->FlatFile raf (paged-file raf))))
+    [raf (paged-file raf size)]))
+
+(defn flat-store
+  "Creates a flat file store. This wraps an append-only file and a paged reader."
+  [name]
+  (let [[raf paged] (file-store name file-name default-region-size)]
+    (->FlatFile raf paged)))
+
+(defn tx-store
+  "Creates a transaction store. This wraps an append-only file and a paged reader."
+  [name]
+  (let [region-size (* tx-size (int (/ default-region-size tx-size)))
+        [raf paged] (file-store name tx-name region-size)]
+    (->TxFile raf paged)))

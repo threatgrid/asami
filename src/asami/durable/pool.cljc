@@ -1,21 +1,17 @@
-(ns ^{:doc "Data pool on disk"
+(ns ^{:doc "Data pool"
       :author "Paula Gearon"}
     asami.durable.pool
-  (:require [clojure.java.io :as io]
-            [asami.durable.stores :refer [DataPool]]
-            [schema.core :as s])
-    (:import [java.io RandomAccessFile ObjectOutputStream FileOutputStream]))
+  (:require [asami.durable.stores :refer [DataPool]]
+            [schema.core :as s]))
 
-(def ^:const index-name "Name of the index file" "idx.bin")
+(def ^:const index-name "Name of the index storage" "idx.bin")
 
-(def ^:const data-name "Name of the data file" "data.bin")
+(def ^:const data-name "Name of the data storage" "data.bin")
 
-(def ^:const tx-name "Name of the transaction file" "tx.bin")
+(def ^:const tx-name "Name of the transaction storage" "tx.bin")
 
-(def ^:const tx-size "Size of the transaction records: timestamp/tree-root" (* 2 Long/BYTES))
-
-(declare avl-file)
-(declare new-file-data-pool)
+(def ^:const tx-size "Size of the transaction records: timestamp/tree-root"
+  (* 2 #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT)))
 
 ;; tx-id: offset for the current transaction, in monotonically increasing order
 ;; root: Block ID for the root of the index tree in the current transaction
