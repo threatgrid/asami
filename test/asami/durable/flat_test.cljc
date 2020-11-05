@@ -1,8 +1,8 @@
 (ns ^{:doc "Tests flat store functionality, saving and retrieving data"
       :author "Paula Gearon"}
     asami.durable.flat-test
-  (:require [asami.durable.flat :refer [write-object! get-object force!]]
-            [asami.durable.transaction :refer [append! get-tx latest tx-count find-tx close]]
+  (:require [asami.durable.common :refer [write-object! get-object force!
+                                          append! get-tx latest tx-count find-tx close]]
             #?(:clj [asami.durable.flat-file :as ff])
             #?(:clj [clojure.java.io :as io])
             [clojure.test :refer [deftest is]])

@@ -6,7 +6,7 @@
                                         get-balance get-child-id at]]
             [asami.durable.block.file.util :as util]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.transaction :refer [close rewind! commit!]]
+            [asami.durable.common :refer [close rewind! commit!]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file]])))

@@ -2,11 +2,11 @@
       :author "Paula Gearon"}
     asami.durable.flat-file
   (:require [clojure.java.io :as io]
-            [asami.durable.pages :refer [Paged refresh! read-byte read-bytes-into read-long]]
-            [asami.durable.flat :refer [FlatStore write-object! get-object force!]]
+            [asami.durable.common :refer [Paged refresh! read-byte read-bytes-into read-long
+                                          FlatStore write-object! get-object force!
+                                          TxStore Closeable get-tx tx-count long-size]]
             [asami.durable.encoder :as encoder]
-            [asami.durable.decoder :as decoder]
-            [asami.durable.transaction :refer [TxStore Closeable get-tx tx-count]])
+            [asami.durable.decoder :as decoder])
   (:import [java.io RandomAccessFile]
            [java.nio ByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]))
@@ -14,8 +14,6 @@
 (def read-only FileChannel$MapMode/READ_ONLY)
 
 (def ^:const default-region-size "Default region of 1GB" 0x40000000)
-
-(def ^:const long-size Long/BYTES)
 
 (defprotocol Clearable
   (clear! [this] "Clears out any resources which may be held"))
@@ -167,10 +165,11 @@
   (get-object
     [this id]
     (decoder/read-object paged id))
+
+  Closeable
   (force! [this]
     (.force (.getChannel ^RandomAccessFile rfile) true))
 
-  Closeable
   (close [this]
     (clear! paged)
     (.close rfile)))
@@ -228,10 +227,10 @@
             (> 0 c) (recur mid high)
             (< 0 c) (recur low mid))))))
 
+  Closeable
   (force! [this]
     (.force (.getChannel rfile) true))
 
-  Closeable
   (close [this]
     (clear! paged)
     (.close rfile)))

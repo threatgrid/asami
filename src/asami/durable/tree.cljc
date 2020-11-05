@@ -9,7 +9,7 @@
                                                    put-block! copy-over!
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx]]
-            [asami.durable.transaction :refer [Transaction Closeable close rewind! commit!]]
+            [asami.durable.common :refer [Transaction Closeable close rewind! commit! long-size]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const left -1)
@@ -19,7 +19,7 @@
 (def ^:const balance-mask -0x4000000000000000)  ;; literal value for 0xC000000000000000
 (def ^:const balance-bitshift 62)
 
-(def ^:const header-size (* 2 #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT)))
+(def ^:const header-size (* 2 long-size))
 
 (def ^:const header-size-int (bit-shift-right header-size 2))
 
