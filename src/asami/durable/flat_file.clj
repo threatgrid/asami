@@ -17,10 +17,6 @@
 
 (def ^:const long-size Long/BYTES)
 
-(def file-name "raw.dat")
-
-(def tx-name "tx.dat")
-
 (defprotocol Clearable
   (clear! [this] "Clears out any resources which may be held"))
 
@@ -254,13 +250,13 @@
 
 (defn flat-store
   "Creates a flat file store. This wraps an append-only file and a paged reader."
-  [name]
-  (let [[raf paged] (file-store name file-name default-region-size)]
+  [group-name name]
+  (let [[raf paged] (file-store group-name name default-region-size)]
     (->FlatFile raf paged)))
 
 (defn tx-store
   "Creates a transaction store. This wraps an append-only file and a paged reader."
-  [name]
+  [group-name name]
   (let [region-size (* tx-size (int (/ default-region-size tx-size)))
-        [raf paged] (file-store name tx-name region-size)]
+        [raf paged] (file-store group-name name region-size)]
     (->TxFile raf paged)))

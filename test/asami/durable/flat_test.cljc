@@ -10,6 +10,9 @@
 
 (def store-name "test-fstore")
 
+(def flat-name "raw.bin")
+(def tx-name "tx.bin")
+
 (defn uri [s] #?(:clj (URI. s) :cljs (goog/Uri. s)))
 
 (def data
@@ -25,8 +28,8 @@
 ;; Clojure specific parts are for clearing out the temporary files
 (deftest test-store
   (let [fmapped (volatile! nil)]
-    #?(:clj (is (not (.exists (io/file store-name ff/file-name)))))
-    (with-open [store (ff/flat-store store-name)]
+    #?(:clj (is (not (.exists (io/file store-name flat-name)))))
+    (with-open [store (ff/flat-store store-name flat-name)]
       (vreset! fmapped (reduce-kv (fn [m k v]
                                     (let [id (write-object! store v)]
                                       (assoc m k id)))
@@ -38,25 +41,25 @@
         (is (= (nth data n) (get-object store id))))
       (force! store))
 
-    (with-open [store (ff/flat-store store-name)]
+    (with-open [store (ff/flat-store store-name flat-name)]
       (doseq [[n id] @fmapped]
         (is (= (nth data n) (get-object store id))))
       (doseq [[n id] (shuffle (seq @fmapped))]
         (is (= (nth data n) (get-object store id))))))
   #?(:clj
-     (let [f (io/file store-name ff/file-name)
+     (let [f (io/file store-name flat-name)
            d (io/file store-name)]
        (is (.delete f))
        (is (.delete d)))))
 
 
 (deftest test-tx-store
-  #?(:clj (let [d (io/file "tx-test")
-                f (io/file "tx-test" ff/tx-name)]
+  #?(:clj (let [d (io/file store-name)
+                f (io/file store-name tx-name)]
             (.mkdir d)
             (when (.exists f) (.delete f))))
 
-  (let [store (ff/tx-store "tx-test")]
+  (let [store (ff/tx-store store-name tx-name)]
     (is (nil? (latest store)))
     (doseq [t (range 0 10 2)]
       (append! store {:timestamp t :tx-data (* t t)}))
@@ -74,7 +77,7 @@
       (is (= {:timestamp t :tx-data (* t t)} r)))
     (close store))
 
-  (let [store (ff/tx-store "tx-test")]
+  (let [store (ff/tx-store store-name tx-name)]
     (is (= 10 (tx-count store)))
     (is (= {:timestamp 18 :tx-data 324} (latest store)))
     (doseq [n (range 10) :let [t (* 2 n) r (get-tx store n)]]
@@ -92,7 +95,7 @@
 
     (close store))
 
-  #?(:clj (let [d (io/file "tx-test")
-                f (io/file "tx-test" ff/tx-name)]
+  #?(:clj (let [d (io/file store-name)
+                f (io/file store-name tx-name)]
             (.delete f)
             (.delete d))))
