@@ -71,31 +71,7 @@
 
   (read-byte [this offset]
     ;; finds a byte in a region
-    (let [region-nr (int (/ offset region-size))
-          region-offset (mod offset region-size)
-          region-count (count @regions)
-          region (if (>= region-nr region-count) ;; region not mapped
-                   (do
-                     (refresh! this)
-                     (when (>= region-nr (count @regions))
-                       (throw (ex-info "Accessing data beyond the end of file"
-                                       {:max (count @regions) :region region-nr :offset offset})))
-                     (nth @regions region-nr))
-                   (let [dregion-count (dec region-count)]
-                     (if (= region-nr dregion-count) ;; referencing final region
-                       (let [last-region (nth @regions dregion-count)]
-                         (if (>= region-offset (.capacity last-region))
-                           (do
-                             (refresh! this)
-                             (let [refreshed-region (nth @regions dregion-count)]
-                               (when (>= region-offset (.capacity refreshed-region))
-                                 (throw (ex-info "Accessing data beyond the end of mapped file"
-                                                 {:region-offset region-offset
-                                                  :region region-nr
-                                                  :offset offset})))
-                               refreshed-region))
-                           last-region))
-                       (nth @regions region-nr))))]
+    (let [[region region-offset] (read-setup this offset 1)]
       (.get ^ByteBuffer region region-offset)))
 
   (read-short [this offset]
