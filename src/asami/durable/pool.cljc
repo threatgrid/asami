@@ -4,7 +4,13 @@
   (:require [asami.durable.common :refer [DataStorage long-size get-object find-node write-object! get-object
                                           find-tx get-tx]]
             [asami.durable.tree :as tree]
-            [asami.durable.block-api :refer [get-long get-byte]]))
+            [asami.durable.encoder :refer [to-bytes]]
+            [asami.durable.decoder :refer [type-info long-bytes-compare]]
+            [asami.durable.block-api :refer [get-long get-byte put-bytes! put-long!]]
+            #?(:clj [clojure.java.io :as io]))
+  #?(:clj
+     (:import [java.util Date]
+              [java.time Instant])))
 
 (def ^:const index-name "Name of the index file" "idx.bin")
 
@@ -19,17 +25,27 @@
 (def ^:const id-offset 1)
 
 (defn index-writer
-  [node [object id]]
-  ;; TODO
-  )
+  [node [[header body] id]]
+  (let [hdr-len (count header)
+        remaining (- long-size hdr-len)]
+    (put-bytes! node data-offset hdr-len header)
+    (when (> remaining 0)
+      (put-bytes! node hdr-len (min remaining (count body)) body))
+    (put-long! node id-offset id)))
 
 (defn pool-comparator-fn
   "Returns a function that can compare data to what is found in a node"
   [data-store]
-  (fn [data node]
-    (let [type-into (get-byte node 0)]
-      ;; TODO
-      )))
+  (fn [[type-byte header body object] node]
+    (let [node-type (type-info (get-byte node data-offset))
+          c (compare type-byte node-type)]
+      (if (zero? c)
+        (let [nc (long-bytes-compare type-byte header body object (get-bytes node data-offset long-size))]
+          (if (zero? nc)
+            (let [stored-data (get-object data-store (get-long node id-offset))]
+              (compare object stored-data))
+            nc))
+        c))))
 
 (defn as-millis
   "If t represents a time value, then return it as milliseconds"
@@ -50,6 +66,13 @@
         tx-data (:tx-data (get-tx tx id))]
     (->ReadOnlyPool tx data (tree/at index tx))))
 
+(defn find*
+  [{:keys [data index]} object]
+  (let [[header body] (to-bytes object)
+        node (tree/find-node index [(type-info (aget header 0)) header body object])]
+    (when-not (vector? node)
+      (get-long node id-offset))))
+
 (defrecord ReadOnlyPool [tx data index]
   DataStorage
   (find-object
@@ -58,9 +81,7 @@
 
   (find-id
     [this object]
-    (let [node (tree/find-node index object)]
-      (when-not (vector? node)
-        (get-long node id-offset))))
+    (find* this object))
 
   (write! [this object]
     (throw (ex-info "Unsupported Operation" {:cause "Read Only" :operation "write"})))
@@ -76,15 +97,14 @@
 
   (find-id
     [this object]
-    (let [node (find-node index object)]
-      (when-not (vector? node)
-        (get-long node id-offset))))
+    (find* this object))
 
   (write! [this object]
-    (let [node (find-node index object)]
+    (let [[header body] (to-bytes object)
+          node (tree/find-node index [(type-info (aget header 0)) header body object])]
       (if (vector? node)
         (let [id (write-object! data object)]
-          (add index [object id] index-writer))
+          (add index [object-data id] index-writer))
         (get-long node id-offset))))
 
   (at [this t]
@@ -101,13 +121,23 @@
   (rewind! [this]
     (assoc this :index (rewind! index))))
 
+(def tx-constructor #?(:clj flat-file/tx-store))
+
+(def data-constructor #?(:clj flat-file/flat-store))
+
+(defn create-block-manager
+  "Creates a block manager"
+  [name managername block-size]
+  #?(:clj
+     (create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
+
 (defn open-pool
   "Opens all the resources required for a pool, and returns the pool structure"
   [name]
-  (let [tx-store (flat-file/tx-store name tx-name)
-        data-store (flat-file/flat-store name data-name)
+  (let [tx-store (tx-constructor name tx-name)
+        data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree create-block-manager index-name (* 2 long-size) data-compare)]
+        index (tree/new-block-tree (partial create-block-manager name) index-name (* 2 long-size) data-compare)]
    (->DataPool tx-store data-store index)))
 
 (defn create-pool
