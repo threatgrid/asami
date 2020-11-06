@@ -1,7 +1,8 @@
 (ns ^{:doc "Tests for the ManagedBlockFile implementation"
       :author "Paula Gearon"}
     asami.durable.block.blockmanager-test
-  (:require [clojure.test :refer :all]
+  (:require [clojure.test :refer :all]  ;; todo: get explicit requirements since this won't work for ClojureScript
+            [asami.durable.test-utils :refer [get-filename]]
             [asami.durable.block.block-api :refer :all]
             [asami.durable.block.file.block-file :refer :all]
             [asami.durable.block.file.voodoo :as voodoo]
@@ -18,14 +19,6 @@
      (when voodoo/windows?
        (System/gc)
        (System/runFinalization))))
-
-(defn get-filename
-  "Returns the resource for creating a manager.
-  For Java, this is a java.io.File. On JS this is a string."
-  [s]
-  #?(:clj (let [f (util/temp-file s)]
-            (doto ^File f .delete))
-     :cljs s))
 
 (defn create-block-manager
   "Central BlockManager construction. On the JVM this is ManagedBlockFile.

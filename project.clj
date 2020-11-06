@@ -7,7 +7,9 @@
                  [org.clojure/clojurescript "1.10.773"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/zuko "0.3.1"]]
+                 [org.clojars.quoll/zuko "0.3.1"]
+                 [tailrecursion/cljs-priority-map "1.2.1"]
+                 [org.clojure/data.priority-map "1.0.0"] ]
   :plugins [[lein-cljsbuild "1.1.7"]
             [cider/cider-nrepl "0.24.0"]]
   :cljsbuild {

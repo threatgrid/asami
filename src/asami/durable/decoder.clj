@@ -17,17 +17,30 @@
 (defn decode-length
   "Reads the header to determine length.
   ext: if 0 then length is a byte, if 1 then length is in either a short or an int"
-  [ext paged-rdr ^long pos]
-  (if ext
-    (let [raw (read-byte paged-rdr pos)]
-      [Byte/BYTES (bit-and 0xFF raw)])
-    (let [len (read-short paged-rdr pos)]
-      (if (< len 0)
-        (let [len2 (read-short paged-rdr pos)]
-          [Integer/BYTES (bit-or
-                          (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
-                          len2)])
-        [Short/BYTES len]))))
+  ([ext paged-rdr ^long pos]
+   (if ext
+     (let [raw (read-byte paged-rdr pos)]
+       [Byte/BYTES (bit-and 0xFF raw)])
+     (let [len (read-short paged-rdr pos)]
+       (if (< len 0)
+         (let [len2 (read-short paged-rdr pos)]
+           [Integer/BYTES (bit-or
+                           (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
+                           len2)])
+         [Short/BYTES len]))))
+  ([^bytes data]
+   (if (zero? (bit-and 0x10 (aget data 0)))
+     (let [raw (aget data 1)]
+       [Byte/BYTES (bit-and 0xFF raw)])
+     (let [len (bit-or (bit-shift-left (aget data 1) 8)
+                       (bit-and 0xFF (aget data 2)))]
+       (if (< len 0)
+         (let [len2 (read-short paged-rdr pos)]
+           [Integer/BYTES (bit-or
+                           (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
+                           (bit-shift-left (aget data 3) 8)
+                           (bit-and 0xFF (aget data 4)))])
+         [Short/BYTES len])))))
 
 ;; Readers are given the length and a position. They then read data into a type
 
@@ -141,6 +154,35 @@
    11 uuid-decoder
    12 blob-decoder
    13 xsd-decoder})
+
+(defn ^byte type-info
+  "Returns the type information encoded in a header-byte"
+  [b]
+  (cond
+    (zero? (bit-and 0x80 b)) 2   ;; string
+    (zero? (bit-and 0x40 b)) 3   ;; uri
+    (zero? (bit-and 0x20 b)) 10  ;; keyword
+    :default (let [tn (bit-and 0xF b)]
+               (if (or (= tn 4) (= tn 5)) 3 tn))))
+
+(defn string-style-compare
+  [left-s right-bytes]
+  (let [rbc (count right-bytes)
+        [rn rlen] (decode-length right-bytes)
+        right-s (String. right-bytes rn (min (- rbc rn) rlen))
+        min-len (min (count left-s) rlen (count right-s))]
+    (compare (subs left-s 0 min-len)
+             (subs right-s 0 min-len))))
+
+(defn long-bytes-compare
+  "Compare data from 2 values that are the same type. If the data cannot give a result
+   then return 0."
+  [type-left left-header left-body left-object right-bytes]
+  (case type-left
+    2 (string-style-compare left-object right-bytes)
+    3 (string-style-compare (str left-object) right-bytes)
+    10 (string-style-compare (subs (str left-object) 1) right-bytes)
+    ))
 
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"

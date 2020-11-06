@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.pages-test
   (:require [asami.durable.encoder :refer [to-bytes]]
-            [asami.durable.pages :refer [read-byte read-short read-bytes]]
+            [asami.durable.common :refer [read-byte read-short read-bytes]]
             [asami.durable.flat-file :refer [paged-file]]
             [clojure.test :refer [deftest is]])
   (:import [java.io RandomAccessFile File]))

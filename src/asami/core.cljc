@@ -73,16 +73,27 @@
     (if-let [conn (connection-for uri)]
       (storage/delete-database conn))))
 
+(def Graphable (s/cond-pre GraphType {:graph GraphType}))
+
+(defn ^:private as-graph
+  "Converts the d argument to a Graph. Leaves it alone if it can't be converted."
+  [d]
+  (if (not (satisfies? gr/Graph d))
+    (let [g (:graph d)]
+      (if (satisfies? gr/Graph g) g d))
+      d))
+
 (s/defn as-connection :- ConnectionType
   "Creates a Database/Connection around an existing Graph.
-   graph: The graph to build a database around.
+   graph: The graph or graph wrapper to build a database around.
    uri: The uri of the database."
-  [graph :- GraphType
-   uri :- s/Str]
-  (let [{:keys [name]} (parse-uri uri)
-        c (memory/new-connection name graph)]
-    (swap! connections assoc uri c)
-    c))
+  ([graph :- Graphable] (as-connection graph (gensym "internal:graph")))
+  ([graph :- Graphable
+    uri :- s/Str]
+   (let [{:keys [name]} (parse-uri uri)
+         c (memory/new-connection name (as-graph graph))]
+     (swap! connections assoc uri c)
+     c)))
 
 (defn ^:private annotated-attribute?
   "Checks if an attribute has been annotated with a character"
@@ -227,6 +238,13 @@
 (def graph storage/graph)
 (def entity storage/entity)
 
+(def TransactData (s/if map?
+                    {(s/optional-key :tx-data) [s/Any]
+                     (s/optional-key :tx-triples) [[(s/one s/Any "entity")
+                                                    (s/one s/Any "attribute")
+                                                    (s/one s/Any "value")]]}
+                    [s/Any]))
+
 (s/defn transact
   ;; returns a deref'able object that derefs to:
   ;; {:db-before DatabaseType
@@ -235,11 +253,14 @@
   ;;  :tempids {s/Any s/Any}}
   "Updates a database. This is currently synchronous, but returns a future or delay for compatibility with Datomic.
    connection: The connection to the database to be updated.
-   tx-info: This is either a seq of items to be transacted, or a map containing a :tx-data value with such a seq.
+   tx-info: This is either a seq of items to be transacted, or a map.
+            If this is a map, then a :tx-data value will contain the same type of seq that tx-info may have.
             Each item to be transacted is one of:
             - vector of the form: [:db/add entity attribute value] - creates a datom
             - vector of the form: [:db/retract entity attribute value] - removes a datom
             - map: an entity to be inserted/updated.
+            Alternatively, a map may have a :tx-triples key. If so, then this is a seq of 3 element vectors.
+            Each vector in a :tx-triples seq will contain the raw values for [entity attribute value]
   Entities and assertions may have attributes that are keywords with a trailing ' character.
   When these appear an existing attribute without that character will be replaced. This only occurs for the top level
   entity, and is not applied to attributes appearing in nested structures.
@@ -254,13 +275,15 @@
   :tx-data      sequence of datoms produced by the transaction
   :tempids      mapping of the temporary IDs in entities to the allocated nodes"
   [{:keys [name state] :as connection} :- ConnectionType
-   {tx-data :tx-data :as tx-info} :- (s/if map? {:tx-data [s/Any]} [s/Any])]
+   {:keys [tx-data tx-triples] :as tx-info} :- TransactData]
   (let [op (fn []
              (let [tx-id (count (:history @state))
                    as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
                    {:keys [graph history] :as db-before} (:db @state)
-                   tx-data (or tx-data tx-info) ;; capture the old usage which didn't have an arg map
-                   [triples removals tempids] (build-triples db-before tx-data)
+                   [triples removals tempids] (if tx-triples       ;; is this inserting raw triples?
+                                                [tx-triples nil {}]
+                                                ;; capture the old usage which didn't have an arg map
+                                                (build-triples db-before (or tx-data tx-info)))
                    [db-before db-after] (storage/transact-data connection triples removals)]
                {:db-before db-before
                 :db-after db-after
@@ -279,10 +302,7 @@
   (map (fn [d]
          (if (satisfies? storage/Database d)
            (storage/graph d)
-           (if (not (satisfies? gr/Graph d))
-             (let [g (:graph d)]
-               (if (satisfies? gr/Graph g) g d))
-             d)))
+           (as-graph d)))
        inputs))
 
 (defn q

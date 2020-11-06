@@ -3,8 +3,8 @@
     asami.durable.codec-test
   (:require [asami.durable.encoder :as encoder :refer [to-bytes]]
             [asami.durable.decoder :as decoder :refer [read-object]]
-            [asami.durable.pages :as pages :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into]]
-            #?(:clj [asami.durable.flat :refer [FlatStore write-object! get-object force!]])
+            [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
+                                          FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
             [clojure.string :as s]
             [clojure.test :refer [deftest is]])
