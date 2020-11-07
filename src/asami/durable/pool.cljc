@@ -4,7 +4,7 @@
   (:require [asami.durable.common :refer [DataStorage long-size get-object find-node write-object! get-object
                                           find-tx get-tx]]
             [asami.durable.tree :as tree]
-            [asami.durable.encoder :refer [to-bytes]]
+            [asami.durable.encoder :refer [to-bytes encapsulation-id]]
             [asami.durable.decoder :refer [type-info long-bytes-compare]]
             [asami.durable.block-api :refer [get-long get-byte put-bytes! put-long!]]
             #?(:clj [clojure.java.io :as io]))
@@ -18,20 +18,24 @@
 
 (def ^:const tx-name "Name of the transaction file" "tx.bin")
 
-(def ^:const tree-node-size "Number of bytes available in the index nodes" (* 2 long-size))
+(def ^:const tree-node-size "Number of bytes available in the index nodes" (* 4 long-size))
 
 (def ^:const data-offset 0)
 
-(def ^:const id-offset 1)
+(def ^:const id-offset-long 3)
+
+(def ^:const id-offset (* id-offset-long long-size))
+
+(def ^:const payload-len (- id-offset data-offset))
 
 (defn index-writer
   [node [[header body] id]]
   (let [hdr-len (count header)
-        remaining (- long-size hdr-len)]
+        remaining (- payload-len hdr-len)]
     (put-bytes! node data-offset hdr-len header)
     (when (> remaining 0)
       (put-bytes! node hdr-len (min remaining (count body)) body))
-    (put-long! node id-offset id)))
+    (put-long! node id-offset-long id)))
 
 (defn pool-comparator-fn
   "Returns a function that can compare data to what is found in a node"
@@ -42,7 +46,10 @@
       (if (zero? c)
         (let [nc (long-bytes-compare type-byte header body object (get-bytes node data-offset long-size))]
           (if (zero? nc)
-            (let [stored-data (get-object data-store (get-long node id-offset))]
+            ;; There is an optimization option here if one of the strings is shorter than the
+            ;; node payload length and matches the header of the other string, then they match
+            ;; and this next step is performed. Instead, in this case a +/- 1 can be returned.
+            (let [stored-data (get-object data-store (get-long node id-offset-long))]
               (compare object stored-data))
             nc))
         c))))
@@ -103,7 +110,8 @@
     (let [[header body] (to-bytes object)
           node (tree/find-node index [(type-info (aget header 0)) header body object])]
       (if (vector? node)
-        (let [id (write-object! data object)]
+        (let [id (or (encapsulated-id object)
+                     (write-object! data object))]
           (add index [object-data id] index-writer))
         (get-long node id-offset))))
 

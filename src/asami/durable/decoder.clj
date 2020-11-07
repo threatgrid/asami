@@ -169,7 +169,8 @@
   [left-s right-bytes]
   (let [rbc (count right-bytes)
         [rn rlen] (decode-length right-bytes)
-        right-s (String. right-bytes rn (min (- rbc rn) rlen))
+        ;; TODO Check if the final byte is part of a unicode pair
+        right-s (String. right-bytes rn (min (- rbc rn) rlen) utf8)
         min-len (min (count left-s) rlen (count right-s))]
     (compare (subs left-s 0 min-len)
              (subs right-s 0 min-len))))
