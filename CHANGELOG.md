@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.6] - 2020-11-09
+### Added
+- Added `nested?` flag to the `entity` function.
+
 ## [1.2.5] - 2020-09-08
 ### Fixed
 - Removed references to dead library code in tests.
@@ -77,7 +81,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.5...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.6...HEAD
+[1.2.6]: https://github.com/threatgrid/asami/compare/1.2.5...1.2.6
 [1.2.5]: https://github.com/threatgrid/asami/compare/1.2.4...1.2.5
 [1.2.4]: https://github.com/threatgrid/asami/compare/1.2.3...1.2.4
 [1.2.3]: https://github.com/threatgrid/asami/compare/1.2.2...1.2.3
