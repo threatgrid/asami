@@ -153,11 +153,9 @@
   [paged-rdr ^long pos]
   (let [b0 (read-byte paged-rdr pos)
         ipos (inc pos)]
-    (if-some [decoder (typecode->decoder (bit-and 0x0F b0) default-decoder)]
-      (decoder (zero? (bit-and 0x10 b0)) paged-rdr ipos)
-      (cond
-        (zero? (bit-and 0x80 b0)) (read-str paged-rdr ipos b0)
-        (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
-        (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
-        :else
-        (throw (ex-info "Unable to read-object" {}))))))
+    (cond
+      (zero? (bit-and 0x80 b0)) (read-str paged-rdr ipos b0)
+      (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
+      (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
+      :else
+      (throw (ex-info "Unable to read-object" {})))))
