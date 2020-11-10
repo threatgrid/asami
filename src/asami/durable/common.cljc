@@ -1,9 +1,10 @@
 (ns ^{:doc "A common namespace for protocols and constants that are referenced
            from multiple files and/or between Clojure and ClojureScript files."
-      :author "Paula Gearon"})
+      :author "Paula Gearon"}
+    asami.durable.common)
 
 (def ^:const long-size "Number of bytes in a Long value"
-  #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT))
+  #?(:clj Long/BYTES :cljs js/Float64Array.BYTES_PER_ELEMENT))
 
 (defprotocol Closeable
   (force! [this] "Ensures that all written data is fully persisted")
