@@ -2,7 +2,7 @@
       :author "Paula Gearon and Joel Holdbrooks"}
     asami.durable.decoder
   (:require [asami.bytes :as bytes]
-            [asami.durable.pages :refer [read-byte read-bytes read-short]]
+            [asami.durable.common :refer [read-byte read-bytes read-short]]
             [clojure.string :as s])
   (:import [goog.math Long Integer]
            [goog Uri]))
