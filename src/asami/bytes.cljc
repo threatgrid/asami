@@ -39,6 +39,20 @@
      :cljs (or (.-byteLength b)
                (count b))))
 
+#?(:cljs
+   (def ^{:arglists '([source-byte-array new-byte-length])}
+     transfer
+     "Same as (.-transfer js/ArrayBuffer source-byte-array new-byte-length)."
+     (if (.-transfer js/ArrayBuffer)
+       ;; Use native ArrayBuffer.transfer implementation
+       (.-transfer js/ArrayBuffer)
+       ;; Use polyfill
+       (fn [source-byte-array new-byte-length]
+         (let [source-view (js/Uint8Array. source-byte-array)
+               destination-view (js/Uint8Array. new-byte-length)]
+           (.set destination-view source-view)
+           (.-buffer destination-view))))))
+
 (defn bytes?
   "true if `x` is a byte array, false otherwise."
   [x]
