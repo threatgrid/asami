@@ -72,7 +72,8 @@
 
 (defprotocol FlatFile
   (header [this len] "Returns a byte array containing a header")
-  (body [this] "Returns a byte array containing the encoded data"))
+  (body [this] "Returns a byte array containing the encoded data")
+  (encapsulated-id [this] "Returns an ID that encapsulates the type"))
 
 (extend-protocol FlatFile
   String
@@ -82,6 +83,7 @@
       (general-header (type->code String) len)))
   (body [^String this]
     (.getBytes this utf8))
+  (encapsulated-id [this] nil)
 
   URI
   (header [this len]
@@ -90,6 +92,7 @@
       (general-header (type->code URI) len)))
   (body [this]
     (.getBytes (str this) utf8))
+  (encapsulated-id [this] nil)
   
   Keyword
   (header [this len]
@@ -100,6 +103,7 @@
     (let [nms (namespace this)
           n (name this)]
       (.getBytes (if nms (str nms "/" n) n) utf8)))
+  (encapsulated-id [this] nil)
   
   Long
   (header [this len]
@@ -110,6 +114,9 @@
           bb (ByteBuffer/wrap b)]
       (.putLong bb 0 this)
       b))
+  (encapsulated-id [this]
+    (if (< (abs this) 0x0FFFFFFFFFFFFFFF)
+      (bit-or 0x8000000000000000 this)))
 
   Double
   (header [this len]
@@ -120,18 +127,21 @@
           bb (ByteBuffer/wrap b)]
       (.putDouble bb 0 this)
       b))
+  (encapsulated-id [this] nil)
 
   BigInt
   (header [this len]
     (general-header (type->code BigInt) len))
   (body [this]
     (.toByteArray (biginteger this)))
+  (encapsulated-id [this] nil)
   
   BigDecimal
   (header [this len]
     (general-header (type->code BigDecimal) len))
   (body [^BigDecimal this]
     (.getBytes (str this) utf8))
+  (encapsulated-id [this] nil)
 
   Date
   (header [this len]
@@ -139,6 +149,7 @@
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
     (body (.getTime this)))
+  (encapsulated-id [this] nil)
 
   Instant
   (header [this len]
@@ -150,6 +161,7 @@
         (.putLong 0 (.getEpochSecond this))
         (.putInt Long/BYTES (.getNano this)))
       b))
+  (encapsulated-id [this] nil)
 
   UUID
   (header [this len]
@@ -161,6 +173,7 @@
         (.putLong 0 (.getLeastSignificantBits this))
         (.putLong Long/BYTES (.getMostSignificantBits this)))
       b))
+  (encapsulated-id [this] nil)
   
   Object
   (header [this len]
@@ -171,7 +184,8 @@
     (if-let [tc (type->code (type this))]
       (.getBytes (str this) utf8)
       (if-let [[_ encoder] (type-code this)]
-        (encoder this)))))
+        (encoder this))))
+  (encapsulated-id [this] nil))
 
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
