@@ -75,6 +75,45 @@
   (body [this] "Returns a byte array containing the encoded data")
   (encapsulated-id [this] "Returns an ID that encapsulates the type"))
 
+;; Encapsualted IDs are IDs containing all of the information without requiring additional storage
+;; The data type is contained in the top 4 bits. The remaining 60 bit hold the data:
+;; Top 4 bits:
+;; 1 0 0 0: long
+;; 1 1 0 0: Date
+;; 1 0 1 0: Instant
+;; 1 1 1 0: Short String
+;; 1 0 0 1: Short Keyword
+
+(def ^:const long-type-mask 0x8000000000000000)
+(def ^:const date-type-mask 0xC000000000000000)
+(def ^:const inst-type-mask 0xA000000000000000)
+(def ^:const sstr-type-mask 0xE000000000000000)
+(def ^:const skey-type-mask 0x9000000000000000)
+(def ^:const data-mask      0x0FFFFFFFFFFFFFFF)
+(def ^:const max-short-long 0x07FFFFFFFFFFFFFF)
+(def ^:const min-short-long 0xF800000000000000)
+
+(def ^:const max-short-len 7)
+(def ^:const sbytes-shift 48)
+
+(def ^:const milli-nano "Number of nanoseconds in a millisecond" 1000000)
+
+(defn encapsulate-sstr
+  "Encapsulates a short string. If the string cannot be encapsulated, then return nil."
+  [^String s]
+  (when (<= (.length s) max-short-len)
+    (let [abytes (.getBytes s utf8)
+          len (count abytes)]
+      (when (<= len max-short-len)
+        (reduce (fn [v n] (bit-or v (bit-shift-left ^byte (aget abytes n) (- sbytes-shift n))))
+                0 (range len))))))
+
+(defn encapsulate-long
+  "Encapsulates a long value. If the long is too large to be encapsulated, then return nil."
+  [^long l]
+  (when (and (< l max-short-long) (> l min-short-long))
+    (bit-and data-mask l)))
+
 (extend-protocol FlatFile
   String
   (header [this len]
@@ -83,7 +122,9 @@
       (general-header (type->code String) len)))
   (body [^String this]
     (.getBytes this utf8))
-  (encapsulated-id [this] nil)
+  (encapsulated-id [this]
+    (when-let [sid (encapsulate-sstr this)]
+      (bit-or sstr-type-mask sid)))
 
   URI
   (header [this len]
@@ -103,7 +144,9 @@
     (let [nms (namespace this)
           n (name this)]
       (.getBytes (if nms (str nms "/" n) n) utf8)))
-  (encapsulated-id [this] nil)
+  (encapsulated-id [this]
+    (when-let [sid (encapsulate-sstr (subs (str this) 1))]
+      (bit-or skey-type-mask sid)))
   
   Long
   (header [this len]
@@ -115,8 +158,8 @@
       (.putLong bb 0 this)
       b))
   (encapsulated-id [this]
-    (if (< (abs this) 0x0FFFFFFFFFFFFFFF)
-      (bit-or 0x8000000000000000 this)))
+    (when-let [v (encapsulate-long this)]
+      (bit-or long-type-mask v)))
 
   Double
   (header [this len]
@@ -149,7 +192,9 @@
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
     (body (.getTime this)))
-  (encapsulated-id [this] nil)
+  (encapsulated-id [this]
+    (when-let [v (encapsulate-long (.getTime ^Date this))]
+      (bit-or date-type-mask v)))
 
   Instant
   (header [this len]
@@ -161,7 +206,10 @@
         (.putLong 0 (.getEpochSecond this))
         (.putInt Long/BYTES (.getNano this)))
       b))
-  (encapsulated-id [this] nil)
+  (encapsulated-id [this]
+    (when-let [v (and (zero? (mod (.getNano ^Instant this) milli-nano))
+                      (encapsulate-long (.toEpochMilli ^Instant this)))]
+      (bit-or inst-type-mask v)))
 
   UUID
   (header [this len]

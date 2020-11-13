@@ -100,20 +100,25 @@
   DataStorage
   (find-object
     [this id]
-    (get-object data id))
+    (or
+     (unencapsulate-id id)
+     (get-object data id)))
 
   (find-id
     [this object]
-    (find* this object))
+    (or
+     (encapsulate-id object)
+     (find* this object)))
 
   (write! [this object]
-    (let [[header body] (to-bytes object)
-          node (tree/find-node index [(type-info (aget header 0)) header body object])]
-      (if (vector? node)
-        (let [id (or (encapsulated-id object)
-                     (write-object! data object))]
-          (add index [object-data id] index-writer))
-        (get-long node id-offset))))
+    (or
+     (encapsulated-id object)
+     (let [[header body] (to-bytes object)
+           node (tree/find-node index [(type-info (aget header 0)) header body object])]
+       (if (vector? node)
+         (let [id (write-object! data object)]
+           (add index [object-data id] index-writer))
+         (get-long node id-offset)))))
 
   (at [this t]
     (at* this t))

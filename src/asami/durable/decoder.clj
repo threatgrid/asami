@@ -35,11 +35,10 @@
      (let [len (bit-or (bit-shift-left (aget data 1) 8)
                        (bit-and 0xFF (aget data 2)))]
        (if (< len 0)
-         (let [len2 (read-short paged-rdr pos)]
-           [Integer/BYTES (bit-or
-                           (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
-                           (bit-shift-left (aget data 3) 8)
-                           (bit-and 0xFF (aget data 4)))])
+         [Integer/BYTES (bit-or
+                         (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
+                         (bit-shift-left (aget data 3) 8)
+                         (bit-and 0xFF (aget data 4)))]
          [Short/BYTES len])))))
 
 ;; Readers are given the length and a position. They then read data into a type
@@ -155,9 +154,59 @@
    12 blob-decoder
    13 xsd-decoder})
 
-(defn ^byte type-info
+(def ^:const type-nybble-shift 60)
+(def ^:const len-nybble-shift 56)
+(def ^:const sbytes-shift 48)
+
+(def ^:const byte-mask 0xFF)
+(def ^:const nybble-mask 0xF)
+(def ^:const long-type 0x8)
+(def ^:const date-type 0xC)
+(def ^:const inst-type 0xA)
+(def ^:const sstr-type 0xE)
+(def ^:const skey-type 0x9)
+(def ^:const data-mask 0x0FFFFFFFFFFFFFFF)
+(def ^:const long-nbit 0x0800000000000000)
+(def ^:const lneg-bits 0xF000000000000000)
+
+(defn extract-long
+  "Extract a long number from an encapsulating ID"
+  [^long id]
+  (let [l (bit-and data-mask id)]
+    (if (zero? (bit-and long-nbit l))
+      l
+      (bit-or lneg-bits l))))
+
+(defn extract-sstr
+  "Extract a short string from an encapsulating ID"
+  [^long id]
+  (let [len (bit-and (bit-shift-right id len-nybble-shift) nybble-mask)
+        abytes (byte-array len)]
+    (doseq [i (range len)]
+      (aset abytes i
+            (->> (* i Byte/SIZE)
+                 (- sbytes-shift)
+                 (bit-shift-right id)
+                 (bit-and byte-mask)
+                 byte)))
+    (String. abytes 0 len utf8)))
+
+(defn unencapsulate-id
+  "Converts an encapsulating ID into the object it encapsulates. Return nil if it does not encapsulate anything."
+  [^long id]
+  (when (> 0 id)
+    (let [tb (bit-shift-right id type-nybble-shift)]
+      (case tb
+        long-type (extract-long id)
+        date-type (Date. (extract-long id))
+        long-type (Instant/ofEpochMilli (extract-long id))
+        sstr-type (extract-sstring id)
+        skey-type (keyword (extract-sstring id))
+        nil))))
+
+(defn type-info
   "Returns the type information encoded in a header-byte"
-  [b]
+  ^byte [b]
   (cond
     (zero? (bit-and 0x80 b)) 2   ;; string
     (zero? (bit-and 0x40 b)) 3   ;; uri
