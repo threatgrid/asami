@@ -61,7 +61,8 @@
   (since [this t] (since* this t))
   (since-t [this] (since-t* this))
   (graph [this] (graph* this))
-  (entity [this id] (entity* this id)))
+  (entity [this id] (entity* this id false))
+  (entity [this id nested?] (entity* this id nested?)))
 
 ;; name is the name of the database
 ;; state is an atom containing:
@@ -158,8 +159,8 @@
   "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
    Objects may be nested, but references to top level objects will be nil in order to avoid loops."
   ;; TODO create an Entity type that lazily loads, and references the database it came from
-  [{graph :graph :as db} id]
+  [{graph :graph :as db} id nested?]
   (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
                    (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
-    (reader/ref->entity graph ref)))
+    (reader/ref->entity graph ref nested?)))
 
