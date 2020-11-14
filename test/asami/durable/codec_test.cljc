@@ -1,8 +1,8 @@
 (ns ^{:doc "Tests the encoding/decoding operations"
       :author "Paula Gearon"}
     asami.durable.codec-test
-  (:require [asami.durable.encoder :as encoder :refer [to-bytes]]
-            [asami.durable.decoder :as decoder :refer [read-object]]
+  (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-sstr sstr-type-mask]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long extract-sstr]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
@@ -198,3 +198,27 @@
     #?(:clj (rt (URL. "http://data.org/")))))
 
 ;; this is an unsupported class with a string constructor
+
+#?(:clj
+   (deftest test-encapsulation
+     (let [ess #(encapsulate-sstr % sstr-type-mask)]
+       (is (= (ess "")        -0x2000000000000000))  ;; 0xE000000000000000
+       (is (= (ess "a")       -0x1E9F000000000000))  ;; 0xE161000000000000
+       (is (= (ess "at")      -0x1D9E8C0000000000))  ;; 0xE261740000000000
+       (is (= (ess "one")     -0x1C90919B00000000))  ;; 0xE36F6E6500000000
+       (is (= (ess "four")    -0x1B99908A8E000000))  ;; 0xE4666F7572000000
+       (is (= (ess "fifth")   -0x1A9996998B980000))  ;; 0xE566696674680000
+       (is (= (ess "sixthy")  -0x198C96878B978700))  ;; 0xE673697874687900
+       (is (= (ess "seven..") -0x188C9A899A91D1D2))  ;; 0xE7736576656E2E2E
+       (is (nil? (ess "eight..."))))))
+
+#?(:clj
+   (deftest test-extract
+     (is (= ""        (extract-sstr -0x2000000000000000)))   ;; 0xE000000000000000
+     (is (= "a"       (extract-sstr -0x1E9F000000000000)))   ;; 0xE161000000000000
+     (is (= "at"      (extract-sstr -0x1D9E8C0000000000)))   ;; 0xE261740000000000
+     (is (= "one"     (extract-sstr -0x1C90919B00000000)))   ;; 0xE36F6E6500000000
+     (is (= "four"    (extract-sstr -0x1B99908A8E000000)))   ;; 0xE4666F7572000000
+     (is (= "fifth"   (extract-sstr -0x1A9996998B980000)))   ;; 0xE566696674680000
+     (is (= "sixthy"  (extract-sstr -0x198C96878B978700)))   ;; 0xE673697874687900
+     (is (= "seven.." (extract-sstr -0x188C9A899A91D1D2))))) ;; 0xE7736576656E2E2E

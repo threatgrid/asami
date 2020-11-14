@@ -4,8 +4,8 @@
   (:require [asami.durable.common :refer [DataStorage long-size get-object find-node write-object! get-object
                                           find-tx get-tx]]
             [asami.durable.tree :as tree]
-            [asami.durable.encoder :refer [to-bytes encapsulation-id]]
-            [asami.durable.decoder :refer [type-info long-bytes-compare]]
+            [asami.durable.encoder :refer [to-bytes encapsulate-id]]
+            [asami.durable.decoder :refer [type-info long-bytes-compare unencapsulate-id]]
             [asami.durable.block-api :refer [get-long get-byte put-bytes! put-long!]]
             #?(:clj [clojure.java.io :as io]))
   #?(:clj
@@ -41,7 +41,7 @@
   "Returns a function that can compare data to what is found in a node"
   [data-store]
   (fn [[type-byte header body object] node]
-    (let [node-type (type-info (get-byte node data-offset))
+    (let [^byte node-type (type-info (get-byte node data-offset))
           c (compare type-byte node-type)]
       (if (zero? c)
         (let [nc (long-bytes-compare type-byte header body object (get-bytes node data-offset long-size))]
@@ -76,7 +76,7 @@
 (defn find*
   [{:keys [data index]} object]
   (let [[header body] (to-bytes object)
-        node (tree/find-node index [(type-info (aget header 0)) header body object])]
+        node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
     (when-not (vector? node)
       (get-long node id-offset))))
 
@@ -114,7 +114,7 @@
     (or
      (encapsulated-id object)
      (let [[header body] (to-bytes object)
-           node (tree/find-node index [(type-info (aget header 0)) header body object])]
+           node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
        (if (vector? node)
          (let [id (write-object! data object)]
            (add index [object-data id] index-writer))

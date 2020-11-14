@@ -73,7 +73,7 @@
 (defprotocol FlatFile
   (header [this len] "Returns a byte array containing a header")
   (body [this] "Returns a byte array containing the encoded data")
-  (encapsulated-id [this] "Returns an ID that encapsulates the type"))
+  (encapsulate-id [this] "Returns an ID that encapsulates the type"))
 
 ;; Encapsualted IDs are IDs containing all of the information without requiring additional storage
 ;; The data type is contained in the top 4 bits. The remaining 60 bit hold the data:
@@ -84,29 +84,32 @@
 ;; 1 1 1 0: Short String
 ;; 1 0 0 1: Short Keyword
 
-(def ^:const long-type-mask 0x8000000000000000)
-(def ^:const date-type-mask 0xC000000000000000)
-(def ^:const inst-type-mask 0xA000000000000000)
-(def ^:const sstr-type-mask 0xE000000000000000)
-(def ^:const skey-type-mask 0x9000000000000000)
+(def ^:const long-type-mask -0x8000000000000000) ;; 0x8000000000000000
+(def ^:const date-type-mask -0x4000000000000000) ;; 0xC000000000000000
+(def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
+(def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
+(def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
 (def ^:const data-mask      0x0FFFFFFFFFFFFFFF)
 (def ^:const max-short-long 0x07FFFFFFFFFFFFFF)
-(def ^:const min-short-long 0xF800000000000000)
+(def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
 
 (def ^:const max-short-len 7)
 (def ^:const sbytes-shift 48)
+(def ^:const lenbyte-shift 56)
 
 (def ^:const milli-nano "Number of nanoseconds in a millisecond" 1000000)
 
 (defn encapsulate-sstr
   "Encapsulates a short string. If the string cannot be encapsulated, then return nil."
-  [^String s]
+  [^String s type-mask]
   (when (<= (.length s) max-short-len)
     (let [abytes (.getBytes s utf8)
           len (count abytes)]
       (when (<= len max-short-len)
-        (reduce (fn [v n] (bit-or v (bit-shift-left ^byte (aget abytes n) (- sbytes-shift n))))
-                0 (range len))))))
+        (reduce (fn [v n] (bit-or v (bit-shift-left ^byte (aget abytes n) (- sbytes-shift (* Byte/SIZE n)))))
+                ;; start with the top byte set to the type nybble and the length
+                (bit-or type-mask (bit-shift-left len lenbyte-shift))
+                (range len))))))
 
 (defn encapsulate-long
   "Encapsulates a long value. If the long is too large to be encapsulated, then return nil."
@@ -122,9 +125,8 @@
       (general-header (type->code String) len)))
   (body [^String this]
     (.getBytes this utf8))
-  (encapsulated-id [this]
-    (when-let [sid (encapsulate-sstr this)]
-      (bit-or sstr-type-mask sid)))
+  (encapsulate-id [this]
+    (encapsulate-sstr this sstr-type-mask))
 
   URI
   (header [this len]
@@ -133,7 +135,7 @@
       (general-header (type->code URI) len)))
   (body [this]
     (.getBytes (str this) utf8))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   Keyword
   (header [this len]
@@ -144,9 +146,8 @@
     (let [nms (namespace this)
           n (name this)]
       (.getBytes (if nms (str nms "/" n) n) utf8)))
-  (encapsulated-id [this]
-    (when-let [sid (encapsulate-sstr (subs (str this) 1))]
-      (bit-or skey-type-mask sid)))
+  (encapsulate-id [this]
+    (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
   Long
   (header [this len]
@@ -157,7 +158,7 @@
           bb (ByteBuffer/wrap b)]
       (.putLong bb 0 this)
       b))
-  (encapsulated-id [this]
+  (encapsulate-id [this]
     (when-let [v (encapsulate-long this)]
       (bit-or long-type-mask v)))
 
@@ -170,21 +171,21 @@
           bb (ByteBuffer/wrap b)]
       (.putDouble bb 0 this)
       b))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
 
   BigInt
   (header [this len]
     (general-header (type->code BigInt) len))
   (body [this]
     (.toByteArray (biginteger this)))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   BigDecimal
   (header [this len]
     (general-header (type->code BigDecimal) len))
   (body [^BigDecimal this]
     (.getBytes (str this) utf8))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
 
   Date
   (header [this len]
@@ -192,7 +193,7 @@
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
     (body (.getTime this)))
-  (encapsulated-id [this]
+  (encapsulate-id [this]
     (when-let [v (encapsulate-long (.getTime ^Date this))]
       (bit-or date-type-mask v)))
 
@@ -206,7 +207,7 @@
         (.putLong 0 (.getEpochSecond this))
         (.putInt Long/BYTES (.getNano this)))
       b))
-  (encapsulated-id [this]
+  (encapsulate-id [this]
     (when-let [v (and (zero? (mod (.getNano ^Instant this) milli-nano))
                       (encapsulate-long (.toEpochMilli ^Instant this)))]
       (bit-or inst-type-mask v)))
@@ -221,7 +222,7 @@
         (.putLong 0 (.getLeastSignificantBits this))
         (.putLong Long/BYTES (.getMostSignificantBits this)))
       b))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   Object
   (header [this len]
@@ -233,7 +234,7 @@
       (.getBytes (str this) utf8)
       (if-let [[_ encoder] (type-code this)]
         (encoder this))))
-  (encapsulated-id [this] nil))
+  (encapsulate-id [this] nil))
 
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"

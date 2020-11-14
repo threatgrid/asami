@@ -4,7 +4,7 @@
   (:require [clojure.java.io :as io]
             [asami.durable.common :refer [Paged refresh! read-byte read-bytes-into read-long
                                           FlatStore write-object! get-object force!
-                                          TxStore Closeable get-tx tx-count long-size]]
+                                          TxStore Closeable Forceable get-tx tx-count long-size]]
             [asami.durable.encoder :as encoder]
             [asami.durable.decoder :as decoder])
   (:import [java.io RandomAccessFile]
@@ -166,10 +166,11 @@
     [this id]
     (decoder/read-object paged id))
 
-  Closeable
+  Forceable
   (force! [this]
     (.force (.getChannel ^RandomAccessFile rfile) true))
 
+  Closeable
   (close [this]
     (clear! paged)
     (.close rfile)))
@@ -227,10 +228,11 @@
             (> 0 c) (recur mid high)
             (< 0 c) (recur low mid))))))
 
-  Closeable
+  Forceable
   (force! [this]
     (.force (.getChannel rfile) true))
 
+  Closeable
   (close [this]
     (clear! paged)
     (.close rfile)))

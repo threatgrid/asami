@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.decoder
   (:require [clojure.string :as s]
-            [asami.durable.pages :refer [read-byte read-bytes read-short]])
+            [asami.durable.common :refer [read-byte read-bytes read-short]])
   (:import [clojure.lang Keyword BigInt]
            [java.math BigInteger BigDecimal]
            [java.net URI]
@@ -199,14 +199,14 @@
       (case tb
         long-type (extract-long id)
         date-type (Date. (extract-long id))
-        long-type (Instant/ofEpochMilli (extract-long id))
-        sstr-type (extract-sstring id)
-        skey-type (keyword (extract-sstring id))
+        inst-type (Instant/ofEpochMilli (extract-long id))
+        sstr-type (extract-sstr id)
+        skey-type (keyword (extract-sstr id))
         nil))))
 
 (defn type-info
   "Returns the type information encoded in a header-byte"
-  ^byte [b]
+  [b]
   (cond
     (zero? (bit-and 0x80 b)) 2   ;; string
     (zero? (bit-and 0x40 b)) 3   ;; uri
