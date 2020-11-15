@@ -177,6 +177,12 @@
       l
       (bit-or lneg-bits l))))
 
+(defn as-byte
+  [n]
+  (if (zero? (bit-and 0x80 n))
+    (byte n)
+    (byte (bit-or -0x100 n))))
+
 (defn extract-sstr
   "Extract a short string from an encapsulating ID"
   [^long id]
@@ -188,7 +194,7 @@
                  (- sbytes-shift)
                  (bit-shift-right id)
                  (bit-and byte-mask)
-                 byte)))
+                 as-byte)))
     (String. abytes 0 len utf8)))
 
 (defn unencapsulate-id

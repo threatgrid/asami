@@ -210,7 +210,10 @@
        (is (= (ess "fifth")   -0x1A9996998B980000))  ;; 0xE566696674680000
        (is (= (ess "sixthy")  -0x198C96878B978700))  ;; 0xE673697874687900
        (is (= (ess "seven..") -0x188C9A899A91D1D2))  ;; 0xE7736576656E2E2E
-       (is (nil? (ess "eight..."))))))
+       (is (nil? (ess "eight...")))
+       (is (= (ess "sevenΦ")  -0x188C9A899A91315A))  ;; 0xE7736576656ECEA6
+       (is (nil? (ess "eight.Φ")))
+       )))
 
 #?(:clj
    (deftest test-extract
@@ -221,4 +224,6 @@
      (is (= "four"    (extract-sstr -0x1B99908A8E000000)))   ;; 0xE4666F7572000000
      (is (= "fifth"   (extract-sstr -0x1A9996998B980000)))   ;; 0xE566696674680000
      (is (= "sixthy"  (extract-sstr -0x198C96878B978700)))   ;; 0xE673697874687900
-     (is (= "seven.." (extract-sstr -0x188C9A899A91D1D2))))) ;; 0xE7736576656E2E2E
+     (is (= "seven.." (extract-sstr -0x188C9A899A91D1D2)))   ;; 0xE7736576656E2E2E
+     (is (= "sevenΦ"  (extract-sstr -0x188C9A899A91315A)))   ;; 0xE7736576656ECEA6
+     ))

@@ -96,6 +96,7 @@
 (def ^:const max-short-len 7)
 (def ^:const sbytes-shift 48)
 (def ^:const lenbyte-shift 56)
+(def ^:const byte-mask 0xFF)
 
 (def ^:const milli-nano "Number of nanoseconds in a millisecond" 1000000)
 
@@ -106,7 +107,11 @@
     (let [abytes (.getBytes s utf8)
           len (count abytes)]
       (when (<= len max-short-len)
-        (reduce (fn [v n] (bit-or v (bit-shift-left ^byte (aget abytes n) (- sbytes-shift (* Byte/SIZE n)))))
+        (reduce (fn [v n]
+                  (-> (aget abytes n)
+                      (bit-and byte-mask)
+                      (bit-shift-left (- sbytes-shift (* Byte/SIZE n)))
+                      (bit-or v)))
                 ;; start with the top byte set to the type nybble and the length
                 (bit-or type-mask (bit-shift-left len lenbyte-shift))
                 (range len))))))
