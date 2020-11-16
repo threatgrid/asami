@@ -1,8 +1,8 @@
 (ns ^{:doc "Tests the encoding/decoding operations"
       :author "Paula Gearon"}
     asami.durable.codec-test
-  (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-sstr sstr-type-mask]]
-            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long extract-sstr]]
+  (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
@@ -12,7 +12,7 @@
      (:import [java.io RandomAccessFile File]
               [java.nio ByteBuffer]
               [java.time Instant]
-              [java.util Date Arrays]
+              [java.util Date Arrays GregorianCalendar]
               [java.net URI URL])
      :cljs
      (:import [goog Uri])))
@@ -200,8 +200,8 @@
 ;; this is an unsupported class with a string constructor
 
 #?(:clj
-   (deftest test-encapsulation
-     (let [ess #(encapsulate-sstr % sstr-type-mask)]
+   (deftest test-string-encapsulation
+     (let [ess #(encoder/encapsulate-sstr % encoder/sstr-type-mask)]
        (is (= (ess "")        -0x2000000000000000))  ;; 0xE000000000000000
        (is (= (ess "a")       -0x1E9F000000000000))  ;; 0xE161000000000000
        (is (= (ess "at")      -0x1D9E8C0000000000))  ;; 0xE261740000000000
@@ -213,17 +213,89 @@
        (is (nil? (ess "eight...")))
        (is (= (ess "sevenΦ")  -0x188C9A899A91315A))  ;; 0xE7736576656ECEA6
        (is (nil? (ess "eight.Φ")))
-       )))
+       (is (= (ess "abc🙂")   -0x189E9D9C0F60667E))  ;; 0xE7616263F09F9982
+       (is (nil? (ess "abcd🙂"))))))
+
+#?(:clj
+   (deftest test-encapsulation
+     (let [cal (GregorianCalendar. 2021 0 20 12 0)
+           date (.getTime cal)
+           inst (.toInstant cal)]
+       (is (= (encapsulate-id "")        -0x2000000000000000))  ;; 0xE000000000000000
+       (is (= (encapsulate-id "seven..") -0x188C9A899A91D1D2))  ;; 0xE7736576656E2E2E
+       (is (nil? (encapsulate-id "eight...")))
+       (is (= (encapsulate-id :a)        -0x6E9F000000000000))  ;; 0x9161000000000000
+       (is (= (encapsulate-id :keyword)  -0x68949A8688908D9C))  ;; 0x976b6579776f7264
+       (is (nil? (encapsulate-id :keywords)))
+       (is (= (encapsulate-id date)      -0x3FFFFE88DF42E580))  ;; 0xC000017720BD1A80
+       (is (= (encapsulate-id inst)      -0x5FFFFE88DF42E580))  ;; 0xA000017720BD1A80
+       (is (nil? (encapsulate-id (.plusNanos inst 7))))
+       (is (= (encapsulate-id 42)        -0x7FFFFFFFFFFFFFD6))  ;; 0x800000000000002A
+       (is (= (encapsulate-id -42)       -0x700000000000002A))  ;; 0x8FFFFFFFFFFFFFD6
+       ;; check some of the boundary conditions for long values
+       (is (= (encapsulate-id 0x0400000000000000) -0x7C00000000000000))  ;; 0x8400000000000000
+       (is (= (encapsulate-id -0x0400000000000000) -0x7400000000000000)) ;; 0x8C00000000000000
+       (is (nil? (encapsulate-id 0x0800000000000000)))
+       (is (nil? (encapsulate-id -0x0800000000000000)))
+       (is (nil? (encapsulate-id 0x07FFFFFFFFFFFFFF)))
+       (is (= (encapsulate-id  0x07FFFFFFFFFFFFFE) -0x7800000000000002)) ;; 0x87fffffffffffffe
+       (is (= (encapsulate-id -0x07FFFFFFFFFFFFFF) -0x77ffffffffffffff)) ;; 0x8800000000000001
+       (is (nil? (encapsulate-id -0x0800000000000000))))))
+
+#?(:clj
+   (deftest test-string-extract
+     (is (= ""        (decoder/extract-sstr -0x2000000000000000)))   ;; 0xE000000000000000
+     (is (= "a"       (decoder/extract-sstr -0x1E9F000000000000)))   ;; 0xE161000000000000
+     (is (= "at"      (decoder/extract-sstr -0x1D9E8C0000000000)))   ;; 0xE261740000000000
+     (is (= "one"     (decoder/extract-sstr -0x1C90919B00000000)))   ;; 0xE36F6E6500000000
+     (is (= "four"    (decoder/extract-sstr -0x1B99908A8E000000)))   ;; 0xE4666F7572000000
+     (is (= "fifth"   (decoder/extract-sstr -0x1A9996998B980000)))   ;; 0xE566696674680000
+     (is (= "sixthy"  (decoder/extract-sstr -0x198C96878B978700)))   ;; 0xE673697874687900
+     (is (= "seven.." (decoder/extract-sstr -0x188C9A899A91D1D2)))   ;; 0xE7736576656E2E2E
+     (is (= "sevenΦ"  (decoder/extract-sstr -0x188C9A899A91315A))))) ;; 0xE7736576656ECEA6
 
 #?(:clj
    (deftest test-extract
-     (is (= ""        (extract-sstr -0x2000000000000000)))   ;; 0xE000000000000000
-     (is (= "a"       (extract-sstr -0x1E9F000000000000)))   ;; 0xE161000000000000
-     (is (= "at"      (extract-sstr -0x1D9E8C0000000000)))   ;; 0xE261740000000000
-     (is (= "one"     (extract-sstr -0x1C90919B00000000)))   ;; 0xE36F6E6500000000
-     (is (= "four"    (extract-sstr -0x1B99908A8E000000)))   ;; 0xE4666F7572000000
-     (is (= "fifth"   (extract-sstr -0x1A9996998B980000)))   ;; 0xE566696674680000
-     (is (= "sixthy"  (extract-sstr -0x198C96878B978700)))   ;; 0xE673697874687900
-     (is (= "seven.." (extract-sstr -0x188C9A899A91D1D2)))   ;; 0xE7736576656E2E2E
-     (is (= "sevenΦ"  (extract-sstr -0x188C9A899A91315A)))   ;; 0xE7736576656ECEA6
-     ))
+     (let [cal (GregorianCalendar. 2021 0 20 12 0)
+           date (.getTime cal)
+           inst (.toInstant cal)]
+       (is (= ""        (unencapsulate-id -0x2000000000000000)))   ;; 0xE000000000000000
+       (is (= "a"       (unencapsulate-id -0x1E9F000000000000)))   ;; 0xE161000000000000
+       (is (= "at"      (unencapsulate-id -0x1D9E8C0000000000)))   ;; 0xE261740000000000
+       (is (= "one"     (unencapsulate-id -0x1C90919B00000000)))   ;; 0xE36F6E6500000000
+       (is (= "four"    (unencapsulate-id -0x1B99908A8E000000)))   ;; 0xE4666F7572000000
+       (is (= "fifth"   (unencapsulate-id -0x1A9996998B980000)))   ;; 0xE566696674680000
+       (is (= "sixthy"  (unencapsulate-id -0x198C96878B978700)))   ;; 0xE673697874687900
+       (is (= "seven.." (unencapsulate-id -0x188C9A899A91D1D2)))   ;; 0xE7736576656E2E2E
+       (is (= "sevenΦ"  (unencapsulate-id -0x188C9A899A91315A)))   ;; 0xE7736576656ECEA6
+       (is (= :a (unencapsulate-id -0x6E9F000000000000)))
+       (is (= :keyword (unencapsulate-id -0x68949A8688908D9C)))
+       (is (= date (unencapsulate-id -0x3FFFFE88DF42E580)))
+       (is (= inst (unencapsulate-id -0x5FFFFE88DF42E580)))
+       (is (= 42 (unencapsulate-id -0x7FFFFFFFFFFFFFD6)))
+       (is (= -42 (unencapsulate-id -0x700000000000002A)))
+       (is (= 0x07FFFFFFFFFFFFFE (unencapsulate-id -0x7800000000000002)))
+       (is (= -0x07FFFFFFFFFFFFFF (unencapsulate-id -0x77ffffffffffffff))))))
+
+;; this test will work on CLJS, but on the JVM it is guaranteed to not use storage, and this is being tested
+#?(:clj
+   (deftest test-id-codec
+     (let [cal (GregorianCalendar. 2021 0 20 12 0)
+           date (.getTime cal)
+           inst (.toInstant cal)
+           check (fn [v] (is (= v (unencapsulate-id (encapsulate-id v)))))]
+       (check "")
+       (check "a")
+       (check "at")
+       (check "one")
+       (check "four")
+       (check "fifth")
+       (check "sevenΦ")
+       (check "abc🙂")
+       (check :one)
+       (check :keyword)
+       (check date)
+       (check inst)
+       (check 0)
+       (check -1)
+       (check 42))))

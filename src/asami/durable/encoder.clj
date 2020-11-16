@@ -89,8 +89,8 @@
 (def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
 (def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
 (def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
-(def ^:const data-mask      0x0FFFFFFFFFFFFFFF)
-(def ^:const max-short-long 0x07FFFFFFFFFFFFFF)
+(def ^:const data-mask       0x0FFFFFFFFFFFFFFF)
+(def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
 (def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
 
 (def ^:const max-short-len 7)

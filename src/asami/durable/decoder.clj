@@ -160,14 +160,9 @@
 
 (def ^:const byte-mask 0xFF)
 (def ^:const nybble-mask 0xF)
-(def ^:const long-type 0x8)
-(def ^:const date-type 0xC)
-(def ^:const inst-type 0xA)
-(def ^:const sstr-type 0xE)
-(def ^:const skey-type 0x9)
-(def ^:const data-mask 0x0FFFFFFFFFFFFFFF)
-(def ^:const long-nbit 0x0800000000000000)
-(def ^:const lneg-bits 0xF000000000000000)
+(def ^:const data-mask  0x0FFFFFFFFFFFFFFF)
+(def ^:const long-nbit  0x0800000000000000)
+(def ^:const lneg-bits -0x1000000000000000) ;; 0xF000000000000000
 
 (defn extract-long
   "Extract a long number from an encapsulating ID"
@@ -201,13 +196,13 @@
   "Converts an encapsulating ID into the object it encapsulates. Return nil if it does not encapsulate anything."
   [^long id]
   (when (> 0 id)
-    (let [tb (bit-shift-right id type-nybble-shift)]
+    (let [tb (bit-and (bit-shift-right id type-nybble-shift) nybble-mask)]
       (case tb
-        long-type (extract-long id)
-        date-type (Date. (extract-long id))
-        inst-type (Instant/ofEpochMilli (extract-long id))
-        sstr-type (extract-sstr id)
-        skey-type (keyword (extract-sstr id))
+        0x8 (extract-long id)                          ;; long-type
+        0xC (Date. (extract-long id))                  ;; date-type
+        0xA (Instant/ofEpochMilli (extract-long id))   ;; inst-type
+        0xE (extract-sstr id)                          ;; sstr-type
+        0x9 (keyword (extract-sstr id))                ;; skey-type
         nil))))
 
 (defn type-info
