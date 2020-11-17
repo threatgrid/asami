@@ -21,7 +21,7 @@
 (s/defn ^:private parse-uri :- {:type s/Str
                                 :name s/Str}
   "Splits up a database URI string into structured parts"
-  [uri :- s/Str]
+  [uri]
   (if (map? uri)
     uri
     (if-let [[_ db-type db-name] (re-find #"asami:([^:]+)://(.+)" uri)]
@@ -87,7 +87,7 @@
   "Creates a Database/Connection around an existing Graph.
    graph: The graph or graph wrapper to build a database around.
    uri: The uri of the database."
-  ([graph :- Graphable] (as-connection graph (gensym "internal:graph")))
+  ([graph :- Graphable] (as-connection graph (name (gensym "asami:mem/internal"))))
   ([graph :- Graphable
     uri :- s/Str]
    (let [{:keys [name]} (parse-uri uri)
