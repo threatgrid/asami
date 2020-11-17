@@ -1,20 +1,22 @@
 (ns ^{:doc "A storage implementation over in-memory indexing. Includes full query engine."
       :author "Paula Gearon"}
     asami.core
-    (:require [clojure.string :as str]
-              [asami.storage :as storage :refer [ConnectionType DatabaseType]]
-              [asami.memory :as memory]
-              [asami.query :as query]
-              [asami.internal :as internal]
-              [asami.datom :as datom :refer [->Datom]]
-              [asami.graph :as gr]
-              [zuko.util :as util]
-              [zuko.node :as node]
-              [zuko.entity.general :as entity :refer [EntityMap GraphType]]
-              [zuko.entity.writer :as writer :refer [Triple]]
-              [zuko.entity.reader :as reader]
-              #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])))
+  (:require [clojure.string :as str]
+            [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+            [asami.memory :as memory]
+            [asami.query :as query]
+            [asami.internal :as internal]
+            [asami.datom :as datom :refer [->Datom]]
+            [asami.graph :as gr]
+            [zuko.util :as util]
+            [zuko.node :as node]
+            [zuko.entity.general :as entity :refer [EntityMap GraphType]]
+            [zuko.entity.writer :as writer :refer [Triple]]
+            [zuko.entity.reader :as reader]
+            #?(:clj  [schema.core :as s]
+               :cljs [schema.core :as s :include-macros true]))
+  #?(:clj (:import (java.util.concurrent CompletableFuture)
+                   (java.util.function Supplier))))
 
 (defonce connections (atom {}))
 
@@ -33,8 +35,8 @@
   [uri]
   (let [{:keys [type name]} (parse-uri uri)]
     (case type
-      "mem" (memory/new-connection name memory/empty-graph) 
-      "multi" (memory/new-connection name memory/empty-multi-graph) 
+      "mem" (memory/new-connection name memory/empty-graph)
+      "multi" (memory/new-connection name memory/empty-multi-graph)
       "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
@@ -274,27 +276,31 @@
   :db-after     database value after the transaction
   :tx-data      sequence of datoms produced by the transaction
   :tempids      mapping of the temporary IDs in entities to the allocated nodes"
-  [{:keys [name state] :as connection} :- ConnectionType
-   {:keys [tx-data tx-triples] :as tx-info} :- TransactData]
-  (let [op (fn []
-             (let [tx-id (count (:history @state))
-                   as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
-                   {:keys [graph history] :as db-before} (:db @state)
-                   [triples removals tempids] (if tx-triples       ;; is this inserting raw triples?
-                                                [tx-triples nil {}]
-                                                ;; capture the old usage which didn't have an arg map
-                                                (build-triples db-before (or tx-data tx-info)))
-                   [db-before db-after] (storage/transact-data connection triples removals)]
-               {:db-before db-before
-                :db-after db-after
-                :tx-data (concat
-                          (map (partial as-datom false) removals)
-                          (map (partial as-datom true) triples))
-                :tempids tempids}))]
-    #?(:clj (future (op))
-       :cljs (let [d (delay (op))]
-               (force d)
-               d))))
+  ([connection tx-info]
+   (transact connection tx-info nil))
+  ([{:keys [name state] :as connection} :- ConnectionType
+    {:keys [tx-data tx-triples] :as tx-info} :- TransactData
+    {:keys [executor] :as options}]
+   (let [op (fn []
+              (let [tx-id (count (:history @state))
+                    as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
+                    {:keys [graph history] :as db-before} (:db @state)
+                    [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
+                                                 [tx-triples nil {}]
+                                                 ;; capture the old usage which didn't have an arg map
+                                                 (build-triples db-before (or tx-data tx-info)))
+                    [db-before db-after] (storage/transact-data connection triples removals)]
+                {:db-before db-before
+                 :db-after db-after
+                 :tx-data (concat
+                           (map (partial as-datom false) removals)
+                           (map (partial as-datom true) triples))
+                 :tempids tempids}))]
+     #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))
+                                            (or executor clojure.lang.Agent/soloExecutor))
+        :cljs (let [d (delay (op))]
+                (force d)
+                d)))))
 
 (defn- graphs-of
   "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
