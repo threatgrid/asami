@@ -2,6 +2,7 @@
       :author "Paula Gearon"}
     asami.memory
     (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+              [asami.internal :refer [now instant?]]
               [asami.index :as mem]
               [asami.multi-graph :as multi]
               [asami.graph :as gr]
@@ -9,19 +10,7 @@
               [zuko.entity.general :as entity :refer [GraphType]]
               [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true]))
-    #?(:clj (:import [java.util Date])))
-
-(defn now
-  "Creates an object to represent the current time"
-  []
-  #?(:clj (Date.)
-     :cljs (js/Date.)))
-
-(defn instant?
-  "Tests if a value is a timestamp"
-  [t]
-  (= #?(:clj Date :cljs js/Date) (type t)))
+                 :cljs [schema.core :as s :include-macros true])))
 
 (defn ^:private find-index
   "Performs a binary search through a sorted vector, returning the index of a provided value

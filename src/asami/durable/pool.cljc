@@ -1,12 +1,16 @@
 (ns ^{:doc "Data pool with blocks"
       :author "Paula Gearon"}
     asami.durable.pool
-  (:require [asami.durable.common :refer [DataStorage long-size get-object find-node write-object! get-object
-                                          find-tx get-tx]]
+  (:require [asami.internal :as internal]
+            [asami.durable.common :refer [DataStorage Closeable Forceable Transaction
+                                          long-size get-object write-object! get-object
+                                          find-tx get-tx append! commit! rewind! force! close]]
             [asami.durable.tree :as tree]
+            [asami.durable.flat-file :as flat-file]
             [asami.durable.encoder :refer [to-bytes encapsulate-id]]
             [asami.durable.decoder :refer [type-info long-bytes-compare unencapsulate-id]]
-            [asami.durable.block-api :refer [get-long get-byte put-bytes! put-long!]]
+            [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-bytes! put-long!]]
+            #?(:clj [asami.durable.block.file.block-file :as block-file])
             #?(:clj [clojure.java.io :as io]))
   #?(:clj
      (:import [java.util Date]
@@ -65,6 +69,8 @@
      (when (instance? js/Date t)
        (.getTime t))))
 
+(declare ->ReadOnlyPool)
+
 (defn at*
   [{:keys [tx data index]} t]
   (let [id (if-let [timestamp (as-millis t)]
@@ -112,12 +118,12 @@
 
   (write! [this object]
     (or
-     (encapsulated-id object)
-     (let [[header body] (to-bytes object)
+     (encapsulate-id object)
+     (let [[header body :as object-data] (to-bytes object)
            node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
        (if (vector? node)
          (let [id (write-object! data object)]
-           (add index [object-data id] index-writer))
+           (tree/add index [object-data id] index-writer))
          (get-long node id-offset)))))
 
   (at [this t]
@@ -128,11 +134,17 @@
     (force! data)
     (let [next-index (commit! index)
           root (:root index)]
-      (append! tx {:timestamp (now) :tx-data root})
+      (append! tx {:timestamp (internal/now) :tx-data root})
       (assoc this :index next-index)))
 
   (rewind! [this]
-    (assoc this :index (rewind! index))))
+    (assoc this :index (rewind! index)))
+
+  Closeable
+  (close [this]
+    (close index)
+    (close data)
+    (close tx)))
 
 (def tx-constructor #?(:clj flat-file/tx-store))
 
@@ -140,9 +152,9 @@
 
 (defn create-block-manager
   "Creates a block manager"
-  [name managername block-size]
+  [name manager-name block-size]
   #?(:clj
-     (create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
+     (block-file/create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
 
 (defn open-pool
   "Opens all the resources required for a pool, and returns the pool structure"

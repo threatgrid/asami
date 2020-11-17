@@ -172,6 +172,7 @@
 
   Closeable
   (close [this]
+    (force! this)
     (clear! paged)
     (.close rfile)))
 
@@ -234,6 +235,7 @@
 
   Closeable
   (close [this]
+    (force! this)
     (clear! paged)
     (.close rfile)))
 
