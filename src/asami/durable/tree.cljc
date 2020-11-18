@@ -297,7 +297,7 @@
 
 (defprotocol Tree
   (find-node [this key] "Finds a node in the tree using a key.")
-  (add [this data writer] "Adds data to the tree")
+  (add [this data writer] [this data writer location] "Adds data to the tree")
   (at [this new-root] "Returns a tree for a given transaction root"))
 
 (defrecord ReadOnlyTree [root node-comparator block-manager node-cache]
@@ -312,7 +312,10 @@
   (find-node [this key] (find-node* this key))
 
   (add [this data writer]
-    (if-let [location (find-node this data)]
+    (add this data writer (find-node this data)))
+
+  (add [this data writer location]
+    (if location
       (if (vector? location)
         ;; one of the pair is a leaf node. Attach to the correct side of that node
         (let [[fl sl] location

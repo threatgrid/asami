@@ -20,8 +20,6 @@
 
 (def ^:const data-name "Name of the data file" "data.bin")
 
-(def ^:const tx-name "Name of the transaction file" "tx.bin")
-
 (def ^:const tree-node-size "Number of bytes available in the index nodes" (* 4 long-size))
 
 (def ^:const data-offset 0)
@@ -58,51 +56,16 @@
             nc))
         c))))
 
-(defn as-millis
-  "If t represents a time value, then return it as milliseconds"
-  [t]
-  #?(:clj
-     (cond
-       (instance? Instant t) (.toEpochMilli ^Instant t)
-       (instance? Date t) (.getTime ^Date t))
-     :cljs
-     (when (instance? js/Date t)
-       (.getTime t))))
-
 (declare ->ReadOnlyPool)
-
-(defn at*
-  [{:keys [tx data index]} t]
-  (let [id (if-let [timestamp (as-millis t)]
-             (find-tx tx timestamp)
-             t)
-        tx-data (:tx-data (get-tx tx id))]
-    (->ReadOnlyPool tx data (tree/at index tx))))
 
 (defn find*
   [{:keys [data index]} object]
   (let [[header body] (to-bytes object)
         node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
     (when-not (vector? node)
-      (get-long node id-offset))))
+      (get-long node id-offset-long))))
 
-(defrecord ReadOnlyPool [tx data index]
-  DataStorage
-  (find-object
-    [this id]
-    (get-object data id))
-
-  (find-id
-    [this object]
-    (find* this object))
-
-  (write! [this object]
-    (throw (ex-info "Unsupported Operation" {:cause "Read Only" :operation "write"})))
-
-  (at [this t]
-    (at* this t)))
-
-(defrecord DataPool [tx data index]
+(defrecord ReadOnlyPool [data index root]
   DataStorage
   (find-object
     [this id]
@@ -117,36 +80,56 @@
      (find* this object)))
 
   (write! [this object]
+    (throw (ex-info "Unsupported Operation" {:cause "Read Only" :operation "write"})))
+
+  (at [this new-root]
+    (->ReadOnlyPool data (tree/at index new-root) new-root)))
+
+(defrecord DataPool [data index root]
+  DataStorage
+  (find-object
+    [this id]
+    (or
+     (unencapsulate-id id)
+     (get-object data id)))
+
+  (find-id
+    [this object]
     (or
      (encapsulate-id object)
-     (let [[header body :as object-data] (to-bytes object)
-           node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
-       (if (vector? node)
-         (let [id (write-object! data object)]
-           (tree/add index [object-data id] index-writer))
-         (get-long node id-offset)))))
+     (find* this object)))
 
-  (at [this t]
-    (at* this t))
+  (write! [this object]
+    (if-let [id (encapsulate-id object)]
+     [id this]
+     (let [[header body :as object-data] (to-bytes object)
+           location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+       (if (or (nil? location) (vector? location))
+         (let [id (write-object! data object)
+               ;; Note that this writer takes a different format to the comparator!
+               ;; That's OK, since this `add` function does not require the location to be found again
+               ;; and the writer will format the data correctly
+               next-index (tree/add index [object-data id] index-writer location)]
+           [id (assoc this :index next-index :root (:root next-index))])
+         [(get-long location id-offset) this]))))
+
+  (at [this new-root]
+    (->ReadOnlyPool data (tree/at index new-root) new-root))
 
   Transaction
   (commit! [this]
     (force! data)
-    (let [next-index (commit! index)
-          root (:root index)]
-      (append! tx {:timestamp (internal/now) :tx-data root})
-      (assoc this :index next-index)))
+    (let [next-index (commit! index)]
+      (assoc this :index next-index :root (:root next-index))))
 
   (rewind! [this]
-    (assoc this :index (rewind! index)))
+    (let [next-index (rewind! index)]
+      (assoc this :index next-index :root (:root index))))
 
   Closeable
   (close [this]
     (close index)
-    (close data)
-    (close tx)))
-
-(def tx-constructor #?(:clj flat-file/tx-store))
+    (close data)))
 
 (def data-constructor #?(:clj flat-file/flat-store))
 
@@ -158,21 +141,21 @@
 
 (defn open-pool
   "Opens all the resources required for a pool, and returns the pool structure"
-  [name]
-  (let [tx-store (tx-constructor name tx-name)
-        data-store (data-constructor name data-name)
+  [name root]
+  (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree (partial create-block-manager name) index-name (* 2 long-size) data-compare)]
-   (->DataPool tx-store data-store index)))
+        index (tree/new-block-tree (partial create-block-manager name) index-name tree-node-size data-compare root)]
+   (->DataPool data-store index root)))
 
 (defn create-pool
   "Creates a datapool object"
-  [name]
-  #?(:clj
-     (let [d (io/file name)]
-       (if (.exists d)
-         (when-not (.isDirectory d)
-           (throw (ex-info (str "'" name "' already exists as a file") {:path (.getAbsolutePath d)})))
-         (when-not (.mkdir d)
-           (throw (ex-info (str "Unable to create directory '" name "'") {:path (.getAbsolutePath d)}))))
-       (open-pool name))))
+  ([name] (create-pool name nil))
+  ([name root]
+   #?(:clj
+      (let [d (io/file name)]
+        (if (.exists d)
+          (when-not (.isDirectory d)
+            (throw (ex-info (str "'" name "' already exists as a file") {:path (.getAbsolutePath d)})))
+          (when-not (.mkdir d)
+            (throw (ex-info (str "Unable to create directory '" name "'") {:path (.getAbsolutePath d)}))))
+        (open-pool name root)))))

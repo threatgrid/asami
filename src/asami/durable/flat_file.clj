@@ -176,45 +176,42 @@
     (clear! paged)
     (.close rfile)))
 
-(def ^:const tx-size "Size of the transaction records: timestamp/tree-root"
-  (* 2 long-size))
 
-
-(defn file-size
-  [rfile]
+(defn tx-file-size
+  [rfile tx-size]
   (let [fsize (.getFilePointer rfile)]
     (when-not (zero? (mod fsize tx-size))
       (throw (ex-info "Corrupted transaction file" {:file-size fsize :tx-size tx-size})))
     fsize))
 
-(defrecord TxFile [^RandomAccessFile rfile paged]
+(defrecord TxFile [^RandomAccessFile rfile paged tx-size]
   TxStore
   (append!
     [this {:keys [timestamp tx-data] :as tx}]
     (let [sz (.getFilePointer rfile)]
-      (doto ^RandomAccessFile rfile
-        (.writeLong ^long timestamp)
-        (.writeLong ^long tx-data))
+      (.writeLong ^RandomAccessFile rfile ^long timestamp)
+      (doseq [t tx-data]
+        (.writeLong ^RandomAccessFile rfile ^long t))
       (long (/ sz tx-size))))
 
   (get-tx
     [this id]
     (let [offset (* tx-size id)
           timestamp (read-long paged offset)
-          tx-data (read-long paged (+ long-size offset))]
+          tx-data (mapv #(read-long paged (+ (* long-size %) offset)) (range 1 (/ tx-size long-size)))]
       {:timestamp timestamp
        :tx-data tx-data}))
 
   (latest
     [this]
-    (let [fsize (file-size rfile)
+    (let [fsize (tx-file-size rfile tx-size)
           id (dec (long (/ fsize tx-size)))]
       (when (<= 0 id)
         (get-tx this id))))
 
   (tx-count
     [this]
-    (long (/ (file-size rfile) tx-size)))
+    (long (/ (tx-file-size rfile tx-size) tx-size)))
 
   (find-tx
     [this timestamp]
@@ -259,7 +256,8 @@
 
 (defn tx-store
   "Creates a transaction store. This wraps an append-only file and a paged reader."
-  [group-name name]
-  (let [region-size (* tx-size (int (/ default-region-size tx-size)))
+  [group-name name payload-size]
+  (let [tx-size (+ long-size payload-size)
+        region-size (* tx-size (int (/ default-region-size tx-size)))
         [raf paged] (file-store group-name name region-size)]
-    (->TxFile raf paged)))
+    (->TxFile raf paged tx-size)))

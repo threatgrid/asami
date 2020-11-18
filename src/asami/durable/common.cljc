@@ -17,7 +17,7 @@
   (commit! [this] "Commits all blocks allocated since the last commit. These blocks are now read-only."))
 
 (defprotocol TxStore
-  (append! [this tx] "Writes a transaction record")
+  (append! [this tx] "Writes a transaction record. The record is a seq of longs")
   (get-tx [this id] "Retrieves a transaction record by ID")
   (latest [this] "Retrieves the last transaction record")
   (tx-count [this] "Retrieves the count of transaction records")
@@ -26,7 +26,7 @@
 (defprotocol DataStorage
   (find-object [pool id] "Retrieves an object by ID")
   (find-id [pool object] "Retrieves an ID for an object")
-  (write! [pool object] "Retrieves an ID for an object, writing it if necessary. Idempotent.")
+  (write! [pool object] "Retrieves an ID for an object, writing it if necessary. Returns a pair of the ID and the next version of the store. Idempotent.")
   (at [pool t] "Retrieve the data at a particular transaction."))
 
 (defprotocol Paged
