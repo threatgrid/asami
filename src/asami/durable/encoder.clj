@@ -1,17 +1,15 @@
 (ns ^{:doc "Encodes and decodes data for storage. Clojure implementation"
       :author "Paula Gearon"}
     asami.durable.encoder
-  (:require [clojure.string :as s])
-  (:import [clojure.lang Keyword BigInt]
-           [java.io RandomAccessFile]
-           [java.math BigInteger BigDecimal]
-           [java.net URI]
-           [java.time Instant]
-           [java.util Date UUID]
-           [java.nio ByteBuffer]
-           [java.nio.charset Charset]))
-
-(def utf8 (Charset/forName "UTF-8"))
+    (:require [clojure.string :as s]
+              [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8]])
+    (:import [clojure.lang Keyword BigInt]
+             [java.io RandomAccessFile]
+             [java.math BigInteger BigDecimal]
+             [java.net URI]
+             [java.time Instant]
+             [java.util Date UUID]
+             [java.nio ByteBuffer]))
 
 (def type->code
   {Long (byte 0)
@@ -89,14 +87,10 @@
 (def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
 (def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
 (def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
-(def ^:const data-mask       0x0FFFFFFFFFFFFFFF)
 (def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
 (def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
 
 (def ^:const max-short-len 7)
-(def ^:const sbytes-shift 48)
-(def ^:const lenbyte-shift 56)
-(def ^:const byte-mask 0xFF)
 
 (def ^:const milli-nano "Number of nanoseconds in a millisecond" 1000000)
 
@@ -105,7 +99,7 @@
   [^String s type-mask]
   (when (<= (.length s) max-short-len)
     (let [abytes (.getBytes s utf8)
-          len (count abytes)]
+          len (alength abytes)]
       (when (<= len max-short-len)
         (reduce (fn [v n]
                   (-> (aget abytes n)
@@ -113,7 +107,7 @@
                       (bit-shift-left (- sbytes-shift (* Byte/SIZE n)))
                       (bit-or v)))
                 ;; start with the top byte set to the type nybble and the length
-                (bit-or type-mask (bit-shift-left len lenbyte-shift))
+                (bit-or type-mask (bit-shift-left len len-nybble-shift))
                 (range len))))))
 
 (defn encapsulate-long
@@ -150,7 +144,7 @@
   (body [this]
     (let [nms (namespace this)
           n (name this)]
-      (.getBytes (if nms (str nms "/" n) n) utf8)))
+      (.getBytes (subs (str this) 1) utf8)))
   (encapsulate-id [this]
     (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
@@ -245,4 +239,4 @@
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [b (body o)]
-    [(header o (count b)) b]))
+    [(header o (alength b)) b]))

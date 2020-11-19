@@ -61,11 +61,20 @@
         [ids pool] (reduce (fn [[ids p] d]
                              (let [[id p'] (write! p d)]
                                [(conj ids id) p']))
-                           [[] pool] data)]
+                           [[] pool] data)
+        root (:root-id pool)]
     (doseq [[id value] (map vector ids data)]
       (is (= value (find-object pool id))))
 
     (doseq [[id value] (map vector ids data)]
       (is (= id (find-id pool value)) (str "data: " value)))
     (close pool)
-    (recurse-delete "pool-test")))
+
+    (let [pool2 (create-pool "pool-test" root)]
+      (doseq [[id value] (map vector ids data)]
+        (is (= value (find-object pool2 id))))
+
+      (doseq [[id value] (map vector ids data)]
+        (is (= id (find-id pool2 value)) (str "data: " value)))))
+
+  (recurse-delete "pool-test"))

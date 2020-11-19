@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.codec-test
   (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
-            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long decode-length]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
@@ -22,7 +22,7 @@
      [len] (js/ArrayBuffer. len)))
 
 (defn byte-length [bytes]
-  #?(:clj (count bytes)
+  #?(:clj (alength bytes)
      :cljs (or (.-byteLength bytes)
                (count bytes))))
 
@@ -196,6 +196,33 @@
     (rt #uuid "1df3b523-357e-4339-a009-2d744e372d44")
     (rt (byte-array (range 256)))
     #?(:clj (rt (URL. "http://data.org/")))))
+
+(defn copy-to!
+  [dest dest-offset src len]
+  (doseq [n (range len)]
+    (#?(:clj aset-byte :cljs aset) dest (+ dest-offset n) (aget src n))))
+
+(deftest test-array-decoder
+  (let [bb (byte-array 2048)
+        write! (fn [o]
+                 (let [[header body] (to-bytes o)
+                       header-size (byte-length header)
+                       body-size (byte-length body)]
+                   (copy-to! bb 0 header header-size)
+                   (copy-to! bb header-size body body-size)))
+        rt (fn [o]
+             (write! o)
+             (let [[hl len] (decode-length bb)
+                   olen (if (keyword? o) (dec (count (str o))) (count (str o)))]
+               (is (= olen len))))]
+    (rt "hello")
+    (rt :hello)
+    (rt (uri "http://hello.com/"))
+    (rt (str-of-len 128))
+    (rt (str-of-len 130))
+    (rt (str-of-len 2000))
+    (rt (uri (str "http://data.org/?ref=" (s/replace (str-of-len 100) "100 " "1234"))))
+    (rt :key45678901234567890123456789012345)))
 
 ;; this is an unsupported class with a string constructor
 

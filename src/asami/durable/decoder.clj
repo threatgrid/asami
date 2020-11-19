@@ -1,26 +1,26 @@
 (ns ^{:doc "Encodes and decodes data for storage. Clojure implementation"
       :author "Paula Gearon"}
     asami.durable.decoder
-  (:require [clojure.string :as s]
-            [asami.durable.common :refer [read-byte read-bytes read-short]])
-  (:import [clojure.lang Keyword BigInt]
-           [java.math BigInteger BigDecimal]
-           [java.net URI]
-           [java.time Instant]
-           [java.util Date UUID]
-           [java.nio ByteBuffer]
-           [java.nio.charset Charset]))
+    (:require [clojure.string :as s]
+              [asami.durable.common :refer [read-byte read-bytes read-short]]
+              [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8]])
+    (:import [clojure.lang Keyword BigInt]
+             [java.math BigInteger BigDecimal]
+             [java.net URI]
+             [java.time Instant]
+             [java.util Date UUID]
+             [java.nio ByteBuffer]))
 
-
-(def utf8 (Charset/forName "UTF-8"))
 
 (defn decode-length
   "Reads the header to determine length.
-  ext: if 0 then length is a byte, if 1 then length is in either a short or an int"
+  ext: if true (bit is 0) then length is a byte, if false (bit is 1) then length is in either a short or an int
+  pos: The beginning of the data. This has skipped the type byte.
+  data: The complete buffer to decode, including the type byte.
+  returns: a pair of the header length and the data length."
   ([ext paged-rdr ^long pos]
    (if ext
-     (let [raw (read-byte paged-rdr pos)]
-       [Byte/BYTES (bit-and 0xFF raw)])
+     [Byte/BYTES (bit-and 0xFF (read-byte paged-rdr pos))]
      (let [len (read-short paged-rdr pos)]
        (if (< len 0)
          (let [len2 (read-short paged-rdr pos)]
@@ -29,17 +29,22 @@
                            len2)])
          [Short/BYTES len]))))
   ([^bytes data]
-   (if (zero? (bit-and 0x10 (aget data 0)))
-     (let [raw (aget data 1)]
-       [Byte/BYTES (bit-and 0xFF raw)])
-     (let [len (bit-or (bit-shift-left (aget data 1) 8)
-                       (bit-and 0xFF (aget data 2)))]
-       (if (< len 0)
-         [Integer/BYTES (bit-or
-                         (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
-                         (bit-shift-left (aget data 3) 8)
-                         (bit-and 0xFF (aget data 4)))]
-         [Short/BYTES len])))))
+   (let [b0 (aget data 0)]
+     (cond ;; test for short format objects
+       (zero? (bit-and 0x80 b0)) [1 b0]
+       (zero? (bit-and 0x40 b0)) [1 (bit-and 0x3F b0)]
+       (zero? (bit-and 0x20 b0)) [1 (bit-and 0x1F b0)]
+       ;; First byte contains only the type information
+       :default (if (zero? (bit-and 0x10 b0))
+                  [(inc Byte/BYTES) (bit-and byte-mask (aget data 1))]
+                  (let [len (bit-or (bit-shift-left (aget data 1) Byte/SIZE)
+                                    (bit-and byte-mask (aget data 2)))]
+                    (if (< len 0)
+                      [(inc Integer/BYTES) (bit-or
+                                            (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
+                                            (bit-shift-left (bit-and byte-mask (aget data 3)) 8)
+                                            (bit-and byte-mask (aget data 4)))]
+                      [(inc Short/BYTES) len])))))))
 
 ;; Readers are given the length and a position. They then read data into a type
 
@@ -155,12 +160,8 @@
    13 xsd-decoder})
 
 (def ^:const type-nybble-shift 60)
-(def ^:const len-nybble-shift 56)
-(def ^:const sbytes-shift 48)
 
-(def ^:const byte-mask 0xFF)
 (def ^:const nybble-mask 0xF)
-(def ^:const data-mask  0x0FFFFFFFFFFFFFFF)
 (def ^:const long-nbit  0x0800000000000000)
 (def ^:const lneg-bits -0x1000000000000000) ;; 0xF000000000000000
 
@@ -215,13 +216,33 @@
     :default (let [tn (bit-and 0xF b)]
                (if (or (= tn 4) (= tn 5)) 3 tn))))
 
+(defn partials-len
+  "Determine the number of bytes that form a partial character at the end of a UTF-8 byte array"
+  ([bs] (partials-len bs (alength bs)))
+  ([bs len]
+   (let [end (dec (min len (alength bs)))]
+     (when (>= end 0)
+       (loop [t 0]
+         (if (= 4 t)  ;; Safety limit. Should not happen for well formed UTF-8
+           t
+           (let [b (aget bs (- end t))]
+             (if (zero? (bit-and 0x80 b))  ;; single char that can be included
+               t
+               (if (zero? (bit-and 0x40 b))  ;; extension char that may be truncated
+                 (recur (inc t))
+                 (cond
+                   (= 0xC0 (bit-and 0xE0 b)) (if (= 1 t) 0 (inc t)) ;; 2 bytes
+                   (= 0xE0 (bit-and 0xF0 b)) (if (= 2 t) 0 (inc t)) ;; 3 bytes
+                   (= 0xF0 (bit-and 0xF8 b)) (if (= 3 t) 0 (inc t)) ;; 4 bytes
+                   :default (recur (inc t))))))))))))  ;; this should not happen for well formed UTF-8
+
 (defn string-style-compare
   [left-s right-bytes]
-  (let [rbc (count right-bytes)
+  (let [rbc (alength right-bytes)
         [rn rlen] (decode-length right-bytes)
-        ;; TODO Check if the final byte is part of a unicode pair
-        right-s (String. right-bytes rn (min (- rbc rn) rlen) utf8)
-        min-len (min (count left-s) rlen (count right-s))]
+        trunc-len (partials-len right-bytes (+ rlen rn))
+        right-s (String. right-bytes rn (- (min (- rbc rn) rlen) trunc-len) utf8)
+        min-len (min (count left-s) (count right-s))]
     (compare (subs left-s 0 min-len)
              (subs right-s 0 min-len))))
 
@@ -230,19 +251,21 @@
    then return 0."
   [type-left left-header left-body left-object right-bytes]
   (case type-left
-    2 (string-style-compare left-object right-bytes)
-    3 (string-style-compare (str left-object) right-bytes)
-    10 (string-style-compare (subs (str left-object) 1) right-bytes)
-    ))
+    2 (string-style-compare left-object right-bytes)   ;; String
+    3 (string-style-compare (str left-object) right-bytes)  ;; URI
+    10 (string-style-compare (subs (str left-object) 1) right-bytes)  ;; Keyword
+    ;; TODO handle other comparison types
+    0))
 
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"
   [paged-rdr ^long pos]
   (let [b0 (read-byte paged-rdr pos)
         ipos (inc pos)]
-    (cond
+    (cond  ;; test for short format objects
       (zero? (bit-and 0x80 b0)) (read-str paged-rdr ipos b0)
       (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
       (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
+      ;; First byte contains only the type information
       :default ((typecode->decoder (bit-and 0x0F b0) default-decoder)
                 (zero? (bit-and 0x10 b0)) paged-rdr ipos))))
