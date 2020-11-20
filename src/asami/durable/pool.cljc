@@ -88,11 +88,9 @@
   DataStorage
   (find-object
     [this id]
-    (try
-      (or
-       (unencapsulate-id id)
-       (get-object data id))
-      (catch Exception e (println "Error getting: " id))))
+    (or
+     (unencapsulate-id id)
+     (get-object data id)))
 
   (find-id
     [this object]
@@ -102,23 +100,18 @@
 
   (write! [this object]
     (if-let [id (encapsulate-id object)]
-      (do
-        (when (> id 0)
-          (println "ENCAPSULATED: " id "for" object))
-        [id this])
-      (let [[header body :as object-data] (to-bytes object)
-            location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
-        (if (or (nil? location) (vector? location))
-          (let [id (write-object! data object)
-                ;; Note that this writer takes a different format to the comparator!
-                ;; That's OK, since this `add` function does not require the location to be found again
-                ;; and the writer will format the data correctly
-                next-index (tree/add index [object-data id] index-writer location)]
-            (when (> id 16777248) (println "WROTE ID: " id "for" object))
-            [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
-          (let [id (get-long location id-offset-long)]
-            (when (> id 16777248) (println "READ ID: " id "for" object))
-            [(get-long location id-offset-long) this])))))
+      [id this])
+    (let [[header body :as object-data] (to-bytes object)
+          location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+      (if (or (nil? location) (vector? location))
+        (let [id (write-object! data object)
+              ;; Note that this writer takes a different format to the comparator!
+              ;; That's OK, since this `add` function does not require the location to be found again
+              ;; and the writer will format the data correctly
+              next-index (tree/add index [object-data id] index-writer location)]
+          [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
+        (let [id (get-long location id-offset-long)]
+          [(get-long location id-offset-long) this]))))
 
   (at [this new-root-id]
     (->ReadOnlyPool data (tree/at index new-root-id) new-root-id))
