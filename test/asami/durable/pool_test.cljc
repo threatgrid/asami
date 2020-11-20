@@ -103,26 +103,21 @@
         words (s/split book #"\s")
         pool (create-pool "book2")
         [coded bpool] (reduce (fn [[ids p] w]
-                                (println "added: " w)
                                 (let [[id p'] (write! p w)]
                                   [(conj ids id) p']))
                               [[] pool]
-                              (take 61 words))
-        gnode (find-node bpool "Gutenberg")
-        gpos (get-long gnode id-offset-long)
-        _ (println "G:" gpos "  ID:" (get-id gnode))
-        [coded bpool] (reduce (fn [[ids p n] w]
-                                (let [[id p'] (write! p w)
-                                      gp (get-long gnode id-offset-long)]
-                                  (when (not= gp gpos)
-                                    (throw (ex-info (str "Failed at " w " /" n) {:word w :pos n})))
-                                  [(conj ids id) p' (inc n)]))
-                              [[] pool 62]
-                              (drop 61 words))
-        fg (find-node bpool "Gutenberg")]
-    (println "Final Gutenberg: " (get-long fg id-offset-long) "  ID:" (get-id fg))
-    (doseq [node (node-seq (:index bpool) (first-node bpool))]
-      (let [id (get-long node id-offset-long)]
-        (if (< id 16777248)
-          (println id ":" (get-object (:data bpool) id))
-          (println "BAD: " (get-id node) (into [] (get-bytes node 0 24))))))))
+                              words)
+        root (:root-id bpool)
+        g (find-id bpool "Gutenberg")
+        output-words (map #(find-object bpool %) coded)]
+    (is (= "Gutenberg" (find-object bpool g)))
+    (is (= words output-words))
+
+    (close bpool)
+
+    (let [new-pool (create-pool "book2" root)
+          g2 (find-id new-pool "Gutenberg")
+          output-words2 (map #(find-object new-pool %) coded)]
+      (is (= g g2))
+      (is (= words output-words2))))
+  (recurse-delete "book2"))

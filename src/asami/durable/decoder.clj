@@ -16,35 +16,30 @@
   "Reads the header to determine length.
   ext: if true (bit is 0) then length is a byte, if false (bit is 1) then length is in either a short or an int
   pos: The beginning of the data. This has skipped the type byte.
-  data: The complete buffer to decode, including the type byte.
   returns: a pair of the header length and the data length."
-  ([ext paged-rdr ^long pos]
-   (if ext
-     [Byte/BYTES (bit-and 0xFF (read-byte paged-rdr pos))]
-     (let [len (read-short paged-rdr pos)]
-       (if (< len 0)
-         (let [len2 (read-short paged-rdr pos)]
-           [Integer/BYTES (bit-or
-                           (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
-                           len2)])
-         [Short/BYTES len]))))
-  ([^bytes data]
-   (let [b0 (aget data 0)]
-     (cond ;; test for short format objects
-       (zero? (bit-and 0x80 b0)) [1 b0]
-       (zero? (bit-and 0x40 b0)) [1 (bit-and 0x3F b0)]
-       (zero? (bit-and 0x20 b0)) [1 (bit-and 0x1F b0)]
-       ;; First byte contains only the type information
-       :default (if (zero? (bit-and 0x10 b0))
-                  [(inc Byte/BYTES) (bit-and byte-mask (aget data 1))]
-                  (let [len (bit-or (bit-shift-left (aget data 1) Byte/SIZE)
-                                    (bit-and byte-mask (aget data 2)))]
-                    (if (< len 0)
-                      [(inc Integer/BYTES) (bit-or
-                                            (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
-                                            (bit-shift-left (bit-and byte-mask (aget data 3)) 8)
-                                            (bit-and byte-mask (aget data 4)))]
-                      [(inc Short/BYTES) len])))))))
+  [ext paged-rdr ^long pos]
+  (if ext
+    [Byte/BYTES (bit-and 0xFF (read-byte paged-rdr pos))]
+    (let [len (read-short paged-rdr pos)]
+      (if (< len 0)
+        (let [len2 (read-short paged-rdr pos)]
+          [Integer/BYTES (bit-or
+                          (bit-shift-left (int (bit-and 0x7FFF len)) Short/SIZE)
+                          len2)])
+        [Short/BYTES len]))))
+
+(defn decode-length-node
+  "Reads the header to determine length.
+  data: The complete buffer to decode, including the type byte.
+  returns: the length, or a lower bound on the length"
+  [^bytes data]
+  (let [b0 (aget data 0)]
+    (cond ;; test for short format objects
+      (zero? (bit-and 0x80 b0)) b0
+      (zero? (bit-and 0x40 b0)) (bit-and 0x3F b0)
+      (zero? (bit-and 0x20 b0)) (bit-and 0x1F b0)
+      ;; First byte contains only the type information. Give a large number = 63
+      :default 0x3F)))
 
 ;; Readers are given the length and a position. They then read data into a type
 
@@ -217,7 +212,8 @@
                (if (or (= tn 4) (= tn 5)) 3 tn))))
 
 (defn partials-len
-  "Determine the number of bytes that form a partial character at the end of a UTF-8 byte array"
+  "Determine the number of bytes that form a partial character at the end of a UTF-8 byte array.
+  The len argument is the defined length of the full string, but that may be greater than the bytes provided."
   ([bs] (partials-len bs (alength bs)))
   ([bs len]
    (let [end (dec (min len (alength bs)))]
@@ -239,23 +235,23 @@
 (defn string-style-compare
   [left-s right-bytes]
   (let [rbc (alength right-bytes)
-        [rn rlen] (decode-length right-bytes)
-        trunc-len (partials-len right-bytes (+ rlen rn))
-        right-s (String. right-bytes rn (- (min (- rbc rn) rlen) trunc-len) utf8)
+        rlen (decode-length-node right-bytes)
+        trunc-len (partials-len right-bytes (inc rlen))
+        right-s (String. right-bytes 1 (- (min (dec rbc) rlen) trunc-len) utf8)
         min-len (min (count left-s) (count right-s))]
     (compare (subs left-s 0 min-len)
              (subs right-s 0 min-len))))
 
 (defn long-bytes-compare
   "Compare data from 2 values that are the same type. If the data cannot give a result
-   then return 0."
+   then return 0. Operates on an array, expected to be in an index node."
   [type-left left-header left-body left-object right-bytes]
   (case type-left
     2 (string-style-compare left-object right-bytes)   ;; String
     3 (string-style-compare (str left-object) right-bytes)  ;; URI
     10 (string-style-compare (subs (str left-object) 1) right-bytes)  ;; Keyword
-    ;; TODO handle other comparison types
-    0))
+    ;; otherwise, skip the type byte in the right-bytes, and raw compare left bytes to right bytes
+    (or (first (drop-while zero? (map compare left-body (drop 1 right-bytes)))) 0)))
 
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"

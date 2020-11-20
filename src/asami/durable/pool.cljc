@@ -9,7 +9,7 @@
               [asami.durable.flat-file :as flat-file]
               [asami.durable.encoder :refer [to-bytes encapsulate-id]]
               [asami.durable.decoder :refer [type-info long-bytes-compare unencapsulate-id]]
-              [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-bytes! put-long! get-id]]
+              [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id]]
               #?(:clj [asami.durable.block.file.block-file :as block-file])
               #?(:clj [clojure.java.io :as io]))
     #?(:clj
@@ -24,7 +24,7 @@
 
 (def ^:const data-offset 0)
 
-(def ^:const id-offset-long 3)
+(def ^:const id-offset-long 1)
 
 (def ^:const id-offset (* id-offset-long long-size))
 
@@ -32,11 +32,10 @@
 
 (defn index-writer
   [node [[header body] id]]
-  (let [hdr-len (alength header)
-        remaining (- payload-len hdr-len)]
-    (put-bytes! node data-offset hdr-len header)
+  (let [remaining (dec payload-len)]
+    (put-byte! node data-offset (aget header 0))
     (when (> remaining 0)
-      (put-bytes! node hdr-len (min remaining (alength body)) body))
+      (put-bytes! node 1 (min remaining (alength body)) body))
     (put-long! node id-offset-long id)))
 
 (defn pool-comparator-fn

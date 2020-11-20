@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.codec-test
   (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
-            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long decode-length]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long decode-length-node]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
@@ -212,9 +212,9 @@
                    (copy-to! bb header-size body body-size)))
         rt (fn [o]
              (write! o)
-             (let [[hl len] (decode-length bb)
+             (let [len (decode-length-node bb)
                    olen (if (keyword? o) (dec (count (str o))) (count (str o)))]
-               (is (= olen len))))]
+               (is (= (if (> olen 23) 0x3F olen) len))))]
     (rt "hello")
     (rt :hello)
     (rt (uri "http://hello.com/"))
