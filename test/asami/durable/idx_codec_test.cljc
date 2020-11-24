@@ -121,16 +121,16 @@
      (index-writer node [data 0])
      (if (identical? obj other)
        (is (= 0 (long-bytes-compare typ oheader obody other
-                                    (get-bytes node pool/data-offset pool/payload-len))))
+                                    (get-bytes node pool/data-offset pool/payload-len)))
+           (str "comparing: '" obj "' / '" other "'"))
        (is (not= 0 (long-bytes-compare typ oheader obody other
                                        (get-bytes node pool/data-offset pool/payload-len)))
            (str "comparing: '" obj "' / '" other "'"))))))
 
 (deftest index-codec
-  ; (check-data "of")
-  ; (check-data "of" "if")
+  (check-data "of")
+  (check-data "of" "if")
   (check-data "of" "off")
-  ; (check-data "one thousand")
-  ; (check-data "one thousand" "one")
-  ; (check-data "Really, really, really, really long data. No, really. It's that long. And longer.")
-  )
+  (check-data "one thousand")
+  (check-data "one thousand" "one")
+  (check-data "Really, really, really, really long data. No, really. It's that long. And longer."))

@@ -235,17 +235,19 @@
 (defn string-style-compare
   "Compare the string form of an object with bytes that store the string form of an object"
   [left-s right-bytes]
-  (let [rbc (alength right-bytes)   ;; length of all bytes
+  (let [rbc (alength right-bytes) ;; length of all bytes
+        full-length (decode-length-node right-bytes)
         ;; get the length of the bytes used in the string
-        rlen (min (decode-length-node right-bytes) (dec rbc))
+        rlen (min full-length (dec rbc))
         ;; look for partial chars to be truncated, starting at the end.
         ;; string starts 1 byte in, after the header, so start at inc of the string byte length
         trunc-len (partials-len right-bytes (inc rlen))
         right-s (String. right-bytes 1 (- rlen trunc-len) utf8)
-        min-len (min (count left-s) (count right-s))]
-    (println "Comparing: '" (subs left-s 0 min-len) "' / '" right-s "'")
-    (compare (subs left-s 0 min-len)
-             right-s)))
+        ;; only truncate the LHS if the node does not contain all of the string data
+        left-side (if (<= full-length (dec rbc))
+                    left-s
+                    (subs left-s 0 (min (count left-s) (count right-s))))]
+    (compare left-side right-s)))
 
 (defn long-bytes-compare
   "Compare data from 2 values that are the same type. If the data cannot give a result
