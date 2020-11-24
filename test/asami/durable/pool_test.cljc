@@ -53,9 +53,22 @@
     (close pool)
     (recurse-delete "empty-test2")))
 
+(defn find-node
+  [{index :index} s]
+  (let [[header body] (to-bytes s)]
+    (tree/find-node index [^byte (type-info (aget header 0)) header body s])))
+
+(defn first-node
+  [{{root :root :as index} :index}]
+  (loop [n root]
+    (if-let [nn (get-child n index left)]
+      (recur nn)
+      n)))
+
 (deftest test-storage
   (let [pool (create-pool "pool-test")
-        data [".......one"
+        data ["abcdefgh"
+              ".......one"
               ".......two"
               ".......three hundred and twenty-five"
               ".......four hundred and thirty-six"
@@ -69,7 +82,13 @@
                              (let [[id p'] (write! p d)]
                                [(conj ids id) p']))
                            [[] pool] data)
-        root (:root-id pool)]
+        root (:root-id pool)
+        [ids2 pool] (reduce (fn [[ids p] d]
+                              (let [[id p'] (write! p d)]
+                                [(conj ids id) p']))
+                            [[] pool] data)]
+    (is (= ids ids2))
+    (is (= root (:root-id pool)))
     (doseq [[id value] (map vector ids data)]
       (is (= value (find-object pool id))))
 
@@ -85,18 +104,6 @@
         (is (= id (find-id pool2 value)) (str "data: " value)))))
 
   (recurse-delete "pool-test"))
-
-(defn find-node
-  [{index :index} s]
-  (let [[header body] (to-bytes s)]
-    (tree/find-node index [^byte (type-info (aget header 0)) header body s])))
-
-(defn first-node
-  [{{root :root :as index} :index}]
-  (loop [n root]
-    (if-let [nn (get-child n index left)]
-      (recur nn)
-      n)))
 
 (deftest test-words
   (let [book (slurp "resources/pride_and_prejudice.txt")

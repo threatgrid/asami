@@ -20,15 +20,15 @@
 
 (def ^:const data-name "Name of the data file" "data.bin")
 
-(def ^:const tree-node-size "Number of bytes available in the index nodes" (* 4 long-size))
-
 (def ^:const data-offset 0)
 
-(def ^:const id-offset-long 1)
+(def ^:const id-offset-long 2)
 
 (def ^:const id-offset (* id-offset-long long-size))
 
 (def ^:const payload-len (- id-offset data-offset))
+
+(def ^:const tree-node-size "Number of bytes used in the index nodes" (* (inc id-offset-long) long-size))
 
 (defn index-writer
   [node [[header body] id]]
@@ -100,18 +100,18 @@
 
   (write! [this object]
     (if-let [id (encapsulate-id object)]
-      [id this])
-    (let [[header body :as object-data] (to-bytes object)
-          location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
-      (if (or (nil? location) (vector? location))
-        (let [id (write-object! data object)
-              ;; Note that this writer takes a different format to the comparator!
-              ;; That's OK, since this `add` function does not require the location to be found again
-              ;; and the writer will format the data correctly
-              next-index (tree/add index [object-data id] index-writer location)]
-          [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
-        (let [id (get-long location id-offset-long)]
-          [(get-long location id-offset-long) this]))))
+      [id this]
+      (let [[header body :as object-data] (to-bytes object)
+            location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+        (if (or (nil? location) (vector? location))
+          (let [id (write-object! data object)
+                ;; Note that this writer takes a different format to the comparator!
+                ;; That's OK, since this `add` function does not require the location to be found again
+                ;; and the writer will format the data correctly
+                next-index (tree/add index [object-data id] index-writer location)]
+            [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
+          (let [id (get-long location id-offset-long)]
+            [(get-long location id-offset-long) this])))))
 
   (at [this new-root-id]
     (->ReadOnlyPool data (tree/at index new-root-id) new-root-id))
