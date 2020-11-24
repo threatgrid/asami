@@ -233,14 +233,19 @@
                    :default (recur (inc t))))))))))))  ;; this should not happen for well formed UTF-8
 
 (defn string-style-compare
+  "Compare the string form of an object with bytes that store the string form of an object"
   [left-s right-bytes]
-  (let [rbc (alength right-bytes)
-        rlen (decode-length-node right-bytes)
+  (let [rbc (alength right-bytes)   ;; length of all bytes
+        ;; get the length of the bytes used in the string
+        rlen (min (decode-length-node right-bytes) (dec rbc))
+        ;; look for partial chars to be truncated, starting at the end.
+        ;; string starts 1 byte in, after the header, so start at inc of the string byte length
         trunc-len (partials-len right-bytes (inc rlen))
-        right-s (String. right-bytes 1 (- (min (dec rbc) rlen) trunc-len) utf8)
+        right-s (String. right-bytes 1 (- rlen trunc-len) utf8)
         min-len (min (count left-s) (count right-s))]
+    (println "Comparing: '" (subs left-s 0 min-len) "' / '" right-s "'")
     (compare (subs left-s 0 min-len)
-             (subs right-s 0 min-len))))
+             right-s)))
 
 (defn long-bytes-compare
   "Compare data from 2 values that are the same type. If the data cannot give a result

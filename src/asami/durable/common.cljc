@@ -6,6 +6,12 @@
 (def ^:const long-size "Number of bytes in a Long value"
   #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT))
 
+(def ^:const int-size "Number of bytes in a Integer value"
+  #?(:clj Integer/BYTES :cljs Int32Array.BYTES_PER_ELEMENT))
+
+(def ^:const short-size "Number of bytes in a Short value"
+  #?(:clj Short/BYTES :cljs Int16Array.BYTES_PER_ELEMENT))
+
 (defprotocol Forceable
   (force! [this] "Ensures that all written data is fully persisted"))
 
