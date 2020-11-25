@@ -105,15 +105,20 @@
 
   (recurse-delete "pool-test"))
 
+(defn load-strings!
+  "Loads words into the pool. Returns a pair of the IDs for the words (in order) and the new pool"
+  [words pool]
+  (reduce (fn [[ids p] w]
+            (let [[id p'] (write! p w)]
+              [(conj ids id) p']))
+          [[] pool]
+          words))
+
 (deftest test-words
   (let [book (slurp "resources/pride_and_prejudice.txt")
         words (s/split book #"\s")
         pool (create-pool "book2")
-        [coded bpool] (reduce (fn [[ids p] w]
-                                (let [[id p'] (write! p w)]
-                                  [(conj ids id) p']))
-                              [[] pool]
-                              words)
+        [coded bpool] (load-strings! words pool)
         root (:root-id bpool)
         g (find-id bpool "Gutenberg")
         output-words (map #(find-object bpool %) coded)]
@@ -124,7 +129,12 @@
 
     (let [new-pool (create-pool "book2" root)
           g2 (find-id new-pool "Gutenberg")
-          output-words2 (map #(find-object new-pool %) coded)]
+          output-words2 (map #(find-object new-pool %) coded)
+          [coded2 bpool2] (load-strings! words new-pool)]
       (is (= g g2))
-      (is (= words output-words2))))
+      (is (= words output-words2))
+      ;; the following should not have changed, since the same words were loaded
+      (is (= coded coded2))
+      (is (= root (:root-id bpool2)))
+      (close bpool2)))
   (recurse-delete "book2"))

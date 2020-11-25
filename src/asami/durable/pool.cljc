@@ -31,6 +31,10 @@
 
 (def ^:const tree-node-size "Number of bytes used in the index nodes" (* (inc id-offset-long) long-size))
 
+(defn get-object-ref
+  [node]
+  (get-long node id-offset-long))
+
 (defn index-writer
   [node [[header body] id]]
   (let [remaining (dec payload-len)]
@@ -51,7 +55,7 @@
             ;; There is an optimization option here if one of the strings is shorter than the
             ;; node payload length and matches the header of the other string, then they match
             ;; and this next step is performed. Instead, in this case a +/- 1 can be returned.
-            (let [stored-data (get-object data-store (get-long node id-offset-long))]
+            (let [stored-data (get-object data-store (get-object-ref node))]
               (compare object stored-data))
             nc))
         c))))
@@ -63,7 +67,7 @@
   (let [[header body] (to-bytes object)
         node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
     (when-not (vector? node)
-      (get-long node id-offset-long))))
+      (get-object-ref node))))
 
 (defrecord ReadOnlyPool [data index root-id cache]
   DataStorage
@@ -116,7 +120,7 @@
                   next-index (tree/add index [object-data id] index-writer location)]
               (swap! cache miss object id)
               [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
-            (let [id (get-long location id-offset-long)]
+            (let [id (get-object-ref location)]
               (swap! cache miss object id)
               [id this]))))))
 
