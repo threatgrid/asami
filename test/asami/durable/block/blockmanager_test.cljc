@@ -3,6 +3,7 @@
     asami.durable.block.blockmanager-test
   (:require [clojure.test :refer :all]  ;; todo: get explicit requirements since this won't work for ClojureScript
             [asami.durable.test-utils :refer [get-filename]]
+            [asami.durable.common :refer :all]
             [asami.durable.block.block-api :refer :all]
             [asami.durable.block.file.block-file :refer :all]
             [asami.durable.block.file.voodoo :as voodoo]
@@ -106,7 +107,7 @@
                                (let [n (long (rand nr-blocks))
                                      b (allocate-block! mbf)]
                                  (put-long! b 0 n)
-                                 (write-block! mbf b)
+                                 (write-block mbf b)
                                  (assoc m (get-id b) n)))
                              {} (range nr-blocks))
             ;; commit the first 100,000
@@ -116,7 +117,7 @@
                                 (let [n (long (rand nr-blocks))
                                       b (allocate-block! mbf)]
                                   (put-long! b 0 n)
-                                  (write-block! mbf b)
+                                  (write-block mbf b)
                                   (assoc m (get-id b) n)))
                               {} (range nr-blocks (* 2 nr-blocks)))]
 
@@ -131,7 +132,7 @@
                                   (let [n (long (rand nr-blocks))
                                         b (allocate-block! mbf)]
                                     (put-long! b 0 n)
-                                    (write-block! mbf b)
+                                    (write-block mbf b)
                                     (assoc m (get-id b) n)))
                                 {} (range nr-blocks (* 2 nr-blocks)))]
 

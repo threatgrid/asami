@@ -39,8 +39,11 @@
                                      [r (.capacity r)]))
                                  [region region-size])]
       (when (> end region-size)
-        (throw (ex-info "Accessing trailing data beyond the end of file"
-                        {:region-size region-size :region-offset region-offset})))
+        (when (= region-nr (dec (count @regions)))
+          (refresh! paged-file))
+        (when (>= region-nr (dec (count @regions)))
+          (throw (ex-info "Accessing trailing data beyond the end of file"
+                          {:region-size region-size :region-offset region-offset}))))
       [region region-offset])))
 
 ;; These functions do update the PagedFile state, but only to expand the mapped region.
