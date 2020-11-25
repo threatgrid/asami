@@ -115,7 +115,7 @@
           words))
 
 (deftest test-words
-  (let [book (slurp "resources/pride_and_prejudice.txt")
+  (let [book (slurp "test/resources/pride_and_prejudice.txt")
         words (s/split book #"\s")
         pool (create-pool "book2")
         [coded bpool] (load-strings! words pool)
