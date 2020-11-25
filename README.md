@@ -28,7 +28,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "1.2.5"}
+    org.clojars.quoll/asami {:mvn/version "1.2.6"}
   }
 }
 ```
@@ -37,7 +37,7 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "1.2.5"]
+[org.clojars.quoll/asami "1.2.6"]
 ```
 
 ### Running
@@ -68,13 +68,15 @@ Once a repl has been configured for Asami, the following can be copy/pasted to t
                     :movie/genre "animation/adventure"
                     :movie/release-year 1995}])
 
-(d/transact conn {:tx-data first-movies})
+@(d/transact conn {:tx-data first-movies})
 ```
 The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
 
 For more information about loading data and executing `transact` see the [Transactions documentation](https://github.com/threatgrid/asami/wiki/Transactions).
 
-With the data loaded, a database value can be retrieved from the database and then queried:
+With the data loaded, a database value can be retrieved from the database and then queried.
+
+**NB:** The `transact` operation will be executed asynchronously on the JVM. Retrieving a database immediately after executing a `transact` will not retrieve the latest database. If the updated database is needed, then perform the `deref` operation as shown above, since this will wait until the operation is complete.
 
 ```clojure
 (def db (d/db conn))

@@ -1,27 +1,26 @@
 (ns ^{:doc "A storage implementation over in-memory indexing. Includes full query engine."
       :author "Paula Gearon"}
     asami.core
-    (:require [clojure.string :as str]
-              [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+    (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
               [asami.memory :as memory]
               [asami.query :as query]
-              [asami.internal :as internal]
               [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]
               [zuko.util :as util]
               [zuko.node :as node]
               [zuko.entity.general :as entity :refer [EntityMap GraphType]]
               [zuko.entity.writer :as writer :refer [Triple]]
-              [zuko.entity.reader :as reader]
               #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])))
+                 :cljs [schema.core :as s :include-macros true]))
+    #?(:clj (:import (java.util.concurrent CompletableFuture)
+                     (java.util.function Supplier))))
 
 (defonce connections (atom {}))
 
 (s/defn ^:private parse-uri :- {:type s/Str
                                 :name s/Str}
   "Splits up a database URI string into structured parts"
-  [uri :- s/Str]
+  [uri]
   (if (map? uri)
     uri
     (if-let [[_ db-type db-name] (re-find #"asami:([^:]+)://(.+)" uri)]
@@ -33,8 +32,8 @@
   [uri]
   (let [{:keys [type name]} (parse-uri uri)]
     (case type
-      "mem" (memory/new-connection name memory/empty-graph) 
-      "multi" (memory/new-connection name memory/empty-multi-graph) 
+      "mem" (memory/new-connection name memory/empty-graph)
+      "multi" (memory/new-connection name memory/empty-multi-graph)
       "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
@@ -87,7 +86,7 @@
   "Creates a Database/Connection around an existing Graph.
    graph: The graph or graph wrapper to build a database around.
    uri: The uri of the database."
-  ([graph :- Graphable] (as-connection graph (gensym "internal:graph")))
+  ([graph :- Graphable] (as-connection graph (name (gensym "asami:mem/internal"))))
   ([graph :- Graphable
     uri :- s/Str]
    (let [{:keys [name]} (parse-uri uri)
@@ -242,7 +241,8 @@
                     {(s/optional-key :tx-data) [s/Any]
                      (s/optional-key :tx-triples) [[(s/one s/Any "entity")
                                                     (s/one s/Any "attribute")
-                                                    (s/one s/Any "value")]]}
+                                                    (s/one s/Any "value")]]
+                     (s/optional-key :executor) s/Any}
                     [s/Any]))
 
 (s/defn transact
@@ -273,14 +273,15 @@
   :db-before    database value before the transaction
   :db-after     database value after the transaction
   :tx-data      sequence of datoms produced by the transaction
-  :tempids      mapping of the temporary IDs in entities to the allocated nodes"
+  :tempids      mapping of the temporary IDs in entities to the allocated nodes
+  :executor     Executor to be used to run the CompletableFuture"
   [{:keys [name state] :as connection} :- ConnectionType
-   {:keys [tx-data tx-triples] :as tx-info} :- TransactData]
+   {:keys [tx-data tx-triples executor] :as tx-info} :- TransactData]
   (let [op (fn []
              (let [tx-id (count (:history @state))
                    as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
                    {:keys [graph history] :as db-before} (:db @state)
-                   [triples removals tempids] (if tx-triples       ;; is this inserting raw triples?
+                   [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
                                                 [tx-triples nil {}]
                                                 ;; capture the old usage which didn't have an arg map
                                                 (build-triples db-before (or tx-data tx-info)))
@@ -291,7 +292,8 @@
                           (map (partial as-datom false) removals)
                           (map (partial as-datom true) triples))
                 :tempids tempids}))]
-    #?(:clj (future (op))
+    #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))
+                                           (or executor clojure.lang.Agent/soloExecutor))
        :cljs (let [d (delay (op))]
                (force d)
                d))))

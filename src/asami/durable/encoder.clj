@@ -1,17 +1,15 @@
 (ns ^{:doc "Encodes and decodes data for storage. Clojure implementation"
       :author "Paula Gearon"}
     asami.durable.encoder
-  (:require [clojure.string :as s])
-  (:import [clojure.lang Keyword BigInt]
-           [java.io RandomAccessFile]
-           [java.math BigInteger BigDecimal]
-           [java.net URI]
-           [java.time Instant]
-           [java.util Date UUID]
-           [java.nio ByteBuffer]
-           [java.nio.charset Charset]))
-
-(def utf8 (Charset/forName "UTF-8"))
+    (:require [clojure.string :as s]
+              [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8]])
+    (:import [clojure.lang Keyword BigInt]
+             [java.io RandomAccessFile]
+             [java.math BigInteger BigDecimal]
+             [java.net URI]
+             [java.time Instant]
+             [java.util Date UUID]
+             [java.nio ByteBuffer]))
 
 (def type->code
   {Long (byte 0)
@@ -73,7 +71,50 @@
 (defprotocol FlatFile
   (header [this len] "Returns a byte array containing a header")
   (body [this] "Returns a byte array containing the encoded data")
-  (encapsulated-id [this] "Returns an ID that encapsulates the type"))
+  (encapsulate-id [this] "Returns an ID that encapsulates the type"))
+
+;; Encapsualted IDs are IDs containing all of the information without requiring additional storage
+;; The data type is contained in the top 4 bits. The remaining 60 bit hold the data:
+;; Top 4 bits:
+;; 1 0 0 0: long
+;; 1 1 0 0: Date
+;; 1 0 1 0: Instant
+;; 1 1 1 0: Short String
+;; 1 0 0 1: Short Keyword
+
+(def ^:const long-type-mask -0x8000000000000000) ;; 0x8000000000000000
+(def ^:const date-type-mask -0x4000000000000000) ;; 0xC000000000000000
+(def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
+(def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
+(def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
+(def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
+(def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
+
+(def ^:const max-short-len 7)
+
+(def ^:const milli-nano "Number of nanoseconds in a millisecond" 1000000)
+
+(defn encapsulate-sstr
+  "Encapsulates a short string. If the string cannot be encapsulated, then return nil."
+  [^String s type-mask]
+  (when (<= (.length s) max-short-len)
+    (let [abytes (.getBytes s utf8)
+          len (alength abytes)]
+      (when (<= len max-short-len)
+        (reduce (fn [v n]
+                  (-> (aget abytes n)
+                      (bit-and byte-mask)
+                      (bit-shift-left (- sbytes-shift (* Byte/SIZE n)))
+                      (bit-or v)))
+                ;; start with the top byte set to the type nybble and the length
+                (bit-or type-mask (bit-shift-left len len-nybble-shift))
+                (range len))))))
+
+(defn encapsulate-long
+  "Encapsulates a long value. If the long is too large to be encapsulated, then return nil."
+  [^long l]
+  (when (and (< l max-short-long) (> l min-short-long))
+    (bit-and data-mask l)))
 
 (extend-protocol FlatFile
   String
@@ -83,7 +124,8 @@
       (general-header (type->code String) len)))
   (body [^String this]
     (.getBytes this utf8))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this]
+    (encapsulate-sstr this sstr-type-mask))
 
   URI
   (header [this len]
@@ -92,7 +134,7 @@
       (general-header (type->code URI) len)))
   (body [this]
     (.getBytes (str this) utf8))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   Keyword
   (header [this len]
@@ -102,8 +144,9 @@
   (body [this]
     (let [nms (namespace this)
           n (name this)]
-      (.getBytes (if nms (str nms "/" n) n) utf8)))
-  (encapsulated-id [this] nil)
+      (.getBytes (subs (str this) 1) utf8)))
+  (encapsulate-id [this]
+    (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
   Long
   (header [this len]
@@ -114,9 +157,9 @@
           bb (ByteBuffer/wrap b)]
       (.putLong bb 0 this)
       b))
-  (encapsulated-id [this]
-    (if (< (abs this) 0x0FFFFFFFFFFFFFFF)
-      (bit-or 0x8000000000000000 this)))
+  (encapsulate-id [this]
+    (when-let [v (encapsulate-long this)]
+      (bit-or long-type-mask v)))
 
   Double
   (header [this len]
@@ -127,21 +170,21 @@
           bb (ByteBuffer/wrap b)]
       (.putDouble bb 0 this)
       b))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
 
   BigInt
   (header [this len]
     (general-header (type->code BigInt) len))
   (body [this]
     (.toByteArray (biginteger this)))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   BigDecimal
   (header [this len]
     (general-header (type->code BigDecimal) len))
   (body [^BigDecimal this]
     (.getBytes (str this) utf8))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
 
   Date
   (header [this len]
@@ -149,7 +192,9 @@
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
     (body (.getTime this)))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this]
+    (when-let [v (encapsulate-long (.getTime ^Date this))]
+      (bit-or date-type-mask v)))
 
   Instant
   (header [this len]
@@ -161,7 +206,10 @@
         (.putLong 0 (.getEpochSecond this))
         (.putInt Long/BYTES (.getNano this)))
       b))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this]
+    (when-let [v (and (zero? (mod (.getNano ^Instant this) milli-nano))
+                      (encapsulate-long (.toEpochMilli ^Instant this)))]
+      (bit-or inst-type-mask v)))
 
   UUID
   (header [this len]
@@ -173,7 +221,7 @@
         (.putLong 0 (.getLeastSignificantBits this))
         (.putLong Long/BYTES (.getMostSignificantBits this)))
       b))
-  (encapsulated-id [this] nil)
+  (encapsulate-id [this] nil)
   
   Object
   (header [this len]
@@ -185,10 +233,10 @@
       (.getBytes (str this) utf8)
       (if-let [[_ encoder] (type-code this)]
         (encoder this))))
-  (encapsulated-id [this] nil))
+  (encapsulate-id [this] nil))
 
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [b (body o)]
-    [(header o (count b)) b]))
+    [(header o (alength b)) b]))

@@ -3,7 +3,7 @@
   (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since]]
             [asami.index :as i]
             [asami.multi-graph :as m]
-            [asami.memory :refer [now]]
+            [asami.internal :refer [now]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -189,6 +189,40 @@
             :address nil
             :rooms   ["Room 1" nil "Room 2" nil "Room 3"]}
            (entity d one)))))
+
+(deftest test-entity-nested
+  (let [c (connect "asami:mem://test4b")
+        d1 {:db/id -1
+            :db/ident "nested-object"
+            :name "nested"}
+        d2 {:db/id -2
+            :name "nested2"}
+        data {:db/id -3
+              :db/ident "top"
+              :name  "Main"
+              :sub   {:db/ident "nested-object"}}
+        data2 {:db/id -4
+              :db/ident "top2"
+              :name  "Main2"
+              :sub   {:db/id -2}}
+        r0 @(transact c [d1])
+        {:keys [tempids tx-data] :as r} @(transact c [d2 data data2])
+        dx (tempids -2)
+        one (tempids -3)
+        two (tempids -4)
+        d (db c)]
+    (is (= {:name  "Main"
+            :sub   {:db/ident "nested-object"}}
+           (entity d one)))
+    (is (= {:name  "Main"
+            :sub   {:name "nested"}}
+           (entity d one true)))
+    (is (= {:name  "Main2"
+            :sub   {:db/ident dx}}
+           (entity d two)))
+    (is (= {:name  "Main2"
+            :sub   {:name "nested2"}}
+           (entity d two true)))))
 
 (defn sleep [msec]
   #?(:clj

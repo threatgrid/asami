@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
   asami.durable.block.file.block-file
   (:require [clojure.java.io :as io]
-            [asami.durable.transaction :refer [Transaction Closeable rewind! commit! close]]
+            [asami.durable.common :refer [Transaction Closeable Forceable rewind! commit! close]]
             [asami.durable.block.block-api :refer [BlockManager copy-over! copy-block! allocate-block! get-id]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo]
@@ -257,9 +257,14 @@
     (force-file (:block-file @state))
     this)
 
+  Forceable
+  (force! [this]
+    (force-file (:block-file @state)))
+  
   Closeable
   (close [this]
     (let [{:keys [block-file next-id]} @state]
+      (force-file block-file)
       (unmap (assoc block-file :nr-blocks (inc next-id))))))
 
 (defn create-managed-block-file
