@@ -7,9 +7,10 @@
                                             find-tx get-tx append! commit! rewind! force! close]]
               [asami.durable.tree :as tree]
               [asami.durable.flat-file :as flat-file]
-              [asami.durable.encoder :refer [to-bytes encapsulate-id]]
-              [asami.durable.decoder :refer [type-info long-bytes-compare unencapsulate-id]]
+              [asami.durable.encoder :as encoder :refer [to-bytes]]
+              [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
               [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id]]
+              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
               #?(:clj [asami.durable.block.file.block-file :as block-file])
               #?(:clj [clojure.java.io :as io]))
     #?(:clj
@@ -64,18 +65,18 @@
     (when-not (vector? node)
       (get-long node id-offset-long))))
 
-(defrecord ReadOnlyPool [data index root-id]
+(defrecord ReadOnlyPool [data index root-id cache]
   DataStorage
   (find-object
     [this id]
     (or
-     (unencapsulate-id id)
+     (decoder/unencapsulate-id id)
      (get-object data id)))
 
   (find-id
     [this object]
     (or
-     (encapsulate-id object)
+     (encoder/encapsulate-id object)
      (find* this object)))
 
   (write! [this object]
@@ -84,37 +85,43 @@
   (at [this new-root-id]
     (->ReadOnlyPool data (tree/at index new-root-id) new-root-id)))
 
-(defrecord DataPool [data index root-id]
+(defrecord DataPool [data index root-id cache]
   DataStorage
   (find-object
     [this id]
     (or
-     (unencapsulate-id id)
+     (decoder/unencapsulate-id id)
      (get-object data id)))
 
   (find-id
     [this object]
     (or
-     (encapsulate-id object)
+     (encoder/encapsulate-id object)
      (find* this object)))
 
   (write! [this object]
-    (if-let [id (encapsulate-id object)]
+    (if-let [id (encoder/encapsulate-id object)]
       [id this]
-      (let [[header body :as object-data] (to-bytes object)
-            location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
-        (if (or (nil? location) (vector? location))
-          (let [id (write-object! data object)
-                ;; Note that this writer takes a different format to the comparator!
-                ;; That's OK, since this `add` function does not require the location to be found again
-                ;; and the writer will format the data correctly
-                next-index (tree/add index [object-data id] index-writer location)]
-            [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
-          (let [id (get-long location id-offset-long)]
-            [(get-long location id-offset-long) this])))))
+      (if-let [id (lookup @cache object)]
+        (do
+          (swap! cache hit object)
+          [id this])
+        (let [[header body :as object-data] (to-bytes object)
+              location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+          (if (or (nil? location) (vector? location))
+            (let [id (write-object! data object)
+                  ;; Note that this writer takes a different format to the comparator!
+                  ;; That's OK, since this `add` function does not require the location to be found again
+                  ;; and the writer will format the data correctly
+                  next-index (tree/add index [object-data id] index-writer location)]
+              (swap! cache miss object id)
+              [id (assoc this :index next-index :root-id (get-id (:root next-index)))])
+            (let [id (get-long location id-offset-long)]
+              (swap! cache miss object id)
+              [id this]))))))
 
   (at [this new-root-id]
-    (->ReadOnlyPool data (tree/at index new-root-id) new-root-id))
+    (->ReadOnlyPool data (tree/at index new-root-id) new-root-id cache))
 
   Transaction
   (commit! [this]
@@ -139,13 +146,16 @@
   #?(:clj
      (block-file/create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
 
+(def ^:const encap-cache-size 1024)
+
 (defn open-pool
   "Opens all the resources required for a pool, and returns the pool structure"
   [name root-id]
   (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree (partial create-block-manager name) index-name tree-node-size data-compare root-id)]
-   (->DataPool data-store index root-id)))
+        index (tree/new-block-tree (partial create-block-manager name) index-name tree-node-size data-compare root-id)
+        encap-cache (atom (lru-cache-factory {} :threshold encap-cache-size))]
+   (->DataPool data-store index root-id encap-cache)))
 
 (defn create-pool
   "Creates a datapool object"
