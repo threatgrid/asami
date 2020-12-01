@@ -1,21 +1,16 @@
 (ns ^{:doc "Data pool with blocks"
       :author "Paula Gearon"}
     asami.durable.pool
-    (:require [asami.internal :as internal]
-              [asami.durable.common :refer [DataStorage Closeable Forceable Transaction
-                                            long-size get-object write-object! get-object
-                                            find-tx get-tx append! commit! rewind! force! close]]
+    (:require [asami.durable.common :as common
+               :refer [DataStorage Closeable Forceable Transaction
+                       long-size get-object write-object! get-object
+                       find-tx get-tx append! commit! rewind! force! close]]
               [asami.durable.tree :as tree]
               [asami.durable.flat-file :as flat-file]
               [asami.durable.encoder :as encoder :refer [to-bytes]]
               [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
               [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id]]
-              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
-              #?(:clj [asami.durable.block.file.block-file :as block-file])
-              #?(:clj [clojure.java.io :as io]))
-    #?(:clj
-       (:import [java.util Date]
-                [java.time Instant])))
+              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const index-name "Name of the index file" "idx.bin")
 
@@ -144,12 +139,6 @@
 
 (def data-constructor #?(:clj flat-file/flat-store))
 
-(defn create-block-manager
-  "Creates a block manager"
-  [name manager-name block-size]
-  #?(:clj
-     (block-file/create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
-
 (def ^:const encap-cache-size 1024)
 
 (defn open-pool
@@ -157,19 +146,12 @@
   [name root-id]
   (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree (partial create-block-manager name) index-name tree-node-size data-compare root-id)
+        index (tree/new-block-tree (partial common/create-block-manager name)
+                                   index-name tree-node-size data-compare root-id)
         encap-cache (atom (lru-cache-factory {} :threshold encap-cache-size))]
    (->DataPool data-store index root-id encap-cache)))
 
 (defn create-pool
   "Creates a datapool object"
   ([name] (create-pool name nil))
-  ([name root-id]
-   #?(:clj
-      (let [d (io/file name)]
-        (if (.exists d)
-          (when-not (.isDirectory d)
-            (throw (ex-info (str "'" name "' already exists as a file") {:path (.getAbsolutePath d)})))
-          (when-not (.mkdir d)
-            (throw (ex-info (str "Unable to create directory '" name "'") {:path (.getAbsolutePath d)}))))
-        (open-pool name root-id)))))
+  ([name root-id] (common/named-storage open-pool name root-id)))
