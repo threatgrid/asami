@@ -1,10 +1,12 @@
 (ns ^{:doc "Tuples index with blocks"
       :author "Paula Gearon"}
     asami.durable.tuples
-  (require [asami.durable.common :as common :refer [TupleIndex find-tuple Transaction]]
-           [asami.durable.tree :as tree]
-           [asami.durable.block.block-api :refer [get-long put-long! get-id]]
-           #?(:clj [asami.durable.block.file.block-file :as block-file])))
+    (:require [asami.durable.common :refer [TupleStorage find-tuple Transaction long-size]]
+              [asami.durable.common-utils :as common-utils]
+              [asami.durable.tree :as tree]
+              [asami.durable.block.block-api :refer [get-long put-long! get-id get-block
+                                                     write-block allocate-block! copy-to-tx]]
+              #?(:clj [asami.durable.block.file.block-file :as block-file])))
 
 
 (def ^:const index-name "Name of the index file" "_stmtidx.bin")
@@ -39,18 +41,14 @@
 (defn get-low-tuple
   "Returns the low tuple value from the node's range"
   [node]
-  [(get-long node low-tuple-offset)
-   (get-long node (+ 1 low-tuple-offset))
-   (get-long node (+ 2 low-tuple-offset))
-   (get-long node (+ 3 low-tuple-offset))])
+  (mapv #(get-long node %)
+        (range low-tuple-offset (+ low-tuple-offset tuple-size))))
 
 (defn get-high-tuple
   "Returns the high tuple value from the node's range"
   [node]
-  [(get-long node high-tuple-offset)
-   (get-long node (+ 1 high-tuple-offset))
-   (get-long node (+ 2 high-tuple-offset))
-   (get-long node (+ 3 high-tuple-offset))])
+  (mapv #(get-long node %)
+        (range high-tuple-offset (+ high-tuple-offset tuple-size))))
 
 (defn get-count
   "Returns the number of tuples in the block"
@@ -69,19 +67,15 @@
 
 (defn set-low-tuple!
   "Returns the low tuple value from the node's range"
-  [node [tuple-a tuple-b tuple-c tuple-d]]
-  [(set-long! node low-tuple-offset tuple-a)
-   (set-long! node (+ 1 low-tuple-offset) tuple-b)
-   (set-long! node (+ 2 low-tuple-offset) tuple-c)
-   (set-long! node (+ 3 low-tuple-offset) tuple-d)])
+  [node tuple]
+  (doseq [offset (range 0 tuple-size)]
+    (put-long! node (+ low-tuple-offset offset) (nth tuple offset))))
 
 (defn set-high-tuple!
   "Returns the high tuple value from the node's range"
-  [node [tuple-a tuple-b tuple-c tuple-d]]
-  [(set-long! node high-tuple-offset tuple-a)
-   (set-long! node (+ 1 high-tuple-offset) tuple-b)
-   (set-long! node (+ 2 high-tuple-offset) tuple-c)
-   (set-long! node (+ 3 high-tuple-offset) tuple-d)])
+  [node tuple]
+  (doseq [offset (range 0 tuple-size)]
+    (put-long! node (+ high-tuple-offset offset) (nth tuple offset))))
 
 (defn set-count!
   "Returns the number of tuples in the block"
@@ -91,7 +85,7 @@
                      (get-long block-reference-offset)
                      (bit-and reference-mask)
                      (bit-or count-code))]
-    (set-long! node block-reference-offset new-code)))
+    (put-long! node block-reference-offset new-code)))
 
 (defn set-block-ref!
   "Gets the ID of the block that contains the tuples"
@@ -100,9 +94,9 @@
                      (get-long block-reference-offset)
                      (bit-and count-code-mask)
                      (bit-or block-ref))]
-    (set-long! node block-reference-offset new-code)))
+    (put-long! node block-reference-offset new-code)))
 
-(def tuple-node-compare
+(defn tuple-node-compare
   "Compare the contents of a tuple to the range of a node"
   [tuple node]
   (loop [[t & tpl] tuple offset 0]
@@ -116,13 +110,56 @@
               1
               (recur tpl (inc offset)))))))))
 
+(defn search-block
+  "Returns the tuple offset in a block that matches a given tuple.
+  If no tuple matches exactly, then returns a pair of positions to insert between."
+  [block len tuple]
+  (letfn [(tuple-compare [offset] ;; if the tuple is smaller, then -1, if larger then +1
+            (loop [[t & tpl] tuple n 0]
+              (if-not t
+                0
+                (let [bv (get-long block (+ n (* tuple-size offset)))]
+                  (cond
+                    (< t bv) -1
+                    (> t bv) 1
+                    :default (recur tpl (inc n)))))))]
+    (loop [low 0 high len]
+      (if (= (inc low) high)
+        (if (zero? (tuple-compare low))
+          low
+          [low high])
+        (let [mid (int (/ (+ low high) 2))
+              c (tuple-compare mid)]
+          (cond
+            (zero? c) mid
+            (> 0 c) (recur low mid)
+            (< 0 c) (recur mid high)))))))
+
+(defn find-coord
+  [index blocks tuple]
+  (let [node (tree/find-node index tuple)]
+    (when node
+      (if (vector? node)
+        (let [[low high] node]
+          [{:node low :pos (dec (get-count low))} {:node high :pos 0}]))
+      (let [block (get-block blocks (get-block-ref node))
+            pos (search-block block (get-count node) tuple)]
+        (if (vector? pos)
+          [{:node node :pos (first pos)} {:node node :pos (second pos)}]
+          {:node node :pos pos})))))
+
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
   (write-tuple! [this tuple]
-    )
+    (let [insert-coord (find-tuple index blocks)]
+      ))
 
   (delete-tuple! [this tuple]
-    )
+    (let [delete-coord (find-coord index blocks tuple)]
+      (if (or (nil? delete-coord) (vector? delete-coord))
+        this
+        ;; TODO: remove
+        )))
 
   (find-tuple [this tuple]
     )
@@ -137,14 +174,14 @@
 
 (defn open-tuples
   [order-name name root-id]
-  (let [index (tree/new-block-tree (partial common/create-block-manager name)
+  (let [index (tree/new-block-tree (partial common-utils/create-block-manager name)
                                    (str order-name index-name) tree-node-size tuple-node-compare root-id)
-        blocks (common/create-block-manager name (str order-name block-name) (* max-block tuple-size long-size))]
+        blocks (common-utils/create-block-manager name (str order-name block-name) (* block-max tuple-size long-size))]
     (->TupleIndex index blocks root-id)))
 
 (defn create-tuple-index
   "Creates a tuple index for a name"
   ([name order-name]
-   (create-tuple-index name  order-namenil))
-  ([name  order-nameroot-id]
-   (common/named-storage (partial open-tuples order-name) name root-id)))
+   (create-tuple-index name order-name nil))
+  ([name order-name root-id]
+   (common-utils/named-storage (partial open-tuples order-name) name root-id)))

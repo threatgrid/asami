@@ -1,10 +1,10 @@
 (ns ^{:doc "Data pool with blocks"
       :author "Paula Gearon"}
     asami.durable.pool
-    (:require [asami.durable.common :as common
-               :refer [DataStorage Closeable Forceable Transaction
-                       long-size get-object write-object! get-object
-                       find-tx get-tx append! commit! rewind! force! close]]
+    (:require [asami.durable.common :refer [DataStorage Closeable Forceable Transaction
+                                            long-size get-object write-object! get-object
+                                            find-tx get-tx append! commit! rewind! force! close]]
+              [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.flat-file :as flat-file]
               [asami.durable.encoder :as encoder :refer [to-bytes]]
@@ -146,7 +146,7 @@
   [name root-id]
   (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree (partial common/create-block-manager name)
+        index (tree/new-block-tree (partial common-utils/create-block-manager name)
                                    index-name tree-node-size data-compare root-id)
         encap-cache (atom (lru-cache-factory {} :threshold encap-cache-size))]
    (->DataPool data-store index root-id encap-cache)))
@@ -154,4 +154,4 @@
 (defn create-pool
   "Creates a datapool object"
   ([name] (create-pool name nil))
-  ([name root-id] (common/named-storage open-pool name root-id)))
+  ([name root-id] (common-utils/named-storage open-pool name root-id)))
