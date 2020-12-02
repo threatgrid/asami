@@ -43,5 +43,5 @@
     (is (= [3 4] (search-block block len [4 1 1])))
 
     ;; testing edge case. This is not called
-    (is (= [0 1] (search-block block len [1 1 1])))
+    (is (= [-1 0] (search-block block len [1 1 1])))
     (is (= [10 11] (search-block block len [16 7 0])))))
