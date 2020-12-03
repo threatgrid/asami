@@ -298,7 +298,10 @@
 (defprotocol Tree
   (find-node [this key] "Finds a node in the tree using a key.")
   (add [this data writer] [this data writer location] "Adds data to the tree")
-  (at [this new-root] "Returns a tree for a given transaction root"))
+  (at [this new-root] "Returns a tree for a given transaction root")
+  (modify-node! [this node]
+    "Makes a node available to modify in the current transaction.
+     Returns the new tree and a node that can be modified (possible the same node)"))
 
 (defrecord ReadOnlyTree [root node-comparator block-manager node-cache]
   Tree
@@ -333,6 +336,30 @@
   (at [this new-root-id]
     (let [new-root (get-node this new-root-id nil)]
       (->ReadOnlyTree new-root node-comparator block-manager node-cache)))
+
+  (modify-node! [this node]
+    ;; copy this node. It will be returned without write being called for it.
+    (let [new-node (copy-on-write node this)]
+      ;; iterate towards the root, copying into the transaction
+      ;; modified-node remembers the node to be returned
+      (loop [nd new-node modified-node nil]
+        (let [parent (get-parent nd)]
+          (if parent
+            ;; copy the parent, setting it to refer to the current node
+            (let [new-parent (-> (copy-on-write parent this)
+                                 (set-child! (:side nd) nd)
+                                 (write this))
+                  ;; modified-node has not been set if this is the first time through
+                  ;; update the current node with the new parent, and store for returning
+                  modified-node (or modified-node (assoc nd :parent new-parent))]
+              (if (identical? parent new-parent)
+                ;; parent did not change, so it was already in the new transaction. Short circuit
+                [this modified-node]
+                ;; continue toward the root, remembering the return node
+                (recur new-parent modified-node)))
+            ;; no parent, so nd is the root
+            ;; if modified-node is not yet set, then new-node was the root
+            [(assoc this :root nd) (or modified-node new-node)])))))
 
   Transaction
   (rewind! [this]

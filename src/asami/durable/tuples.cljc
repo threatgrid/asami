@@ -4,7 +4,7 @@
     (:require [asami.durable.common :refer [TupleStorage find-tuple Transaction long-size]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
-              [asami.durable.block.block-api :refer [get-long put-long! get-id get-block
+              [asami.durable.block.block-api :refer [get-long put-long! get-id get-block put-block!
                                                      write-block allocate-block! copy-to-tx]]
               #?(:clj [asami.durable.block.file.block-file :as block-file])))
 
@@ -14,6 +14,8 @@
 (def ^:const block-name "Name of the block statement file" "_stmt.bin")
 
 (def ^:const tuple-size "The number of values in a tuple" 4)
+
+(def ^:const tuple-size-bytes "The number of bytes in a tuple" (* tuple-size long-size))
 
 ;; All offsets are measured in longs.
 ;; Byte offsets can be calculated by multiplying these by long-size
@@ -138,17 +140,28 @@
             1 (recur mid high)))))))
 
 (defn find-coord
+  "Retrieves the coordinate of a tuple.
+   A coordinate is a structure of node/pos for the node and offset in the node's block.
+   If the tuple is found, then returns a coordinate.
+   If the tuple is not found, then return a pair of coordinates that the tuple appears between.
+   A nil coordinate in a pair indicates the end of the range of the index."
   [index blocks tuple]
   (let [node (tree/find-node index tuple)]
     (when node
       (if (vector? node)
         (let [[low high] node]
-          [{:node low :pos (dec (get-count low))} {:node high :pos 0}]))
+          [(and low {:node low :pos (dec (get-count low))})
+           (and high {:node high :pos 0})]))
       (let [block (get-block blocks (get-block-ref node))
             pos (search-block block (get-count node) tuple)]
         (if (vector? pos)
           [{:node node :pos (first pos)} {:node node :pos (second pos)}]
           {:node node :pos pos})))))
+
+(defn tuple-at
+  "Retrieves the tuple found at a particular tuple offset"
+  [block offset]
+  (mapv #(get-long block %) (range offset (+ offset tuple-size))))
 
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
@@ -160,8 +173,37 @@
     (let [delete-coord (find-coord index blocks tuple)]
       (if (or (nil? delete-coord) (vector? delete-coord))
         this
-        ;; TODO: remove
-        )))
+        (let [{:keys [node pos]} delete-coord
+              tuple-count (get-count node)
+              block-id (get-block-ref node)
+              block (get-block blocks block-id)
+              ;; modifying the block, which requires copy-on-write
+              block (copy-to-tx blocks block)
+              new-block-id (get-id block)
+              ;; also modifying the tree to refer to this new block
+              [new-index node] (tree/modify-node! index node)
+              ;; get the offsets in the block to move tuples
+              byte-pos (* pos tuple-size-bytes)
+              byte-len (* (- tuple-count pos) tuple-size-bytes)
+              next-tuple-count (dec tuple-count)]
+          ;; move the data in the block down to overwrite the target tuple
+          (if (= pos next-tuple-count)
+            ;; truncating the block. Change the high tuple. No need to change the block
+            (when-not (zero? pos) ;; note: empty blocks will keep the old high tuple
+              (set-high-tuple! node (tuple-at block (dec pos))))
+            (do
+              ;; remove the tuple from the block
+              (put-block! block byte-pos block (+ byte-pos tuple-size-bytes) byte-len)
+              (when (zero? pos)
+                (set-low-tuple! node (tuple-at block 0)))))
+          (write-block blocks block)
+          ;; update the node's block reference if there is a new block
+          (when (not= block-id new-block-id)
+            (set-block-ref! node new-block-id))
+          ;; decrement the tuple count in the node
+          (set-count! node next-tuple-count)
+          (tree/write node new-index)
+          (assoc this :index new-index :root-id (get-id (:root new-index)))))))
 
   (find-tuple [this tuple]
     )
