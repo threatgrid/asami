@@ -374,13 +374,22 @@
                     :where [?book :title ?title]
                     [?book :price ?price]
                     [(right-price ?price)]]
-                  st))]
+                  st))
+          r3 (q '[:find ?title
+                  :in $ ?right-price
+                  :where [?book :title ?title]
+                  [?book :price ?price]
+                  [(?right-price ?price)]]
+                st #(>= % 40))]
       (is (= #{["The Art of Computer Programming" 20.00]
                ["Purely Functional Data Structures" 15.00]}
              (set r1)))
       (is (= #{["The Art of Computer Programming"]
                ["Purely Functional Data Structures"]}
-             (set r2))))))
+             (set r2)))
+      (is (= #{["The Art of Computer Programming"]
+               ["Purely Functional Data Structures"]}
+             (set r3))))))
 
 (let [pa (nn)
       paa (nn)
