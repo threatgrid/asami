@@ -1,8 +1,8 @@
 (ns ^{:doc "Encodes and decodes data for storage. Clojure implementation"
-      :author "Paula Gearon and Joel Holdbrooks"}
+      :author "Joel Holdbrooks"}
     asami.durable.decoder
   (:require [clojure.string :as s]
-            [asami.durable.pages :refer [read-byte read-bytes read-short]])
+            [asami.durable.common :refer [read-byte read-bytes read-short]])
   (:import [goog.math Long Integer]
            [goog Uri]))
 
