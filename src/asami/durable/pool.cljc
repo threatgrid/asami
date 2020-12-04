@@ -6,11 +6,11 @@
                                             find-tx get-tx append! commit! rewind! force! close]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
-              [asami.durable.flat-file :as flat-file]
               [asami.durable.encoder :as encoder :refer [to-bytes]]
               [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
               [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id]]
-              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
+              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
+              #?(:clj [asami.durable.flat-file :as flat-file])))
 
 (def ^:const index-name "Name of the index file" "idx.bin")
 
