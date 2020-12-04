@@ -126,7 +126,8 @@
                     (> t bv) 1
                     :default (recur tpl (inc n)))))))]
     (loop [low 0 high len]
-      (if (= (inc low) high)
+      (if (>= (inc low) high)  ;; the >= catches an empty block, though these should not be searched
+        ;; finished the search. Return the offset when found or a pair when not found
         (let [r (tuple-compare low)]
           (case r
             0 low
@@ -147,16 +148,26 @@
    A nil coordinate in a pair indicates the end of the range of the index."
   [index blocks tuple]
   (let [node (tree/find-node index tuple)]
+    ;; empty trees return nothing
     (when node
       (if (vector? node)
+        ;; 2 nodes means that the point is between the top of the lower node,
+        ;; and the bottom of the higher node
         (let [[low high] node]
           [(and low {:node low :pos (dec (get-count low))})
-           (and high {:node high :pos 0})]))
-      (let [block (get-block blocks (get-block-ref node))
-            pos (search-block block (get-count node) tuple)]
-        (if (vector? pos)
-          [{:node node :pos (first pos)} {:node node :pos (second pos)}]
-          {:node node :pos pos})))))
+           (and high {:node high :pos 0})])
+        ;; single node, so look inside for the point
+        (let [block (get-block blocks (get-block-ref node))
+              block-len (get-count node)]
+          ;; empty nodes have the position of their last single tuple
+          ;; if the tuple matched then give a point between the empty node and the next
+          (if (zero? block-len)
+            [{:node node :pos 0} {:node (tree/next-node index node) :pos 0}]
+            ;; search within the node for the coordinate
+            (let [pos (search-block block block-len tuple)]
+              (if (vector? pos)
+                [{:node node :pos (first pos)} {:node node :pos (second pos)}]
+                {:node node :pos pos}))))))))
 
 (defn tuple-at
   "Retrieves the tuple found at a particular tuple offset"
