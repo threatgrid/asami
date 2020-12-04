@@ -21,6 +21,9 @@
 (def ^{:private true}
   LONG_BYTES 8)
 
+;; temporary stub
+(defn type-info [data] 0)
+
 (defn decode-length
   "Reads the header to determine length.
   ext: if 0 then length is a byte, if 1 then length is in either a short or an int"
