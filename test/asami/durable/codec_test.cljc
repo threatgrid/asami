@@ -11,8 +11,8 @@
   #?(:clj
      (:import [java.io RandomAccessFile File]
               [java.nio ByteBuffer]
-              [java.time Instant]
-              [java.util Date Arrays GregorianCalendar]
+              [java.time Instant ZoneOffset]
+              [java.util Date Arrays GregorianCalendar TimeZone]
               [java.net URI URL])
      :cljs
      (:import [goog Uri])))
@@ -245,22 +245,23 @@
 
 #?(:clj
    (deftest test-encapsulation
-     (let [cal (GregorianCalendar. 2021 0 20 12 0)
+     (let [cal (doto (GregorianCalendar. 2021 0 20 12 0)
+                 (.setTimeZone (TimeZone/getTimeZone ZoneOffset/UTC)))
            date (.getTime cal)
            inst (.toInstant cal)]
-       (is (= (encapsulate-id "")        -0x2000000000000000))  ;; 0xE000000000000000
-       (is (= (encapsulate-id "seven..") -0x188C9A899A91D1D2))  ;; 0xE7736576656E2E2E
+       (is (= (encapsulate-id "")        -0x2000000000000000)) ;; 0xE000000000000000
+       (is (= (encapsulate-id "seven..") -0x188C9A899A91D1D2)) ;; 0xE7736576656E2E2E
        (is (nil? (encapsulate-id "eight...")))
-       (is (= (encapsulate-id :a)        -0x6E9F000000000000))  ;; 0x9161000000000000
-       (is (= (encapsulate-id :keyword)  -0x68949A8688908D9C))  ;; 0x976b6579776f7264
+       (is (= (encapsulate-id :a)        -0x6E9F000000000000)) ;; 0x9161000000000000
+       (is (= (encapsulate-id :keyword)  -0x68949A8688908D9C)) ;; 0x976b6579776f7264
        (is (nil? (encapsulate-id :keywords)))
-       (is (= (encapsulate-id date)      -0x3FFFFE88DF42E580))  ;; 0xC000017720BD1A80
-       (is (= (encapsulate-id inst)      -0x5FFFFE88DF42E580))  ;; 0xA000017720BD1A80
+       (is (= (encapsulate-id date)      -0x3FFFFE88E0558E00)) ;; 0xC00001771FAA7200
+       (is (= (encapsulate-id inst)      -0x5FFFFE88E0558E00)) ;; 0xA00001771FAA7200
        (is (nil? (encapsulate-id (.plusNanos inst 7))))
-       (is (= (encapsulate-id 42)        -0x7FFFFFFFFFFFFFD6))  ;; 0x800000000000002A
-       (is (= (encapsulate-id -42)       -0x700000000000002A))  ;; 0x8FFFFFFFFFFFFFD6
+       (is (= (encapsulate-id 42)        -0x7FFFFFFFFFFFFFD6)) ;; 0x800000000000002A
+       (is (= (encapsulate-id -42)       -0x700000000000002A)) ;; 0x8FFFFFFFFFFFFFD6
        ;; check some of the boundary conditions for long values
-       (is (= (encapsulate-id 0x0400000000000000) -0x7C00000000000000))  ;; 0x8400000000000000
+       (is (= (encapsulate-id 0x0400000000000000) -0x7C00000000000000)) ;; 0x8400000000000000
        (is (= (encapsulate-id -0x0400000000000000) -0x7400000000000000)) ;; 0x8C00000000000000
        (is (nil? (encapsulate-id 0x0800000000000000)))
        (is (nil? (encapsulate-id -0x0800000000000000)))
@@ -283,7 +284,8 @@
 
 #?(:clj
    (deftest test-extract
-     (let [cal (GregorianCalendar. 2021 0 20 12 0)
+     (let [cal (doto (GregorianCalendar. 2021 0 20 12 0)
+                 (.setTimeZone (TimeZone/getTimeZone ZoneOffset/UTC)))
            date (.getTime cal)
            inst (.toInstant cal)]
        (is (= ""        (unencapsulate-id -0x2000000000000000)))   ;; 0xE000000000000000
@@ -297,8 +299,8 @@
        (is (= "sevenΦ"  (unencapsulate-id -0x188C9A899A91315A)))   ;; 0xE7736576656ECEA6
        (is (= :a (unencapsulate-id -0x6E9F000000000000)))
        (is (= :keyword (unencapsulate-id -0x68949A8688908D9C)))
-       (is (= date (unencapsulate-id -0x3FFFFE88DF42E580)))
-       (is (= inst (unencapsulate-id -0x5FFFFE88DF42E580)))
+       (is (= date (unencapsulate-id -0x3FFFFE88E0558E00)))
+       (is (= inst (unencapsulate-id -0x5FFFFE88E0558E00)))
        (is (= 42 (unencapsulate-id -0x7FFFFFFFFFFFFFD6)))
        (is (= -42 (unencapsulate-id -0x700000000000002A)))
        (is (= 0x07FFFFFFFFFFFFFE (unencapsulate-id -0x7800000000000002)))
