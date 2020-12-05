@@ -187,6 +187,12 @@
    ;; 13 xsd-decoder
    })
 
+(defn long-bytes-compare
+  "Compare data from 2 values that are the same type. If the data cannot give a result
+   then return 0. Operates on an array, expected to be in an index node."
+  [type-left left-header left-body left-object right-bytes]
+  0)
+
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"
   [paged-rdr ^long pos]
