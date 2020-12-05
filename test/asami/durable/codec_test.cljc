@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.codec-test
   (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
-            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id extract-long decode-length-node]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id decode-length-node]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])

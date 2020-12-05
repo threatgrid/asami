@@ -1,8 +1,9 @@
 (ns ^{:doc "Common functions for storage based tests"
       :author "Paula Gearon"}
     asami.durable.test-utils
-    (:require [asami.durable.block.file.util :as util]
-              [asami.durable.block.block-api :refer [Block]]
+    (:require [asami.durable.block.block-api :refer [Block]]
+              #?(:clj
+                 [asami.durable.block.file.util :as util])
               #?(:clj
                  [asami.durable.block.bufferblock :refer [create-block]]))
     #?(:clj (:import [java.io File]

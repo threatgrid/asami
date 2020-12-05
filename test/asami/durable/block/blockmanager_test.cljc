@@ -1,17 +1,23 @@
 (ns ^{:doc "Tests for the ManagedBlockFile implementation"
       :author "Paula Gearon"}
     asami.durable.block.blockmanager-test
-  (:require [clojure.test :refer :all]  ;; todo: get explicit requirements since this won't work for ClojureScript
+  (:require [clojure.test :refer [deftest is]]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.common :refer :all]
-            [asami.durable.block.block-api :refer :all]
-            [asami.durable.block.file.block-file :refer :all]
-            [asami.durable.block.file.voodoo :as voodoo]
-            [asami.durable.block.file.util :as util]
-            [asami.durable.block.blockfile-test :refer [put-string! get-string str0 str1 str2 str3]])
+            [asami.durable.common :refer [close commit! rewind!]]
+            [asami.durable.block.block-api :refer [allocate-block! get-id get-block write-block put-long! get-long]]
+            #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file get-nr-blocks]])
+            #?(:clj [asami.durable.block.file.voodoo :as voodoo])
+            #?(:clj [asami.durable.block.file.util :as util])
+            #?(:clj [asami.durable.block.blockfile-test :refer [put-string! get-string str0 str1 str2 str3]]))
   #?(:clj (:import [java.io File])))
 
 (def test-block-size 256)
+
+#?(:cljs
+   (defn get-string [b]))
+
+#?(:cljs
+   (defn put-string! [b s]))
 
 (defn cleanup
   "A windows hack that attempts to prompt the JVM into unmapping unreferenced files"

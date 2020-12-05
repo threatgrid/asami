@@ -204,3 +204,7 @@
       (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
       :default ((typecode->decoder (bit-and 0x0F b0) default-decoder)
                 (zero? (bit-and 0x10 b0)) paged-rdr ipos))))
+
+(defn unencapsulate-id [x])
+
+(defn decode-length-node [b])
