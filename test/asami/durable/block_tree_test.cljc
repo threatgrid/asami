@@ -5,13 +5,11 @@
                                         new-block-tree find-node add get-child node-seq get-node
                                         get-balance get-child-id at]]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.common :refer [close rewind! commit!]]
+            [asami.durable.common :refer [close rewind! commit! long-bytes]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
             #?(:clj [asami.durable.block.file.util :as util])
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file]])))
-
-(def ^:const long-bytes #?(:clj Long/BYTES :cljs BigInt64Array.BYTES_PER_ELEMENT))
 
 (defn create-block-manager
   "Creates a block manager. If the reuse? flag is on, then an existing non-empty block manager is returned.
