@@ -5,7 +5,7 @@
                                         new-block-tree find-node add get-child node-seq get-node
                                         get-balance get-child-id at]]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.common :refer [close rewind! commit! long-bytes]]
+            [asami.durable.common :refer [close rewind! commit! long-size]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
             [clojure.test :refer [deftest is]]
             #?(:clj [asami.durable.block.file.util :as util])
@@ -62,13 +62,13 @@
 
 #?(:clj
    (deftest create-tree
-     (let [empty-tree (new-block-tree create-block-manager "create.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "create.avl" long-size long-compare)
            f (find-node empty-tree 1)]
        (is (nil? f)))))
 
 #?(:clj
    (deftest insert-node
-     (let [empty-tree (new-block-tree create-block-manager "one.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "one.avl" long-size long-compare)
            tree (add empty-tree 2 long-writer)
            f1 (find-node tree 1)
            f2 (find-node tree 2)
@@ -85,7 +85,7 @@
 ;; 1
 #?(:clj
    (deftest insert-left
-     (let [empty-tree (new-block-tree create-block-manager "two.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "two.avl" long-size long-compare)
            tree (add empty-tree 3 long-writer)
            tree (add tree 1 long-writer)
            f0 (find-node tree 0)
@@ -116,7 +116,7 @@
 ;; 1   5
 #?(:clj
    (deftest insert-nodes
-     (let [empty-tree (new-block-tree create-block-manager "three.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "three.avl" long-size long-compare)
            tree (add empty-tree 3 long-writer)
            tree (add tree 1 long-writer)
            tree (add tree 5 long-writer)
@@ -154,7 +154,7 @@
 #?(:clj
    (defn triple-node-test
      [nm vs]
-     (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager nm long-size long-compare)
            tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
            [f0 f1 f2 f3 f4 f5 f6] (map (partial find-node tree) (range 7))]
 
@@ -230,7 +230,7 @@
 
 (defn five-node-left-test
   [nm vs]
-  (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
+  (let [empty-tree (new-block-tree create-block-manager nm long-size long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -327,7 +327,7 @@
 
 (defn five-node-right-test
   [nm vs]
-  (let [empty-tree (new-block-tree create-block-manager nm long-bytes long-compare)
+  (let [empty-tree (new-block-tree create-block-manager nm long-size long-compare)
         tree (reduce (fn [t v] (add t v long-writer)) empty-tree vs)
         [f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10] (map (partial find-node tree) (range 11))]
 
@@ -431,7 +431,7 @@
 
 #?(:clj
    (deftest large-tree
-     (let [empty-tree (new-block-tree create-block-manager "large.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "large.avl" long-size long-compare)
            tree (reduce (fn [t v]
                           (add t v long-writer))
                         empty-tree pseudo-random)
@@ -443,16 +443,16 @@
 
        (close tree)
        ;; check the truncated file length. Include the null node.
-       (is (= (* (inc (count pseudo-random)) 3 long-bytes) (.length block-file)))
+       (is (= (* (inc (count pseudo-random)) 3 long-size) (.length block-file)))
 
-       (let [new-tree (new-block-tree reopen-block-manager "large.avl" long-bytes long-compare root-id)
+       (let [new-tree (new-block-tree reopen-block-manager "large.avl" long-size long-compare root-id)
              start-node (find-node new-tree 0)]
          (is (= (range (count pseudo-random)) (map get-data (node-seq new-tree start-node))))
          (close new-tree)))))
 
 #?(:clj
    (deftest test-tx
-     (let [empty-tree (new-block-tree create-block-manager "tx.avl" long-bytes long-compare)
+     (let [empty-tree (new-block-tree create-block-manager "tx.avl" long-size long-compare)
            add-all (partial reduce (fn [t v] (add t v long-writer)))
            tree (add-all empty-tree (range 0 20 2)) 
            tree (commit! tree)
