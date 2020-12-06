@@ -103,7 +103,8 @@
   [tuple node]
   (loop [[t & tpl] tuple offset 0]
     (if-not t
-      0
+      ;; always compare a missing element as less than an existing one
+      (if (= offset tuple-size) 0 -1)
       (let [low (get-long node (+ low-tuple-offset offset))]
         (if (< t low)
           -1
@@ -116,29 +117,38 @@
   "Returns the tuple offset in a block that matches a given tuple.
   If no tuple matches exactly, then returns a pair of positions to insert between."
   [block len tuple]
-  (letfn [(tuple-compare [offset] ;; if the tuple is smaller, then -1, if larger then +1
+  (letfn [(tuple-compare [offset partials?] ;; if the tuple is smaller, then -1, if larger then +1
             (loop [[t & tpl] tuple n 0]
               (if-not t
-                0
+                ;; end of the input tuple. If partials are accepted, or it an entire tuple then it's equal,
+                ;; otherwise it's a partial tuple and considered less than
+                (if (or partials? (= n tuple-size)) 0 -1)
                 (let [bv (get-long block (+ n (* tuple-size offset)))]
                   (cond
                     (< t bv) -1
                     (> t bv) 1
                     :default (recur tpl (inc n)))))))]
     (loop [low 0 high len]
-      (if (>= (inc low) high)  ;; the >= catches an empty block, though these should not be searched
+      (if (>= (inc low) high) ;; the >= catches an empty block, though these should not be searched
         ;; finished the search. Return the offset when found or a pair when not found
-        (let [r (tuple-compare low)]
-          (case r
-            0 low
-            -1 [(dec low) low]
-            1 [low high]))
+        (case (tuple-compare low false)
+          0 low
+          -1 (case (tuple-compare low true)
+               -1 [(dec low) low]
+               0 low)
+          1 [low high])
         (let [mid (int (/ (+ low high) 2))
-              c (tuple-compare mid)]
+              c (tuple-compare mid false)]
           (case c
             0 mid
             -1 (recur low mid)
             1 (recur mid high)))))))
+
+(defn partial-equal
+  "Compares tuples. If one is only partial, then they are allowed to compare equal"
+  [[t1 & r1] [t2 & r2]]
+  (or (nil? t1) (nil? t2)
+      (and (= t1 t2) (recur r1 r2))))
 
 (defn find-coord
   "Retrieves the coordinate of a tuple.
@@ -154,8 +164,10 @@
         ;; 2 nodes means that the point is between the top of the lower node,
         ;; and the bottom of the higher node
         (let [[low high] node]
-          [(and low {:node low :pos (dec (get-count low))})
-           (and high {:node high :pos 0})])
+          (if (and high (partial-equal tuple (get-low-tuple high)))
+            {:node high :pos 0}
+            [(and low {:node low :pos (dec (get-count low))})
+             (and high {:node high :pos 0})]))
         ;; single node, so look inside for the point
         (let [block (get-block blocks (get-block-ref node))
               block-len (get-count node)]
