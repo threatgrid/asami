@@ -96,13 +96,14 @@
 
 
 (defn new-block
-  [len]
-  #?(:clj
-     (let [ba (byte-array len)
-           bb (ByteBuffer/wrap ba)
-           ib (.asIntBuffer bb)
-           lb (.asLongBuffer bb)]
-       (create-block 0 len 0 bb bb ib lb))
+  ([len] (new-block len 0))
+  ([len id]
+   #?(:clj
+      (let [ba (byte-array len)
+            bb (ByteBuffer/wrap ba)
+            ib (.asIntBuffer bb)
+            lb (.asLongBuffer bb)]
+        (create-block id len 0 bb bb ib lb))
 
-     :cljs
-     (->BufferBlock (js/DataView. (js/ArrayBuffer. len)) 0 len)))
+      :cljs
+      (->BufferBlock (js/DataView. (js/ArrayBuffer. len)) id len))))

@@ -68,19 +68,19 @@
       (bit-and reference-mask)))
 
 (defn set-low-tuple!
-  "Returns the low tuple value from the node's range"
+  "Sets the low tuple value of the node's range"
   [node tuple]
   (doseq [offset (range 0 tuple-size)]
     (put-long! node (+ low-tuple-offset offset) (nth tuple offset))))
 
 (defn set-high-tuple!
-  "Returns the high tuple value from the node's range"
+  "Sets the high tuple value of the node's range"
   [node tuple]
   (doseq [offset (range 0 tuple-size)]
     (put-long! node (+ high-tuple-offset offset) (nth tuple offset))))
 
 (defn set-count!
-  "Returns the number of tuples in the block"
+  "Sets the number of tuples in the block"
   [node count*]
   (let [count-code (bit-shift-left count* count-shift)
         new-code (-> node
@@ -90,7 +90,7 @@
     (put-long! node block-reference-offset new-code)))
 
 (defn set-block-ref!
-  "Gets the ID of the block that contains the tuples"
+  "Sets the ID of the block that contains the tuples"
   [node block-ref]
   (let [new-code (-> node
                      (get-long block-reference-offset)
@@ -187,6 +187,12 @@
   "Retrieves the tuple found at a particular tuple offset"
   [block offset]
   (mapv #(get-long block %) (range offset (+ offset tuple-size))))
+
+(defn set-tuple-at!
+  "Retrieves the tuple found at a particular tuple offset"
+  [block offset tuple]
+  (doseq [n (range tuple-size)]
+    (put-long! block (+ n offset) (nth tuple n))))
 
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
