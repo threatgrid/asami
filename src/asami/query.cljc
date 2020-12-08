@@ -190,7 +190,10 @@
                          j
                          (constantly (nth args i))))
                      args)
-        callable-op (cond (fn? op) op
+        ;; TODO: this assumes the operation is constant, if it's in a var.
+        ;; Binding does not presume this, which is inconsistent
+        callable-op (cond (vartest? op) (nth (first part) (var-map op))  ;; assuming operation is constant
+                          (fn? op) op
                           (symbol? op) (or (get *env* op) (fn-for op))
                           (string? op) (fn-for (symbol op))
                           :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))

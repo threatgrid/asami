@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.7] - 2020-12-03
+### Added
+- Added support for variables to be used as functions in filters. Previously this was only possible in bindings.
+
 ## [1.2.6] - 2020-11-09
 ### Added
 - Added `nested?` flag to the `entity` function.
@@ -81,7 +85,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.6...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.7...HEAD
+[1.2.7]: https://github.com/threatgrid/asami/compare/1.2.6...1.2.7
 [1.2.6]: https://github.com/threatgrid/asami/compare/1.2.5...1.2.6
 [1.2.5]: https://github.com/threatgrid/asami/compare/1.2.4...1.2.5
 [1.2.4]: https://github.com/threatgrid/asami/compare/1.2.3...1.2.4
