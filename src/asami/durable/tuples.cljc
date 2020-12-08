@@ -133,10 +133,12 @@
         ;; finished the search. Return the offset when found or a pair when not found
         (case (tuple-compare low false)
           0 low
-          -1 (case (tuple-compare low true)
-               -1 [(dec low) low]
-               0 low)
-          1 [low high])
+          -1 (if (zero? (tuple-compare low true))
+               low
+               [(dec low) low])
+          1 (if (zero? (tuple-compare high true))
+              high
+              [low high]))
         (let [mid (int (/ (+ low high) 2))
               c (tuple-compare mid false)]
           (case c

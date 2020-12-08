@@ -34,9 +34,13 @@
         len (count tuples)
         block (add-tuples block tuples)]
     (is (= 3 (search-block block len [1 6 2])))
+    (is (= 3 (search-block block len [1 6 2 1])))
     (is (= 4 (search-block block len [10 2 3])))
+    (is (= 4 (search-block block len [10 2 3 1])))
     (is (= 0 (search-block block len [1 2 3])))
+    (is (= 0 (search-block block len [1 2 3 1])))
     (is (= 10 (search-block block len [16 6 2])))
+    (is (= 10 (search-block block len [16 6 2 1])))
 
     (is (= [0 1] (search-block block len [1 2 4])))
     (is (= [1 2] (search-block block len [1 3 40])))
