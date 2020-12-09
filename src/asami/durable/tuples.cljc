@@ -101,28 +101,45 @@
 (defn tuple-node-compare
   "Compare the contents of a tuple to the range of a node"
   [tuple node]
-  (loop [[t & tpl] tuple offset 0]
+  (loop [[t & tpl] tuple offset 0 low-test? true high-test? true]
     (if-not t
       ;; always compare a missing element as less than an existing one
-      (if (= offset tuple-size) 0 -1)
-      (let [low (get-long node (+ low-tuple-offset offset))]
-        (if (< t low)
-          -1
-          (let [high (get-long node (+ high-tuple-offset offset))]
-            (if (> t high)
-              1
-              (recur tpl (inc offset)))))))))
+      (cond
+        (= offset tuple-size) 0 ;; no missing elements
+        low-test? -1 ;; still testing against low, so smaller than this node
+        high-test? 0 ;; still testing against high, so within this node
+        :default -1) ;; sanity test: not possible
+      (let [[return low-test?] (if low-test?
+                                 (let [low (get-long node (+ low-tuple-offset offset))]
+                                   (cond
+                                     (< t low) [-1 nil]
+                                     (> t low) [nil false]
+                                     :default [nil true]))
+                                 [nil false])]
+        (or
+         return
+         (let [[return high-test?] (if high-test?
+                                     (let [high (get-long node (+ high-tuple-offset offset))]
+                                       (cond
+                                         (> t high) [1 nil]
+                                         (< t high) [nil false]
+                                         :default [nil true]))
+                                     [nil false])]
+           (or
+            return
+            (if (not (or low-test? high-test?)) 0)
+            (recur tpl (inc offset) low-test? high-test?))))))))
 
 (defn search-block
   "Returns the tuple offset in a block that matches a given tuple.
   If no tuple matches exactly, then returns a pair of positions to insert between."
   [block len tuple]
-  (letfn [(tuple-compare [offset partials?] ;; if the tuple is smaller, then -1, if larger then +1
+  (letfn [(tuple-compare [offset] ;; if the tuple is smaller, then -1, if larger then +1
             (loop [[t & tpl] tuple n 0]
               (if-not t
-                ;; end of the input tuple. If partials are accepted, or it an entire tuple then it's equal,
+                ;; end of the input tuple. If it's an entire tuple then it's equal,
                 ;; otherwise it's a partial tuple and considered less than
-                (if (or partials? (= n tuple-size)) 0 -1)
+                (if (= n tuple-size) 0 -1)
                 (let [bv (get-long block (+ n (* tuple-size offset)))]
                   (cond
                     (< t bv) -1
@@ -131,16 +148,16 @@
     (loop [low 0 high len]
       (if (>= (inc low) high) ;; the >= catches an empty block, though these should not be searched
         ;; finished the search. Return the offset when found or a pair when not found
-        (case (tuple-compare low false)
+        (case (tuple-compare low)
           0 low
-          -1 (if (zero? (tuple-compare low true))
+          -1 (if (zero? (tuple-compare low))
                low
                [(dec low) low])
-          1 (if (zero? (tuple-compare high true))
+          1 (if (zero? (tuple-compare high))
               high
               [low high]))
         (let [mid (int (/ (+ low high) 2))
-              c (tuple-compare mid false)]
+              c (tuple-compare mid)]
           (case c
             0 mid
             -1 (recur low mid)
@@ -186,13 +203,15 @@
 (defn tuple-at
   "Retrieves the tuple found at a particular tuple offset"
   [block offset]
-  (mapv #(get-long block %) (range offset (+ offset tuple-size))))
+  (let [long-offset (* offset tuple-size)]
+    (mapv #(get-long block %) (range long-offset (+ long-offset tuple-size)))))
 
 (defn set-tuple-at!
   "Retrieves the tuple found at a particular tuple offset"
   [block offset tuple]
-  (doseq [n (range tuple-size)]
-    (put-long! block (+ n offset) (nth tuple n))))
+  (let [long-offset (* offset tuple-size)]
+    (doseq [n (range tuple-size)]
+      (put-long! block (+ n long-offset) (nth tuple n)))))
 
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
