@@ -43,13 +43,13 @@
                 [16 6 2 1]]
         len (count tuples)
         block (add-tuples block tuples)]
-    (is (= [2 3] (search-block block len [1 6 2])))
+    (is (= 3 (search-block block len [1 6 2])))
     (is (= 3 (search-block block len [1 6 2 1])))
-    (is (= [3 4] (search-block block len [10 2 3])))
+    (is (= 4 (search-block block len [10 2 3])))
     (is (= 4 (search-block block len [10 2 3 1])))
-    (is (= [-1 0] (search-block block len [1 2 3]))) ;; special case
+    (is (= 0 (search-block block len [1 2 3])))
     (is (= 0 (search-block block len [1 2 3 1])))
-    (is (= [9 10] (search-block block len [16 6 2])))
+    (is (= 10 (search-block block len [16 6 2])))
     (is (= 10 (search-block block len [16 6 2 1])))
 
     (is (= [0 1] (search-block block len [1 2 4])))
@@ -180,5 +180,5 @@
          [block1 block2 block3 block4] :tuple-blocks
          {:keys [index blocks] :as tuples} :tuples} (create-test-tree)]
     (is (= {:node lchild :pos 1} (find-coord index blocks [2 8 8 1])))
-    (is (= [{:node lchild :pos 0} {:node lchild :pos 1}] (find-coord index blocks [2 8 8])))
+    (is (= {:node lchild :pos 1} (find-coord index blocks [2 8 8])))
     ))

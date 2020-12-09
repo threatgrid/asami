@@ -134,12 +134,12 @@
   "Returns the tuple offset in a block that matches a given tuple.
   If no tuple matches exactly, then returns a pair of positions to insert between."
   [block len tuple]
-  (letfn [(tuple-compare [offset] ;; if the tuple is smaller, then -1, if larger then +1
+  (letfn [(tuple-compare [offset partials?] ;; if the tuple is smaller, then -1, if larger then +1
             (loop [[t & tpl] tuple n 0]
               (if-not t
                 ;; end of the input tuple. If it's an entire tuple then it's equal,
                 ;; otherwise it's a partial tuple and considered less than
-                (if (= n tuple-size) 0 -1)
+                (if (or partials? (= n tuple-size)) 0 -1)
                 (let [bv (get-long block (+ n (* tuple-size offset)))]
                   (cond
                     (< t bv) -1
@@ -148,16 +148,16 @@
     (loop [low 0 high len]
       (if (>= (inc low) high) ;; the >= catches an empty block, though these should not be searched
         ;; finished the search. Return the offset when found or a pair when not found
-        (case (tuple-compare low)
+        (case (tuple-compare low false)
           0 low
-          -1 (if (zero? (tuple-compare low))
+          -1 (if (zero? (tuple-compare low true))
                low
                [(dec low) low])
-          1 (if (zero? (tuple-compare high))
+          1 (if (zero? (tuple-compare high true))
               high
               [low high]))
         (let [mid (int (/ (+ low high) 2))
-              c (tuple-compare mid)]
+              c (tuple-compare mid false)]
           (case c
             0 mid
             -1 (recur low mid)
