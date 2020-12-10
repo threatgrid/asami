@@ -133,13 +133,6 @@
     (set-tuple-at! block2 0 [2 8 10 1])
     (set-tuple-at! block2 1 [2 8 14 1])
     (set-tuple-at! block2 2 [2 8 18 1])
-    
-    (set-low-tuple! rchild [3 1 2 1])
-    (set-high-tuple! rchild [3 2 1 1])
-    (set-count! rchild 2)
-    (set-block-ref! rchild (get-id block3))
-    (set-tuple-at! block3 0 [3 1 2 1])
-    (set-tuple-at! block3 1 [3 2 1 1])
 
     (set-low-tuple! rlchild [2 8 20 1])
     (set-high-tuple! rlchild [3 1 1 1])
@@ -149,6 +142,13 @@
     (set-tuple-at! block4 1 [2 10 4 1])
     (set-tuple-at! block4 2 [2 20 8 1])
     (set-tuple-at! block4 3 [3 1 1 1])
+    
+    (set-low-tuple! rchild [3 1 3 1])
+    (set-high-tuple! rchild [3 2 1 1])
+    (set-count! rchild 2)
+    (set-block-ref! rchild (get-id block3))
+    (set-tuple-at! block3 0 [3 1 3 1])
+    (set-tuple-at! block3 1 [3 2 1 1])
     
     (tree/set-child! root tree/left lchild)
     (tree/set-child! root tree/right rchild)
@@ -179,6 +179,58 @@
   (let [{:keys [root lchild rchild rlchild tuples]
          [block1 block2 block3 block4] :tuple-blocks
          {:keys [index blocks] :as tuples} :tuples} (create-test-tree)]
+    (is (= [nil {:node lchild :pos 0}] (find-coord index blocks [2 1 1 1])))
+    (is (= [nil {:node lchild :pos 0}] (find-coord index blocks [2 1 1])))
+
+    (is (= {:node lchild :pos 0} (find-coord index blocks [2 4 6 1])))
+    (is (= {:node lchild :pos 0} (find-coord index blocks [2 4 6])))
+    (is (= [{:node lchild :pos 0} {:node lchild :pos 1}] (find-coord index blocks [2 6 6 1])))
+    (is (= [{:node lchild :pos 0} {:node lchild :pos 1}] (find-coord index blocks [2 6 6])))
     (is (= {:node lchild :pos 1} (find-coord index blocks [2 8 8 1])))
     (is (= {:node lchild :pos 1} (find-coord index blocks [2 8 8])))
-    ))
+
+    (is (= [{:node lchild :pos 1} {:node root :pos 0}] (find-coord index blocks [2 8 9 1])))
+    (is (= [{:node lchild :pos 1} {:node root :pos 0}] (find-coord index blocks [2 8 9])))
+
+    (is (= {:node root :pos 0} (find-coord index blocks [2 8 10 1])))
+    (is (= {:node root :pos 0} (find-coord index blocks [2 8 10])))
+    (is (= [{:node root :pos 0} {:node root :pos 1}] (find-coord index blocks [2 8 12 1])))
+    (is (= [{:node root :pos 0} {:node root :pos 1}] (find-coord index blocks [2 8 12])))
+    (is (= {:node root :pos 1} (find-coord index blocks [2 8 14 1])))
+    (is (= {:node root :pos 1} (find-coord index blocks [2 8 14])))
+    (is (= [{:node root :pos 1} {:node root :pos 2}] (find-coord index blocks [2 8 16 1])))
+    (is (= [{:node root :pos 1} {:node root :pos 2}] (find-coord index blocks [2 8 16])))
+    (is (= {:node root :pos 2} (find-coord index blocks [2 8 18 1])))
+    (is (= {:node root :pos 2} (find-coord index blocks [2 8 18])))
+
+    (is (= [{:node root :pos 2} {:node rlchild :pos 0}] (find-coord index blocks [2 8 19 1])))
+    (is (= [{:node root :pos 2} {:node rlchild :pos 0}] (find-coord index blocks [2 8 19])))
+
+    (is (= {:node rlchild :pos 0} (find-coord index blocks [2 8 20 1])))
+    (is (= {:node rlchild :pos 0} (find-coord index blocks [2 8 20])))
+    (is (= [{:node rlchild :pos 0} {:node rlchild :pos 1}] (find-coord index blocks [2 9 12 1])))
+    (is (= [{:node rlchild :pos 0} {:node rlchild :pos 1}] (find-coord index blocks [2 9 12])))
+    (is (= {:node rlchild :pos 1} (find-coord index blocks [2 10 4 1])))
+    (is (= {:node rlchild :pos 1} (find-coord index blocks [2 10 4])))
+    (is (= [{:node rlchild :pos 1} {:node rlchild :pos 2}] (find-coord index blocks [2 20 6 1])))
+    (is (= [{:node rlchild :pos 1} {:node rlchild :pos 2}] (find-coord index blocks [2 20 6])))
+    (is (= {:node rlchild :pos 2} (find-coord index blocks [2 20 8 1])))
+    (is (= {:node rlchild :pos 2} (find-coord index blocks [2 20 8])))
+    (is (= [{:node rlchild :pos 2} {:node rlchild :pos 3}] (find-coord index blocks [2 20 8 2])))
+    (is (= [{:node rlchild :pos 2} {:node rlchild :pos 3}] (find-coord index blocks [2 20 9 1])))
+    (is (= [{:node rlchild :pos 2} {:node rlchild :pos 3}] (find-coord index blocks [2 20 9])))
+    (is (= {:node rlchild :pos 3} (find-coord index blocks [3 1 1 1])))
+    (is (= {:node rlchild :pos 3} (find-coord index blocks [3 1 1])))
+
+    (is (= [{:node rlchild :pos 3} {:node rchild :pos 0}] (find-coord index blocks [3 1 1 2])))
+    (is (= [{:node rlchild :pos 3} {:node rchild :pos 0}] (find-coord index blocks [3 1 2])))
+
+    (is (= {:node rchild :pos 0} (find-coord index blocks [3 1 3 1])))
+    (is (= {:node rchild :pos 0} (find-coord index blocks [3 1 3])))
+    (is (= [{:node rchild :pos 0} {:node rchild :pos 1}] (find-coord index blocks [3 1 4 1])))
+    (is (= [{:node rchild :pos 0} {:node rchild :pos 1}] (find-coord index blocks [3 1 4])))
+    (is (= {:node rchild :pos 1} (find-coord index blocks [3 2 1 1])))
+    (is (= {:node rchild :pos 1} (find-coord index blocks [3 2 1])))
+
+    (is (= [{:node rchild :pos 1} nil] (find-coord index blocks [3 2 2 1])))
+    (is (= [{:node rchild :pos 1} nil] (find-coord index blocks [3 2 2])))))
