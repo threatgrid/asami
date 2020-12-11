@@ -12,6 +12,7 @@
                                           set-count! set-block-ref!
                                           tuple-at set-tuple-at!
                                           tree-node-size tuple-node-compare
+                                          tuple-seq
                                           ->TupleIndex find-coord]]
             [asami.durable.block.block-api :refer [BlockManager allocate-block! get-id get-long put-long!]]))
 
@@ -234,3 +235,13 @@
 
     (is (= [{:node rchild :pos 1} nil] (find-coord index blocks [3 2 2 1])))
     (is (= [{:node rchild :pos 1} nil] (find-coord index blocks [3 2 2])))))
+
+(deftest test-tuple-search
+  (let [{:keys [root lchild rchild rlchild tuples]
+         [block1 block2 block3 block4] :tuple-blocks
+         {:keys [index blocks] :as tuples} :tuples} (create-test-tree)]
+    (is (= nil (tuple-seq index blocks [2 1 1] lchild 0)))
+    (is (= [[2 8 8 1] [2 8 10 1] [2 8 14 1] [2 8 18 1] [2 8 20 1]] (tuple-seq index blocks [2 8] lchild 1)))
+    (is (= [[3 1 1 1]] (tuple-seq index blocks [3 1 1] rlchild 3)))
+    )
+  )

@@ -232,7 +232,7 @@
                            (let [nxto (inc offs)
                                  [nnodes nblock noffset] (if (= nxto (get-count n))
                                                                        [ns (block-for (first ns)) 0]
-                                                                       [all-ns block nxto])]
+                                                                       [all-ns blk nxto])]
                              (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
     (nested-seq nodes (block-for node) offset)))
 
@@ -281,14 +281,13 @@
 
   (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
     (let [pos (find-coord index blocks tuple)]
-      (or
-       ;; short circuit for existence test
-       (if (= tuple-size (count tuple))
-         (when (map? pos) [tuple])
-         (when pos
-           (let [{:keys [node offset]} (if (map? pos) pos (second pos))]
-             (tuple-seq index blocks tuple node offset))))
-       [])))
+      (if (map? pos)
+        ;; short circuit for existence test
+        (if (= tuple-size (count tuple))
+          (when (map? pos) [tuple])
+          (let [{:keys [node offset]} pos]
+            (tuple-seq index blocks tuple node offset)))
+        [])))
 
   Transaction
   (rewind! [this]
