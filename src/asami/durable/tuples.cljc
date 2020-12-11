@@ -224,7 +224,7 @@
   offset: the starting point of iteration"
   [index blocks tuple node offset]
   (let [nodes (tree/node-seq index node)
-        block-for (fn [n] (get-block blocks (get-block-ref n)))
+        block-for (fn [n] (and n (get-block blocks (get-block-ref n))))
         nested-seq (fn nested-seq' [[n & ns :as all-ns] blk offs]
                      (when n
                        (let [t (tuple-at blk offs)]
