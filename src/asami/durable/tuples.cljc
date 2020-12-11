@@ -213,6 +213,30 @@
     (doseq [n (range tuple-size)]
       (put-long! block (+ n long-offset) (nth tuple n)))))
 
+(defn tuple-seq
+  "Create a lazy sequence of tuples.
+  This iterates through the block associated with the given node, until reaching the size of the block.
+  Then moves to the next node, and starts iterating through the block associated with it.
+  Continues as long as the provided tuple matches the tuple in the block.
+  index: the tree index with the nodes
+  blocks: the block manager for tuples blocks
+  tuple: the tuple being searched for. Every returned tuple with match this one by prefix
+  offset: the starting point of iteration"
+  [index blocks tuple node offset]
+  (let [nodes (tree/node-seq index node)
+        block-for (fn [n] (get-block blocks (get-block-ref n)))
+        nested-seq (fn nested-seq' [[n & ns :as all-ns] blk offs]
+                     (when n
+                       (let [t (tuple-at blk offs)]
+                         (when (partial-equal tuple t)
+                           (let [nxto (inc offs)
+                                 [nnodes nblock noffset] (if (= nxto (get-count n))
+                                                                       [ns (block-for (first ns)) 0]
+                                                                       [all-ns block nxto])]
+                             (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
+    (nested-seq nodes (block-for node) offset)))
+
+
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
   (write-tuple! [this tuple]
@@ -255,8 +279,16 @@
           (tree/write node new-index)
           (assoc this :index new-index :root-id (get-id (:root new-index)))))))
 
-  (find-tuple [this tuple]
-    )
+  (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
+    (let [pos (find-coord index blocks tuple)]
+      (or
+       ;; short circuit for existence test
+       (if (= tuple-size (count tuple))
+         (when (map? pos) [tuple])
+         (when pos
+           (let [{:keys [node offset]} (if (map? pos) pos (second pos))]
+             (tuple-seq index blocks tuple node offset))))
+       [])))
 
   Transaction
   (rewind! [this]
