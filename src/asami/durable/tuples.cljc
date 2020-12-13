@@ -231,8 +231,11 @@
                          (when (partial-equal tuple t)
                            (let [nxto (inc offs)
                                  [nnodes nblock noffset] (if (= nxto (get-count n))
-                                                                       [ns (block-for (first ns)) 0]
-                                                                       [all-ns blk nxto])]
+                                                           (loop [[fns & rns :as alln] ns]
+                                                             (if (and fns (zero? (get-count fns)))
+                                                               (recur rns)
+                                                               [alln (block-for fns) 0]))
+                                                           [all-ns blk nxto])]
                              (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
     (nested-seq nodes (block-for node) offset)))
 
