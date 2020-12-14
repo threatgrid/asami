@@ -3,7 +3,7 @@
     asami.durable.tuples-test
   (:require [clojure.test :refer [deftest is]]
             [asami.durable.test-utils :refer [new-block]]
-            [asami.durable.common :refer [long-size]]
+            [asami.durable.common :refer [long-size delete-tuple!]]
             [asami.durable.tree :as tree]
             [asami.durable.tuples :refer [search-block tuple-size tree-node-size block-max
                                           get-low-tuple get-high-tuple
@@ -73,7 +73,7 @@
   (write-block [this block] this)
   (get-block [this id] (nth @block-list id))
   (get-block-size [this] tuples-block-size)
-  (copy-to-tx [this block] this))
+  (copy-to-tx [this block] block))
 
 (defn faux-manager [s] (->FauxManager (atom []) s))
 
@@ -246,3 +246,21 @@
     (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 14 1] [2 8 18 1] [2 8 20 1]
             [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
            (tuple-seq index blocks [] lchild 0)))))
+
+(deftest test-delete
+  (let [{:keys [root lchild rchild rlchild tuples]
+         [block1 block2 block3 block4] :tuple-blocks
+         {:keys [index blocks]} :tuples} (create-test-tree)
+        tuples (->TupleIndex index blocks (get-id root))
+        tuples (delete-tuple! tuples [2 8 14 1])]
+    (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
+            [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+           (tuple-seq index blocks [] lchild 0)))
+    (let [tuples (delete-tuple! tuples [2 8 10 1])]
+      (is (= [[2 4 6 1] [2 8 8 1] [2 8 18 1] [2 8 20 1]
+              [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+             (tuple-seq index blocks [] lchild 0)))
+      (let [tuples (delete-tuple! tuples [2 8 18 1])]
+        (is (= [[2 4 6 1] [2 8 8 1] [2 8 20 1]
+                [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+               (tuple-seq index blocks [] lchild 0)))))))
