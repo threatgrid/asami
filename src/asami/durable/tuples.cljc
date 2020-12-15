@@ -239,12 +239,49 @@
                              (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
     (nested-seq nodes (block-for node) offset)))
 
+(defn init-node-writer
+  [block-id node tuple]
+  (set-low-tuple! node tuple)
+  (set-high-tuple! node tuple)
+  (set-count! node 1)
+  (set-block-ref! node block-id))
 
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
   (write-tuple! [this tuple]
-    (let [insert-coord (find-tuple index blocks)]
-      ))
+    (let [insert-coord (find-coord index blocks tuple)]
+      (cond
+        (nil? insert-coord) (let [block (allocate-block! blocks)
+                                  idx (tree/add index tuple (partial init-node-writer (get-id block)) nil)]
+                              (set-tuple-at! block 0 tuple)
+                              (assoc this :index idx :root-id (:root idx)))
+        (vector? insert-coord)  ;; insert into existing block
+        (let [{lnode :node lpos :pos} {hnode :node hpos :pos}]
+          (if (= lnode hnode)  ;; modifying this node
+            (let [[new-index node] (tree/modify-node! index lnode)
+                  old-block-id (get-block-ref node) 
+                  block (->> old-block-id
+                             (get-block blocks)
+                             (copy-to-tx blocks))
+                  block-id (get-id block)
+                  tuple-count (get-count node)
+                  byte-pos (* hpos tuple-size-bytes)
+                  byte-len (* (- tuple-count hpos) tuple-size-bytes)]
+              (if (= block-max (get-count lnode))
+                ;; TODO: full block. Must split
+                (do
+                  (put-block! block (+ byte-pos tuple-size-bytes) block byte-pos byte-len)
+                  (set-tuple-at! block hpos tuple)
+                  (write-block blocks block)
+                  (when (not= old-block-id block-id)
+                    (set-block-ref! node block-id))
+                  (set-count! node (inc tuple-count))
+                  (tree/write node new-index)
+                  (assoc this :index new-index :root-id (get-id (:root new-index))))))
+            ;; else between nodes. TODO: Figure out where to add... recurse to above
+            ))
+
+        :default this)))  ;; do nothing
 
   (delete-tuple! [this tuple]
     (let [delete-coord (find-coord index blocks tuple)]
@@ -253,9 +290,8 @@
         (let [{:keys [node pos]} delete-coord
               tuple-count (get-count node)
               block-id (get-block-ref node)
-              block (get-block blocks block-id)
               ;; modifying the block, which requires copy-on-write
-              block (copy-to-tx blocks block)
+              block (->> block-id (get-block blocks) (copy-to-tx blocks))
               new-block-id (get-id block)
               ;; also modifying the tree to refer to this new block
               [new-index node] (tree/modify-node! index node)
