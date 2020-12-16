@@ -31,6 +31,12 @@
 ;; range is 0-511
 (def ^:const block-max "Maximum number of tuples in a block" 512)
 
+(def ^:const half-block "Half the maximum number of tuples in a block" (bit-shift-right block-max 1))
+
+(def ^:const block-bytes "Number of bytes in a full block" (* block-max tuple-size-bytes))
+
+(def ^:const half-block-bytes "Number of bytes in a full block" (bit-shift-right block-bytes 1))
+
 ;; 9 bits required to measure block-size
 (def ^:const reference-mask 0x007FFFFFFFFFFFFF)
 
@@ -297,9 +303,44 @@
   byte-pos: the byte position representing the pos
   byte-len: the bytes from the byte position to the end of the block"
   [tuple node block pos tuple-count byte-pos byte-len]
-  (put-block! block (+ byte-pos tuple-size-bytes) block byte-pos byte-len)  ;; todo: check that this is safe!
+  (put-block! block (+ byte-pos tuple-size-bytes) block byte-pos byte-len)
   (set-tuple-at! block pos tuple)
   (inc tuple-count))
+
+(defn split-node-writer
+  [block-id node [low high]]
+  (set-low-tuple! node low)
+  (set-high-tuple! node high)
+  (set-count! node half-block)
+  (set-block-ref! node block-id))
+
+(defn split-block!
+  "Updates a node and associated block to split them into 2 nodes and 2 blocks.
+  Returns the new insertion coordinate"
+  [{:keys [index blocks root-id] :as tuples-store} {node :node pos :pos :as coord}]
+  (let [low-block (get-block blocks (get-block-ref node))
+        ;; get the tuples above and below the split
+        lhigh-tuple (tuple-at low-block (dec half-block))
+        hlow-tuple (tuple-at low-block half-block)
+        ;; get the top tuple in the block
+        hhigh-tuple (get-high-tuple node)
+        ;; modify the low node to refer to only the low half of tuples
+        [new-index lnode] (tree/modify-node! index node)
+        _ (set-high-tuple! lnode lhigh-tuple)
+        _ (set-count! lnode half-block)
+        ;; find the position to insert the new high node
+        location [lnode (tree/next-node new-index lnode)]
+        ;; create the block that will be used by the new high node
+        high-block (allocate-block! blocks)
+        ;; insert the new high node
+        new-index (tree/add new-index [hlow-tuple hhigh-tuple] (partial split-node-writer (get-id high-block)) location)]
+    ;; add the high tuples to the block attached to the high node
+    (put-block! high-block 0 low-block half-block-bytes half-block-bytes)
+    (write-block blocks high-block)
+    ;; identify where the insertion should occur
+    (let [ipos (mod pos half-block)
+          inode (if (< pos half-block) lnode (tree/next-node new-index lnode))]
+      [{:node inode :pos ipos} {:node inode :pos (inc ipos)}])))
 
 (defn init-node-writer
   [block-id node tuple]
@@ -311,24 +352,31 @@
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
   (write-tuple! [this tuple]
-    (let [insert-coord (find-coord index blocks tuple)]
+    (let [insert-coord (find-coord index blocks tuple)
+          insert #(modify-node-block! this % (partial add-single-tuple! tuple))]
       (cond
         (nil? insert-coord) (let [block (allocate-block! blocks)
                                   idx (tree/add index tuple (partial init-node-writer (get-id block)) nil)]
                               (set-tuple-at! block 0 tuple)
                               (assoc this :index idx :root-id (:root idx)))
-        (vector? insert-coord)  ;; insert into existing block
-        (let [[{lnode :node lpos :pos} {hnode :node hpos :pos :as high-coord}] insert-coord]
-          (if (= lnode hnode)  ;; modifying this node
-            (if (= block-max (get-count lnode))
-              (modify-node-block! this high-coord (partial add-single-tuple! tuple))
-              ;; TODO full block. Must split
-              )
-            
-            ;; else between nodes. TODO: Figure out where to add... then add, as above
-            ))
 
-        :default this)))  ;; do nothing
+        (vector? insert-coord) ;; insert into existing block
+        (let [[{lnode :node lpos :pos :as low-coord} {hnode :node hpos :pos :as high-coord}] insert-coord]
+          (if (= lnode hnode) ;; modifying this node
+            (if (= block-max (get-count lnode))
+              (insert high-coord)
+              ;; full block. Must split
+              (insert (split-block! this low-coord)))
+            ;; else between nodes
+            (let [lcount (get-count lnode)
+                  c (compare lcount (get-count hnode))]
+              (cond 
+                (< c 0) (insert low-coord)
+                (> c 0) (insert high-coord)
+                (= lcount block-max) (insert (split-block! this low-coord))
+                :default (insert low-coord)))))
+
+        :default this))) ;; do nothing
 
   (delete-tuple! [this tuple]
     (let [delete-coord (find-coord index blocks tuple)]
