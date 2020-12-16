@@ -239,6 +239,68 @@
                              (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
     (nested-seq nodes (block-for node) offset)))
 
+(defn modify-node-block!
+  "Modifies a node and associated block, using the provided operation"
+  [{:keys [index blocks root-id] :as tuples-store} coord op!]
+  (let [{:keys [node pos]} coord
+        tuple-count (get-count node)
+        old-block-id (get-block-ref node)
+        ;; modifying the block, which requires copy-on-write
+        block (->> old-block-id (get-block blocks) (copy-to-tx blocks))
+        block-id (get-id block)
+        ;; also modifying the tree to refer to this new block
+        [new-index node] (tree/modify-node! index node)
+        ;; get the offsets in the block to move tuples
+        byte-pos (* pos tuple-size-bytes)
+        byte-len (* (- tuple-count pos) tuple-size-bytes)
+        ;; perform the task specific operations
+        next-tuple-count (op! node block pos tuple-count byte-pos byte-len)]
+    ;; flush block data, if the implementation does this
+    (write-block blocks block)
+    ;; update the node's block reference if there is a new block
+    (when (not= old-block-id block-id)
+      (set-block-ref! node block-id))
+    ;; update the tuple count in the node
+    (set-count! node next-tuple-count)
+    ;; flush node data, if the implementation does this
+    (tree/write node new-index)
+    (assoc tuples-store :index new-index :root-id (get-id (:root new-index)))))
+
+(defn delete-single-tuple!
+  "Performs the operation necessary to remove a single tuple from a node/block.
+  node: the node to be modified
+  block: the tuples block to be modified
+  pos: the tuple position within the block
+  tuple-count: the number of tuples in the block
+  byte-pos: the byte position representing the pos
+  byte-len: the bytes from the byte position to the end of the block"
+  [node block pos tuple-count byte-pos byte-len]
+  (let [next-tuple-count (dec tuple-count)]
+    (if (= pos next-tuple-count)
+      ;; truncating the block. Change the high tuple. No need to change the block
+      (when-not (zero? pos) ;; note: empty blocks will keep the old high tuple
+        (set-high-tuple! node (tuple-at block (dec pos))))
+      (do
+        ;; remove the tuple from the block
+        (put-block! block byte-pos block (+ byte-pos tuple-size-bytes) byte-len)
+        (when (zero? pos)
+          (set-low-tuple! node (tuple-at block 0)))))
+    next-tuple-count))
+
+(defn add-single-tuple!
+  "Performs the operation necessary to add a single tuple from a node/block.
+  tuple: the tuple to be added
+  node: the node to be modified
+  block: the tuples block to be modified
+  pos: the tuple position within the block
+  tuple-count: the number of tuples in the block
+  byte-pos: the byte position representing the pos
+  byte-len: the bytes from the byte position to the end of the block"
+  [tuple node block pos tuple-count byte-pos byte-len]
+  (put-block! block (+ byte-pos tuple-size-bytes) block byte-pos byte-len)  ;; todo: check that this is safe!
+  (set-tuple-at! block pos tuple)
+  (inc tuple-count))
+
 (defn init-node-writer
   [block-id node tuple]
   (set-low-tuple! node tuple)
@@ -256,29 +318,14 @@
                               (set-tuple-at! block 0 tuple)
                               (assoc this :index idx :root-id (:root idx)))
         (vector? insert-coord)  ;; insert into existing block
-        (let [{lnode :node lpos :pos} {hnode :node hpos :pos}]
+        (let [[{lnode :node lpos :pos} {hnode :node hpos :pos :as high-coord}] insert-coord]
           (if (= lnode hnode)  ;; modifying this node
-            (let [[new-index node] (tree/modify-node! index lnode)
-                  old-block-id (get-block-ref node) 
-                  block (->> old-block-id
-                             (get-block blocks)
-                             (copy-to-tx blocks))
-                  block-id (get-id block)
-                  tuple-count (get-count node)
-                  byte-pos (* hpos tuple-size-bytes)
-                  byte-len (* (- tuple-count hpos) tuple-size-bytes)]
-              (if (= block-max (get-count lnode))
-                ;; TODO: full block. Must split
-                (do
-                  (put-block! block (+ byte-pos tuple-size-bytes) block byte-pos byte-len)
-                  (set-tuple-at! block hpos tuple)
-                  (write-block blocks block)
-                  (when (not= old-block-id block-id)
-                    (set-block-ref! node block-id))
-                  (set-count! node (inc tuple-count))
-                  (tree/write node new-index)
-                  (assoc this :index new-index :root-id (get-id (:root new-index))))))
-            ;; else between nodes. TODO: Figure out where to add... recurse to above
+            (if (= block-max (get-count lnode))
+              (modify-node-block! this high-coord (partial add-single-tuple! tuple))
+              ;; TODO full block. Must split
+              )
+            
+            ;; else between nodes. TODO: Figure out where to add... then add, as above
             ))
 
         :default this)))  ;; do nothing
@@ -287,36 +334,7 @@
     (let [delete-coord (find-coord index blocks tuple)]
       (if (or (nil? delete-coord) (vector? delete-coord))
         this
-        (let [{:keys [node pos]} delete-coord
-              tuple-count (get-count node)
-              block-id (get-block-ref node)
-              ;; modifying the block, which requires copy-on-write
-              block (->> block-id (get-block blocks) (copy-to-tx blocks))
-              new-block-id (get-id block)
-              ;; also modifying the tree to refer to this new block
-              [new-index node] (tree/modify-node! index node)
-              ;; get the offsets in the block to move tuples
-              byte-pos (* pos tuple-size-bytes)
-              byte-len (* (- tuple-count pos) tuple-size-bytes)
-              next-tuple-count (dec tuple-count)]
-          ;; move the data in the block down to overwrite the target tuple
-          (if (= pos next-tuple-count)
-            ;; truncating the block. Change the high tuple. No need to change the block
-            (when-not (zero? pos) ;; note: empty blocks will keep the old high tuple
-              (set-high-tuple! node (tuple-at block (dec pos))))
-            (do
-              ;; remove the tuple from the block
-              (put-block! block byte-pos block (+ byte-pos tuple-size-bytes) byte-len)
-              (when (zero? pos)
-                (set-low-tuple! node (tuple-at block 0)))))
-          (write-block blocks block)
-          ;; update the node's block reference if there is a new block
-          (when (not= block-id new-block-id)
-            (set-block-ref! node new-block-id))
-          ;; decrement the tuple count in the node
-          (set-count! node next-tuple-count)
-          (tree/write node new-index)
-          (assoc this :index new-index :root-id (get-id (:root new-index)))))))
+        (modify-node-block! this delete-coord delete-single-tuple!))))
 
   (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
     (let [pos (find-coord index blocks tuple)]
