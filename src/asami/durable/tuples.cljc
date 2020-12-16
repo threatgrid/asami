@@ -396,10 +396,13 @@
 
   Transaction
   (rewind! [this]
-    )
+    (rewind! blocks)
+    (let [rindex (rewind! index)]
+      (assoc this :index rindex :root-id (:root rindex))))
 
   (commit! [this]
-    ))
+    (commit! blocks)
+    (assoc this :index (commit! index))))
 
 
 (defn open-tuples
