@@ -1,7 +1,7 @@
 (ns ^{:doc "Tuples index with blocks"
       :author "Paula Gearon"}
     asami.durable.tuples
-    (:require [asami.durable.common :refer [TupleStorage find-tuple Transaction long-size]]
+    (:require [asami.durable.common :refer [TupleStorage find-tuple long-size Transaction rewind! commit!]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.block.block-api :refer [get-long put-long! get-id get-block put-block!
@@ -219,6 +219,15 @@
     (doseq [n (range tuple-size)]
       (put-long! block (+ n long-offset) (nth tuple n)))))
 
+(defn next-populated
+  "Returns the next node with tuples, starting with the provided node."
+  [index node]
+  (loop [n node]
+    (cond
+      (nil? n) nil
+      (zero? (get-count n)) (recur (tree/next-node index n))
+      :default n)))
+
 (defn tuple-seq
   "Create a lazy sequence of tuples.
   This iterates through the block associated with the given node, until reaching the size of the block.
@@ -229,21 +238,22 @@
   tuple: the tuple being searched for. Every returned tuple with match this one by prefix
   offset: the starting point of iteration"
   [index blocks tuple node offset]
-  (let [nodes (tree/node-seq index node)
-        block-for (fn [n] (and n (get-block blocks (get-block-ref n))))
-        nested-seq (fn nested-seq' [[n & ns :as all-ns] blk offs]
-                     (when n
-                       (let [t (tuple-at blk offs)]
-                         (when (partial-equal tuple t)
-                           (let [nxto (inc offs)
-                                 [nnodes nblock noffset] (if (= nxto (get-count n))
-                                                           (loop [[fns & rns :as alln] ns]
-                                                             (if (and fns (zero? (get-count fns)))
-                                                               (recur rns)
-                                                               [alln (block-for fns) 0]))
-                                                           [all-ns blk nxto])]
-                             (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
-    (nested-seq nodes (block-for node) offset)))
+  (when-let [node (next-populated index node)]
+    (let [nodes (tree/node-seq index node)
+          block-for (fn [n] (and n (get-block blocks (get-block-ref n))))
+          nested-seq (fn nested-seq' [[n & ns :as all-ns] blk offs]
+                       (when n
+                         (let [t (tuple-at blk offs)]
+                           (when (partial-equal tuple t)
+                             (let [nxto (inc offs)
+                                   [nnodes nblock noffset] (if (= nxto (get-count n))
+                                                             (loop [[fns & rns :as alln] ns]
+                                                               (if (and fns (zero? (get-count fns)))
+                                                                 (recur rns)
+                                                                 [alln (block-for fns) 0]))
+                                                             [all-ns blk nxto])]
+                               (cons t (lazy-seq (nested-seq' nnodes nblock noffset))))))))]
+      (nested-seq nodes (block-for node) offset))))
 
 (defn modify-node-block!
   "Modifies a node and associated block, using the provided operation"
@@ -385,13 +395,14 @@
         (modify-node-block! this delete-coord delete-single-tuple!))))
 
   (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
-    (let [pos (find-coord index blocks tuple)]
-      (if (map? pos)
+    (let [coord (find-coord index blocks tuple)]
+      ;; a double position indicates that nothing matches
+      (if (map? coord)
         ;; short circuit for existence test
         (if (= tuple-size (count tuple))
-          (when (map? pos) [tuple])
-          (let [{:keys [node offset]} pos]
-            (tuple-seq index blocks tuple node offset)))
+          (when (map? coord) [tuple])
+          (let [{:keys [node pos]} coord]
+            (tuple-seq index blocks tuple node pos)))
         [])))
 
   Transaction

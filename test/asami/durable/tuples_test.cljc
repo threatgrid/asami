@@ -3,7 +3,7 @@
     asami.durable.tuples-test
   (:require [clojure.test :refer [deftest is]]
             [asami.durable.test-utils :refer [new-block]]
-            [asami.durable.common :refer [long-size delete-tuple!]]
+            [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuple write-tuple!]]
             [asami.durable.tree :as tree]
             [asami.durable.tuples :refer [search-block tuple-size tree-node-size block-max
                                           get-low-tuple get-high-tuple
@@ -14,7 +14,8 @@
                                           tree-node-size tuple-node-compare
                                           tuple-seq
                                           ->TupleIndex find-coord]]
-            [asami.durable.block.block-api :refer [BlockManager allocate-block! get-id get-long put-long!]]))
+            [asami.durable.block.block-api :refer [BlockManager allocate-block! get-id get-long put-long!
+                                                   copy-block! copy-over!]]))
 
 (defn add-tuples
   [block tuples]
@@ -63,19 +64,24 @@
 
 (def tree-block-size (+ tree-node-size tree/header-size))
 
-(defrecord FauxManager [block-list block-size]
+(defrecord FauxManager [block-list block-size commit-point]
   BlockManager
   (allocate-block! [this]
     (let [b (new-block block-size (count @block-list))]
       (swap! block-list conj b)
       b))
-  (copy-block! [this block] (throw (ex-info "Unsupported operation on test stub" {:op "copy-block!"})))
+  (copy-block! [this block] (copy-over! (allocate-block! this) block 0))
   (write-block [this block] this)
   (get-block [this id] (nth @block-list id))
   (get-block-size [this] tuples-block-size)
-  (copy-to-tx [this block] block))
+  (copy-to-tx [this block] (if (<= (get-id block) @commit-point)
+                             (copy-block! this block)
+                             block))
+  Transaction
+  (rewind! [this] (swap! block-list subvec 0 commit-point))
+  (commit! [this] (swap! commit-point constantly (count @block-list)) this))
 
-(defn faux-manager [s] (->FauxManager (atom []) s))
+(defn faux-manager [s] (->FauxManager (atom []) s (atom 0)))
 
 (defn print-tuple-block
   [block]
@@ -252,15 +258,45 @@
          [block1 block2 block3 block4] :tuple-blocks
          {:keys [index blocks]} :tuples} (create-test-tree)
         tuples (->TupleIndex index blocks (get-id root))
-        tuples (delete-tuple! tuples [2 8 14 1])]
-    (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
-            [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
-           (tuple-seq index blocks [] lchild 0)))
-    (let [tuples (delete-tuple! tuples [2 8 10 1])]
-      (is (= [[2 4 6 1] [2 8 8 1] [2 8 18 1] [2 8 20 1]
-              [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
-             (tuple-seq index blocks [] lchild 0)))
-      (let [tuples (delete-tuple! tuples [2 8 18 1])]
-        (is (= [[2 4 6 1] [2 8 8 1] [2 8 20 1]
-                [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
-               (tuple-seq index blocks [] lchild 0)))))))
+        tuples (delete-tuple! tuples [2 8 14 1])
+        _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (tuple-seq index blocks [] lchild 0)))
+        ;; this triple does not exist
+        tuples (delete-tuple! tuples [2 8 9 1])
+        _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (tuple-seq index blocks [] lchild 0)))
+        tuples (delete-tuple! tuples [2 8 10 1])
+        _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 18 1] [2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (tuple-seq index blocks [] lchild 0)))
+        tuples (delete-tuple! tuples [2 8 18 1])
+        _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (tuple-seq index blocks [] lchild 0)))
+        tuples (delete-tuple! tuples [2 4 6 1])
+        _ (is (= [[2 8 8 1] [2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (tuple-seq index blocks [] lchild 0)))
+        tuples (delete-tuple! tuples [2 8 8 1])
+        _ (is (= [[2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
+                 (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [3 1 1 1])
+        _ (is (= [[2 8 20 1]
+                  [2 10 4 1] [2 20 8 1] [3 1 3 1] [3 2 1 1]]
+                 (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [3 1 3 1])
+        _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1] [3 2 1 1]]
+                 (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [3 2 1 1])
+        _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1]]
+                 (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [2 20 8 1])
+        _ (is (= [[2 8 20 1] [2 10 4 1]]
+                 (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [2 10 4 1])
+        _ (is (= [[2 8 20 1]] (find-tuple tuples [])))
+        tuples (delete-tuple! tuples [2 8 20 1])]
+    (is (= nil (find-tuple tuples [])))))
