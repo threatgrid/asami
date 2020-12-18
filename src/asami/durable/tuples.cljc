@@ -340,25 +340,24 @@
         ;; get the top tuple in the block
         hhigh-tuple (get-high-tuple node)
         ;; modify the low node to refer to only the low half of tuples
-        [new-index lnode] (tree/modify-node! index node)
+        [nxt-index lnode] (tree/modify-node! index node)
         _ (set-high-tuple! lnode lhigh-tuple)
         _ (set-count! lnode half-block)
         ;; find the position to insert the new high node
-        location [lnode (tree/next-node new-index lnode)]
+        location [lnode (tree/next-node nxt-index lnode)]
         ;; create the block that will be used by the new high node
         high-block (allocate-block! blocks)
         ;; insert the new high node
-        ;; avoid searching for the new node by capturing it during creation
-        hnode-ref (volatile! nil)
-        node-writer (fn [node range] (vreset! hnode-ref node) (split-node-writer (get-id high-block) node range))
-        new-index (tree/add new-index [hlow-tuple hhigh-tuple] node-writer location)]
+        node-writer (fn [node range] (split-node-writer (get-id high-block) node range))
+        new-index (tree/add nxt-index [hlow-tuple hhigh-tuple] node-writer location)
+        {lnode :node} (find-coord new-index blocks lhigh-tuple)]
     ;; add the high tuples to the block attached to the high node
     (put-block! high-block 0 low-block half-block-bytes half-block-bytes)
     (write-block blocks high-block)
     ;; identify where the insertion should occur
     (let [[ipos inode] (if (<= pos half-block)
                          [pos lnode]
-                         [(- pos half-block) @hnode-ref])]
+                         [(- pos half-block) (tree/next-node new-index lnode)])]
       [(assoc tuples-store :index new-index) {:node inode :pos ipos}])))
 
 (defn init-node-writer
@@ -373,13 +372,14 @@
   (write-tuple! [this tuple]
     (let [insert-coord (find-coord index blocks tuple)
           inc-c #(update % :pos inc)
-          insert-to (fn insert-to-fn
-                      ([coord] (insert-to-fn this coord))
-                      ([storage coord]
-                       (modify-node-block! storage coord (partial add-single-tuple! tuple))))
+          add-tuple (partial add-single-tuple! tuple)
+          split-insert (fn [coord]
+                         (let [[new-storage new-coord] (split-block! this coord)]
+                           (modify-node-block! new-storage new-coord add-tuple)))
+          insert-to #(modify-node-block! this % add-tuple)
           insert (fn [node coord]
                    (if (= block-max (get-count node))
-                     (apply insert-to (split-block! this coord))
+                     (split-insert coord)
                      (insert-to coord)))]
       (cond
         ;; Empty tree. Initialize
@@ -400,8 +400,7 @@
                        (cond 
                          (< c 0) (insert-to (inc-c low-coord)) ;; low node has fewer tuples
                          (> c 0) (insert-to high-coord) ;; high node has fewer tuples
-                         (= lcount block-max) (apply insert-to ;; equal, and max tuples
-                                                     (split-block! this (inc-c low-coord)))
+                         (= lcount block-max) (split-insert (inc-c low-coord)) ;; equal, and max tuples
                          :default (insert-to (inc-c low-coord)))))) ;; equal tuples, but not max: choose the low node
 
         ;; The tuple already exists
