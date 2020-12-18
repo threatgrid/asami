@@ -375,8 +375,7 @@
     (is (= 257 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 2 511 2] (get-high-tuple n2)))
-    (is (= 256 (get-count n2)))
-    )
+    (is (= 256 (get-count n2))))
 
   (let [tuples (create-test-tuples)
         data (map #(vector 2 2 % 2) (range block-max))
@@ -390,9 +389,10 @@
     (is (= 256 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 2 511 2] (get-high-tuple n2)))
-    (is (= 257 (get-count n2)))
-    )
+    (is (= 257 (get-count n2)))))
 
+;; forces 2 splits and a rebalance
+(deftest test-rebalance-split
   (let [tuples (create-test-tuples)
         data (map #(vector 2 % 2 2) (range block-max))
         tuples (reduce write-tuple! tuples data)
@@ -425,5 +425,4 @@
       (is (= [2 511 2 2] (get-high-tuple n3)))
       (is (= 512 (get-count n3)))
       )
-    )
-  )
+    ))

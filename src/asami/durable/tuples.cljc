@@ -257,9 +257,8 @@
 
 (defn modify-node-block!
   "Modifies a node and associated block, using the provided operation"
-  [{:keys [index blocks root-id] :as tuples-store} coord op!]
-  (let [{:keys [node pos]} coord
-        tuple-count (get-count node)
+  [{:keys [index blocks] :as tuples-store} {:keys [node pos] :as coord} op!]
+  (let [tuple-count (get-count node)
         old-block-id (get-block-ref node)
         ;; modifying the block, which requires copy-on-write
         block (->> old-block-id (get-block blocks) (copy-to-tx blocks))
@@ -348,16 +347,19 @@
         ;; create the block that will be used by the new high node
         high-block (allocate-block! blocks)
         ;; insert the new high node
-        node-writer (fn [node range] (split-node-writer (get-id high-block) node range))
-        new-index (tree/add nxt-index [hlow-tuple hhigh-tuple] node-writer location)
-        {lnode :node} (find-coord new-index blocks lhigh-tuple)]
+        hnode-ref (volatile! nil)
+        node-writer (fn [n range] (vreset! hnode-ref n) (split-node-writer (get-id high-block) n range))
+        new-index (tree/add nxt-index [hlow-tuple hhigh-tuple] node-writer location)]
+    ;; Note: the lnode and the hnode no longer have valid parents or sides after the add
+    ;; However, these fields are not needed from this point, so we can proceed without having to search
+    ;; the new tree for them
     ;; add the high tuples to the block attached to the high node
     (put-block! high-block 0 low-block half-block-bytes half-block-bytes)
     (write-block blocks high-block)
     ;; identify where the insertion should occur
     (let [[ipos inode] (if (<= pos half-block)
                          [pos lnode]
-                         [(- pos half-block) (tree/next-node new-index lnode)])]
+                         [(- pos half-block) @hnode-ref])]
       [(assoc tuples-store :index new-index) {:node inode :pos ipos}])))
 
 (defn init-node-writer
