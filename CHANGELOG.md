@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.9] - 2021-01-07
+### Fixed
+- Auto generated connection URIs were malformed, and have been fixed.
+
 ## [1.2.8] - 2020-12-14
 ### Changed
 - Updated to Zuko 0.3.3 for performance improvement in loading entities.
@@ -89,7 +93,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.8...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.9...HEAD
+[1.2.9]: https://github.com/threatgrid/asami/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/threatgrid/asami/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/threatgrid/asami/compare/1.2.6...1.2.7
 [1.2.6]: https://github.com/threatgrid/asami/compare/1.2.5...1.2.6

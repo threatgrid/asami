@@ -23,7 +23,8 @@
     uri
     (if-let [[_ db-type db-name] (re-find #"asami:([^:]+)://(.+)" uri)]
       {:type db-type
-       :name db-name})))
+       :name db-name}
+      (throw (ex-info (str "Invalid URI: " uri) {:uri uri})))))
 
 (defn- connection-for
   "Creates a connection for a URI"
@@ -84,7 +85,7 @@
   "Creates a Database/Connection around an existing Graph.
    graph: The graph or graph wrapper to build a database around.
    uri: The uri of the database."
-  ([graph :- Graphable] (as-connection graph (name (gensym "asami:mem/internal"))))
+  ([graph :- Graphable] (as-connection graph (str (gensym "asami:mem://internal"))))
   ([graph :- Graphable
     uri :- s/Str]
    (let [{:keys [name]} (parse-uri uri)

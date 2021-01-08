@@ -28,7 +28,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "1.2.8"}
+    org.clojars.quoll/asami {:mvn/version "1.2.9"}
   }
 }
 ```
@@ -37,7 +37,7 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "1.2.8"]
+[org.clojars.quoll/asami "1.2.9"]
 ```
 
 ### Running
@@ -270,7 +270,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 ## License
 
-Copyright © 2016-2020 Cisco
+Copyright © 2016-2021 Cisco
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
