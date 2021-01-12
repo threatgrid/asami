@@ -1,6 +1,7 @@
 # Change Log
 
 ## [Unreleased]
+Nothing yet.
 
 ## [1.2.9] - 2021-01-07
 ### Fixed
@@ -93,7 +94,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.9...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.10...HEAD
+[1.2.10]: https://github.com/threatgrid/asami/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/threatgrid/asami/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/threatgrid/asami/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/threatgrid/asami/compare/1.2.6...1.2.7
