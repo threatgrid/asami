@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.2.10] - 2021-01-11
+### Added
+- New update-fn argument accepted in `asami.core/transact` to allow direct graph update operations.
+
 ## [1.2.9] - 2021-01-07
 ### Fixed
 - Auto generated connection URIs were malformed, and have been fixed.
