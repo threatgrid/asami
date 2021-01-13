@@ -106,7 +106,8 @@
                      (s/optional-key :tx-triples) [[(s/one s/Any "entity")
                                                     (s/one s/Any "attribute")
                                                     (s/one s/Any "value")]]
-                     (s/optional-key :executor) s/Any}
+                     (s/optional-key :executor) s/Any
+                     (s/optional-key :update-fn) (s/pred fn?)}
                     [s/Any]))
 
 (s/defn transact
