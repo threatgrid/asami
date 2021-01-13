@@ -3,6 +3,10 @@
 ## [Unreleased]
 Nothing yet.
 
+## [1.2.11] - 2021-01-12
+### Fixed
+- Updated schema definition of `core/transact`. This only affected code with schema validation. 
+
 ## [1.2.10] - 2021-01-11
 ### Added
 - New update-fn argument accepted in `asami.core/transact` to allow direct graph update operations.
@@ -98,7 +102,8 @@ Nothing yet.
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.10...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.11...HEAD
+[1.2.11]: https://github.com/threatgrid/asami/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/threatgrid/asami/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/threatgrid/asami/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/threatgrid/asami/compare/1.2.7...1.2.8
