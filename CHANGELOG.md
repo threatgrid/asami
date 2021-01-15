@@ -1,7 +1,9 @@
 # Change Log
 
 ## [Unreleased]
-Nothing yet.
+### Added
+- Added internal API for Connections to expose their transaction ID.
+- Added extra API schema in the Connection sources
 
 ## [1.2.11] - 2021-01-12
 ### Fixed
