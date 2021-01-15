@@ -9,6 +9,7 @@
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
+              [asami.sandbox :as sandbox]
               [zuko.projection :as projection]
               [zuko.util :refer [fn-for]]
               #?(:clj  [schema.core :as s]
@@ -19,6 +20,8 @@
 (def ^:dynamic *env* {})
 
 (def ^:dynamic *select-distinct* distinct)
+
+(def ^:dynamic *override-restrictions* false)
 
 (def ^:const identity-binding (with-meta [[]] {:cols []}))
 
@@ -173,6 +176,29 @@
              (not (get varmap arg)))
     arg))
 
+(def Fn (s/pred #(or (fn? %) (var? %))))
+
+(s/defn resolve-op :- (s/maybe Fn)
+  "Resolves a symbol to an associated function. Symbols without a namespace are presumed to be in clojure.core"
+  [s :- s/Symbol]
+  (when (or *override-restrictions*
+            (if-let [n (namespace s)]
+              (and (= n "clojure.core") (sandbox/allowed-fns (symbol (name s))))
+              (sandbox/allowed-fns s)))
+    (fn-for s)))
+
+(s/defn retrieve-op :- Fn
+  "Retrieves a function for a provided operation. An op can be a variable, a function, a symbol for a function, or a string"
+  [op var-map part]
+  (or
+   (cond
+     (vartest? op) (retrieve-op (nth (first part) (var-map op)) var-map part) ;; assuming operation is constant
+     (fn? op) op
+     (symbol? op) (or (get *env* op) (resolve-op op))
+     (string? op) (resolve-op (symbol op))
+     :default (throw (ex-info (str "Unknown operation type" op) {:op op :type (type op)})))
+   (throw (ex-info (str "Unsupported operation: " op) {:op op :type (type op)}))))
+
 (s/defn filter-join
   "Uses row bindings in a partial result as arguments to a function whose parameters are defined by those names.
    Those rows whose bindings return true/truthy are kept and the remainder are removed."
@@ -192,11 +218,7 @@
                      args)
         ;; TODO: this assumes the operation is constant, if it's in a var.
         ;; Binding does not presume this, which is inconsistent
-        callable-op (cond (vartest? op) (nth (first part) (var-map op))  ;; assuming operation is constant
-                          (fn? op) op
-                          (symbol? op) (or (get *env* op) (fn-for op))
-                          (string? op) (fn-for (symbol op))
-                          :default (throw (ex-info (str "Unknown filter operation type" op) {:op op :type (type op)})))
+        callable-op (retrieve-op op var-map part)
         filter-fn (fn [& [a]]
                     (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))]
     (try
@@ -227,9 +249,7 @@
                                          (map
                                           #(if (neg? %) (nth expr (- %)) (nth row %))
                                           arg-indexes))])))
-                     (let [callable-op (cond (fn? op) op
-                                             (symbol? op) (or (get *env* op) (fn-for op))
-                                             (string? op) (fn-for (symbol op)))]
+                     (let [callable-op (retrieve-op op var-map part)]
                        (fn [row]
                          (concat row
                                  [(apply callable-op
