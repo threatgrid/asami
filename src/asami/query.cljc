@@ -216,11 +216,14 @@
                          j
                          (constantly (nth args i))))
                      args)
-        ;; TODO: this assumes the operation is constant, if it's in a var.
-        ;; Binding does not presume this, which is inconsistent
-        callable-op (retrieve-op op var-map part)
-        filter-fn (fn [& [a]]
-                    (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))]
+        filter-fn (if (vartest? op)
+                    (let [op-idx (var-map op)]
+                      (fn [a]
+                        (let [callable-op (retrieve-op (nth a op-idx) var-map part)]
+                          (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))))
+                    (let [callable-op (retrieve-op op var-map part)]
+                      (fn [a]
+                        (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))))]
     (try
       (with-meta (filter filter-fn part) m)
       (catch #?(:clj Throwable :cljs :default) e
@@ -244,11 +247,12 @@
         binding-fn (if (vartest? op)
                      (let [op-idx (var-map op)]
                        (fn [row]
-                         (concat row
-                                 [(apply (nth row op-idx)
-                                         (map
-                                          #(if (neg? %) (nth expr (- %)) (nth row %))
-                                          arg-indexes))])))
+                         (let [o (retrieve-op (nth row op-idx) var-map part)]
+                           (concat row
+                                   [(apply o
+                                           (map
+                                            #(if (neg? %) (nth expr (- %)) (nth row %))
+                                            arg-indexes))]))))
                      (let [callable-op (retrieve-op op var-map part)]
                        (fn [row]
                          (concat row

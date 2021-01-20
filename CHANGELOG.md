@@ -1,7 +1,12 @@
 # Change Log
 
 ## [Unreleased]
+Nothing
+
+## [1.2.12] - 2021-01-19
 ### Added
+- Bindings and Filters are now restricted by default. Introduced `asami.query/*override-restrictions*` flag to avoid restrictions.
+- Can now filter by operations that are retrieved or calculated per row.
 - Added internal API for Connections to expose their transaction ID.
 - Added extra API schema in the Connection sources
 
@@ -104,7 +109,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.11...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.12...HEAD
+[1.2.12]: https://github.com/threatgrid/asami/compare/1.2.11...1.2.12
 [1.2.11]: https://github.com/threatgrid/asami/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/threatgrid/asami/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/threatgrid/asami/compare/1.2.8...1.2.9
