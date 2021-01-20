@@ -176,9 +176,9 @@
              (not (get varmap arg)))
     arg))
 
-(def Fn (s/pred #(or (fn? %) (var? %))))
+(def Fcn (s/pred #(or (fn? %) (var? %))))
 
-(s/defn resolve-op :- (s/maybe Fn)
+(s/defn resolve-op :- (s/maybe Fcn)
   "Resolves a symbol to an associated function. Symbols without a namespace are presumed to be in clojure.core"
   [s :- s/Symbol]
   (when (or *override-restrictions*
@@ -187,7 +187,7 @@
               (sandbox/allowed-fns s)))
     (fn-for s)))
 
-(s/defn retrieve-op :- Fn
+(s/defn retrieve-op :- Fcn
   "Retrieves a function for a provided operation. An op can be a variable, a function, a symbol for a function, or a string"
   [op var-map part]
   (or
@@ -217,10 +217,11 @@
                          (constantly (nth args i))))
                      args)
         filter-fn (if (vartest? op)
-                    (let [op-idx (var-map op)]
+                    (if-let [op-idx (var-map op)]
                       (fn [a]
                         (let [callable-op (retrieve-op (nth a op-idx) var-map part)]
-                          (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))))
+                          (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes))))
+                      (throw (ex-info (str "Unknown variable: " op) {:op op})))
                     (let [callable-op (retrieve-op op var-map part)]
                       (fn [a]
                         (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))))]
@@ -245,14 +246,15 @@
         arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
         expr (vec expr)
         binding-fn (if (vartest? op)
-                     (let [op-idx (var-map op)]
+                     (if-let [op-idx (var-map op)]
                        (fn [row]
                          (let [o (retrieve-op (nth row op-idx) var-map part)]
                            (concat row
                                    [(apply o
                                            (map
                                             #(if (neg? %) (nth expr (- %)) (nth row %))
-                                            arg-indexes))]))))
+                                            arg-indexes))])))
+                       (throw (ex-info (str "Unknown variable: " op) {:op op})))
                      (let [callable-op (retrieve-op op var-map part)]
                        (fn [row]
                          (concat row

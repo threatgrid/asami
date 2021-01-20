@@ -391,53 +391,95 @@
                ["Purely Functional Data Structures"]}
              (set r3)))))
 
-  (deftest test-sandbox-queries
-    (let [st (-> empty-graph (assert-data data))
-          r1 (binding [*override-restrictions* true]
-               (q '[:find ?title ?cost
-                    :where [?book :title ?title]
-                    [?book :price ?price]
-                    [?book :profit ?profit]
-                    [(read-string "-") ?minus]
-                    [(?minus ?price ?profit) ?cost]]
-                  st))
-          r2 (q '[:find ?title ?cost
-                  :in $ ?rs
-                  :where [?book :title ?title]
-                  [?book :price ?price]
-                  [?book :profit ?profit]
-                  [(?rs "-") ?minus]
-                  [(?minus ?price ?profit) ?cost]]
-                st read-string)
-          r3 (binding [*env* {'rs read-string}]
-               (q '[:find ?title ?cost
-                    :where [?book :title ?title]
-                    [?book :price ?price]
-                    [?book :profit ?profit]
-                    [(rs "-") ?minus]
-                    [(?minus ?price ?profit) ?cost]]
-                  st))]
-      (is (thrown-with-msg?
-           ExceptionInfo #"Unsupported operation: read-string"
-           (q '[:find ?title ?cost
-                  :where [?book :title ?title]
-                  [?book :price ?price]
-                  [?book :profit ?profit]
-                  [(read-string "-") ?minus]
-                  [(?minus ?price ?profit) ?cost]]
-                st)))
-      (is (= #{["The Art of Computer Programming" 35.66]
-               ["Basic Category Theory for Computer Scientists" 26.17]
-               ["Purely Functional Data Structures" 32.77]}
-             (set r1)))
-      (is (= #{["The Art of Computer Programming" 35.66]
-               ["Basic Category Theory for Computer Scientists" 26.17]
-               ["Purely Functional Data Structures" 32.77]}
-             (set r2)))
-      (is (= #{["The Art of Computer Programming" 35.66]
-               ["Basic Category Theory for Computer Scientists" 26.17]
-               ["Purely Functional Data Structures" 32.77]}
-             (set r3))))))
+  #?(:clj
+     (deftest test-sandbox-queries
+       (let [st (-> empty-graph (assert-data data))
+             r1 (binding [*override-restrictions* true]
+                  (q '[:find ?title ?cost
+                       :where [?book :title ?title]
+                       [?book :price ?price]
+                       [?book :profit ?profit]
+                       [(read-string "-") ?minus]
+                       [(?minus ?price ?profit) ?cost]]
+                     st))
+             r2 (q '[:find ?title ?cost
+                     :in $ ?rs
+                     :where [?book :title ?title]
+                     [?book :price ?price]
+                     [?book :profit ?profit]
+                     [(?rs "-") ?minus]
+                     [(?minus ?price ?profit) ?cost]]
+                   st read-string)
+             r3 (binding [*env* {'rs read-string}]
+                  (q '[:find ?title ?cost
+                       :where [?book :title ?title]
+                       [?book :price ?price]
+                       [?book :profit ?profit]
+                       [(rs "-") ?minus]
+                       [(?minus ?price ?profit) ?cost]]
+                     st))]
+         (is (thrown-with-msg?
+              ExceptionInfo #"Unsupported operation: read-string"
+              (q '[:find ?title ?cost
+                   :where [?book :title ?title]
+                   [?book :price ?price]
+                   [?book :profit ?profit]
+                   [(read-string "-") ?minus]
+                   [(?minus ?price ?profit) ?cost]]
+                 st)))
+         (is (= #{["The Art of Computer Programming" 35.66]
+                  ["Basic Category Theory for Computer Scientists" 26.17]
+                  ["Purely Functional Data Structures" 32.77]}
+                (set r1)))
+         (is (= #{["The Art of Computer Programming" 35.66]
+                  ["Basic Category Theory for Computer Scientists" 26.17]
+                  ["Purely Functional Data Structures" 32.77]}
+                (set r2)))
+         (is (= #{["The Art of Computer Programming" 35.66]
+                  ["Basic Category Theory for Computer Scientists" 26.17]
+                  ["Purely Functional Data Structures" 32.77]}
+                (set r3)))))
+
+     ;; ClojureScript is already sandboxed, so this is just testing mechanism
+     :cljs
+     (deftest test-sandbox-queries
+       (let [st (-> empty-graph (assert-data data))
+             r1 (q '[:find ?title ?cost
+                     :in $ ?atom
+                     :where [?book :title ?title]
+                     [?book :price ?price]
+                     [?book :profit ?profit]
+                     [(?atom ?price) ?p]
+                     [(deref ?p) ?p2]
+                     [(- ?p2 ?profit) ?cost]]
+                   st atom)
+             r2 (binding [*env* {'atom atom}]
+                  (q '[:find ?title ?cost
+                       :where [?book :title ?title]
+                       [?book :price ?price]
+                       [?book :profit ?profit]
+                       [(atom ?price) ?p]
+                       [(deref ?p) ?p2]
+                       [(- ?p2 ?profit) ?cost]]
+                     st))]
+         (is (thrown-with-msg?
+              ExceptionInfo #"Unsupported operation: atom"
+              (q '[:find ?title ?cost
+                   :where [?book :title ?title]
+                   [?book :price ?price]
+                   [?book :profit ?profit]
+                   [(atom ?price) ?p]
+                   [(deref ?p) ?p2]
+                   [(- ?p2 ?profit) ?cost]]
+                 st)))
+         (is (= #{["The Art of Computer Programming" 35.66]
+                  ["Basic Category Theory for Computer Scientists" 26.17]
+                  ["Purely Functional Data Structures" 32.77]}
+                (set r1)))
+         (is (= #{["The Art of Computer Programming" 35.66]
+                  ["Basic Category Theory for Computer Scientists" 26.17]
+                  ["Purely Functional Data Structures" 32.77]}
+                (set r2)))))))
 
 (let [pa (nn)
       paa (nn)
