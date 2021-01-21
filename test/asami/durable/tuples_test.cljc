@@ -3,7 +3,8 @@
     asami.durable.tuples-test
   (:require [clojure.test :refer [deftest is]]
             [asami.durable.test-utils :refer [new-block]]
-            [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuple write-tuple!]]
+            [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuple
+                                          write-tuple! write-new-tx-tuple!]]
             [asami.durable.tree :as tree]
             [asami.durable.tuples :refer [search-block tuple-size tree-node-size block-max
                                           get-low-tuple get-high-tuple
@@ -325,7 +326,26 @@
         tuples (write-tuple! tuples [1 1 0 1])
         _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1]] (find-tuple tuples [])))
         tuples (write-tuple! tuples [1 1 4 1])
-        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1]] (find-tuple tuples [])))]))
+        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1]] (find-tuple tuples [])))]
+
+    (is (nil? (write-tuple! tuples [1 1 1 1])))
+    (is (nil? (write-tuple! tuples [1 1 3 1])))
+    (is (nil? (write-tuple! tuples [1 1 2 1])))
+    (is (nil? (write-tuple! tuples [1 1 0 1])))
+    (is (nil? (write-tuple! tuples [1 1 4 1])))
+    (let [tuples (write-tuple! tuples [1 1 5 1])]
+      (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1]] (find-tuple tuples [])))
+
+      (is (nil? (write-tuple! tuples [1 1 2 1])))
+      (is (nil? (write-new-tx-tuple! tuples [1 1 2 2])))
+      (is (nil? (write-new-tx-tuple! tuples [1 1 4 2])))
+      
+      (is (nil? (write-new-tx-tuple! tuples [1 1 3 2])))
+      (is (nil? (write-new-tx-tuple! tuples [1 1 0 2])))
+      (let [tuples (write-new-tx-tuple! tuples [1 1 6 2])]
+        (is (nil? (write-new-tx-tuple! tuples [1 1 6 2])))
+        (is (nil? (write-new-tx-tuple! tuples [1 1 6 1])))
+        (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1] [1 1 6 2]] (find-tuple tuples [])))))))
 
 (defn tnodes
   [{:keys [index blocks] :as tuples}]

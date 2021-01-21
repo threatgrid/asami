@@ -17,6 +17,8 @@
 
 (def ^:const tuple-size-bytes "The number of bytes in a tuple" (* tuple-size long-size))
 
+(def ^:const dec-tuple-size "One less than the number of values in a tuple" (dec tuple-size))
+
 ;; All offsets are measured in longs.
 ;; Byte offsets can be calculated by multiplying these by long-size
 
@@ -369,44 +371,55 @@
   (set-count! node 1)
   (set-block-ref! node block-id))
 
+(defn insert-tuple!
+  "Inserts a tuple into an index"
+  [{:keys [index blocks root-id] :as this} tuple short-tuple]
+  (let [insert-coord (find-coord index blocks short-tuple)]
+    (cond
+      ;; Empty tree. Initialize
+      (nil? insert-coord) (let [block (allocate-block! blocks)
+                                idx (tree/add index tuple (partial init-node-writer (get-id block)) nil)]
+                            (set-tuple-at! block 0 tuple)
+                            (assoc this :index idx :root-id (:root idx)))
+
+      ;; Found an insertion point between 2 positions
+      (vector? insert-coord)
+      (let [inc-c #(update % :pos inc)
+            add-tuple (partial add-single-tuple! tuple)
+            split-insert (fn [coord]
+                           (let [[new-storage new-coord] (split-block! this coord)]
+                             (modify-node-block! new-storage new-coord add-tuple)))
+            insert-to #(modify-node-block! this % add-tuple)
+            insert (fn [node coord]
+                     (if (= block-max (get-count node))
+                       (split-insert coord)
+                       (insert-to coord)))
+            [{lnode :node lpos :pos :as low-coord} {hnode :node hpos :pos :as high-coord}] insert-coord]
+        (cond
+          (= lnode hnode) (insert hnode high-coord) ;; found the node to insert into
+          (nil? lnode) (insert hnode high-coord) ;; before the first node, so insert into the first
+          (nil? hnode) (insert lnode (inc-c low-coord)) ;; after the last node, so insert into the last
+          :default (let [lcount (get-count lnode) ;; between 2 nodes, so choose which one to insert into
+                         c (compare lcount (get-count hnode))]
+                     (cond 
+                       (< c 0) (insert-to (inc-c low-coord)) ;; low node has fewer tuples
+                       (> c 0) (insert-to high-coord) ;; high node has fewer tuples
+                       (= lcount block-max) (split-insert (inc-c low-coord)) ;; equal, and max tuples
+                       :default (insert-to (inc-c low-coord)))))) ;; equal tuples, but not max: choose the low node
+
+      ;; The tuple already exists
+      :default nil)))
+
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
+  (write-new-tx-tuple! [this tuple]
+    (let [part-tuple (if (vector? tuple)
+                       (subvec tuple 0 dec-tuple-size)
+                       (vec (butlast tuple)))]
+      (insert-tuple! this tuple part-tuple)))
+
   (write-tuple! [this tuple]
-    (let [insert-coord (find-coord index blocks tuple)
-          inc-c #(update % :pos inc)
-          add-tuple (partial add-single-tuple! tuple)
-          split-insert (fn [coord]
-                         (let [[new-storage new-coord] (split-block! this coord)]
-                           (modify-node-block! new-storage new-coord add-tuple)))
-          insert-to #(modify-node-block! this % add-tuple)
-          insert (fn [node coord]
-                   (if (= block-max (get-count node))
-                     (split-insert coord)
-                     (insert-to coord)))]
-      (cond
-        ;; Empty tree. Initialize
-        (nil? insert-coord) (let [block (allocate-block! blocks)
-                                  idx (tree/add index tuple (partial init-node-writer (get-id block)) nil)]
-                              (set-tuple-at! block 0 tuple)
-                              (assoc this :index idx :root-id (:root idx)))
-
-        ;; Found an insertion point between 2 positions
-        (vector? insert-coord)
-        (let [[{lnode :node lpos :pos :as low-coord} {hnode :node hpos :pos :as high-coord}] insert-coord]
-          (cond
-            (= lnode hnode) (insert hnode high-coord) ;; found the node to insert into
-            (nil? lnode) (insert hnode high-coord) ;; before the first node, so insert into the first
-            (nil? hnode) (insert lnode (inc-c low-coord)) ;; after the last node, so insert into the last
-            :default (let [lcount (get-count lnode) ;; between 2 nodes, so choose which one to insert into
-                           c (compare lcount (get-count hnode))]
-                       (cond 
-                         (< c 0) (insert-to (inc-c low-coord)) ;; low node has fewer tuples
-                         (> c 0) (insert-to high-coord) ;; high node has fewer tuples
-                         (= lcount block-max) (split-insert (inc-c low-coord)) ;; equal, and max tuples
-                         :default (insert-to (inc-c low-coord)))))) ;; equal tuples, but not max: choose the low node
-
-        ;; The tuple already exists
-        :default this)))
+    (insert-tuple! this tuple tuple))
 
   (delete-tuple! [this tuple]
     (let [delete-coord (find-coord index blocks tuple)]
