@@ -16,40 +16,40 @@
 (use-fixtures :once st/validate-schemas)
 
 (def edges1
-  [[:mem/a :p1 :mem/b]
-   [:mem/a :p2 2]
-   [:mem/a :p3 :mem/c]
-   [:mem/b :p1 :mem/d]
-   [:mem/b :p2 3]
-   [:mem/b :p3 :mem/e]
-   [:mem/c :p1 :mem/f]
-   [:mem/c :p2 4]
-   [:mem/c :p3 :mem/g]
-   [:mem/d :p1 :mem/h]
-   [:mem/d :p2 5]
-   [:mem/e :p2 6]
-   [:mem/f :p2 7]
-   [:mem/g :p1 :mem/i]
-   [:mem/g :p2 8]
-   [:mem/g :p3 :mem/j]])
+  [[:mem/a :p1 :mem/b 1]
+   [:mem/a :p2 2 1]
+   [:mem/a :p3 :mem/c 1]
+   [:mem/b :p1 :mem/d 1]
+   [:mem/b :p2 3 1]
+   [:mem/b :p3 :mem/e 1]
+   [:mem/c :p1 :mem/f 1]
+   [:mem/c :p2 4 1]
+   [:mem/c :p3 :mem/g 1]
+   [:mem/d :p1 :mem/h 1]
+   [:mem/d :p2 5 1]
+   [:mem/e :p2 6 1]
+   [:mem/f :p2 7 1]
+   [:mem/g :p1 :mem/i 1]
+   [:mem/g :p2 8 1]
+   [:mem/g :p3 :mem/j 1]])
 
 (def edges2
-  [[:mem/m :pr :mem/n]
-   [:mem/o :pr :mem/n]
-   [:mem/o :pr :mem/p]
-   [:mem/q :pr :mem/p]
-   [:mem/q :pr :mem/r]
-   [:mem/s :pr :mem/r]
-   [:mem/s :pr :mem/t]
-   [:mem/u :pr :mem/t]
-   [:mem/u :pr :mem/v]])
+  [[:mem/m :pr :mem/n 2]
+   [:mem/o :pr :mem/n 2]
+   [:mem/o :pr :mem/p 2]
+   [:mem/q :pr :mem/p 2]
+   [:mem/q :pr :mem/r 2]
+   [:mem/s :pr :mem/r 2]
+   [:mem/s :pr :mem/t 2]
+   [:mem/u :pr :mem/t 2]
+   [:mem/u :pr :mem/v 2]])
 
 (def edges3
-  [[:mem/x :p :mem/y]
-   [:mem/y :p :mem/x]])
+  [[:mem/x :p :mem/y 3]
+   [:mem/y :p :mem/x 3]])
 
 (def edges4
-  [[:mem/z :p :mem/z]])
+  [[:mem/z :p :mem/z 4]])
 
 (defn edges [graph] (resolve-triple graph '?s '?p '?o))
 

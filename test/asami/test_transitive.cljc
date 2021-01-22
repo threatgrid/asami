@@ -14,8 +14,10 @@
 
 (use-fixtures :once st/validate-schemas)
 
+(def default-tx 1)
+
 (defn assert-data [g d]
-  (reduce (partial apply graph-add) g d))
+  (reduce (fn [g [s p o]] (graph-add g s p o default-tx)) g d))
 
 (defn unordered-resolve
   [g pattern]
