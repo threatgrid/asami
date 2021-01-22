@@ -28,7 +28,7 @@
    [:c :p4 :t]])
 
 (defn assert-data [g d]
-  (reduce (partial apply multi-graph-add) g d))
+  (reduce (fn [g [s p o]] (multi-graph-add g s p o 1)) g d))
 
 (defn sort-resolve
   [g pattern]

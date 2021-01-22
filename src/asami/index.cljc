@@ -71,7 +71,7 @@
 
   Graph
   (new-graph [this] empty-graph)
-  (graph-add [this subj pred obj]
+  (graph-add [this subj pred obj tx]
     (let [new-spo (index-add spo subj pred obj)]
       (if (identical? spo new-spo)
         this
@@ -88,7 +88,7 @@
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
-      (reduce (fn [acc [s p o]] (graph-add acc s p o)) graph assertions)))
+      (reduce (fn [acc [s p o]] (graph-add acc s p o tx-id)) graph assertions)))
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]

@@ -11,13 +11,14 @@ allow rules to successfully use this graph type."
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])))
 
-(def ^:dynamic *insert-op* #(if (zero? %) 1 %))
+(def ^:dynamic *insert-op* inc)
 
 (def IndexStructure
   {s/Any
    {s/Any
     {s/Any
      {(s/required-key :count) s/Num
+      (s/required-key :tx) s/Num
       s/Keyword s/Any}}}})
 
 (s/defn multi-add :- IndexStructure
@@ -25,8 +26,9 @@ allow rules to successfully use this graph type."
   [idx :- IndexStructure
    a :- s/Any
    b :- s/Any
-   c :- s/Any]
-  (update-in idx [a b c :count] (fnil *insert-op* 0)))
+   c :- s/Any
+   tx :- s/Any]
+  (update-in idx [a b c] (fn [m] (if m (update m :count *insert-op*) {:count 1 :tx tx}))))
 
 (s/defn multi-delete :- (s/maybe IndexStructure)
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -108,11 +110,11 @@ allow rules to successfully use this graph type."
 
   Graph
   (new-graph [this] empty-multi-graph)
-  (graph-add [this subj pred obj]
+  (graph-add [this subj pred obj tx]
     (assoc this
-           :spo (multi-add spo subj pred obj)
-           :pos (multi-add pos pred obj subj)
-           :osp (multi-add osp obj subj pred)))
+           :spo (multi-add spo subj pred obj tx)
+           :pos (multi-add pos pred obj subj tx)
+           :osp (multi-add osp obj subj pred tx)))
   (graph-delete [this subj pred obj]
     (if-let [idx (multi-delete spo subj pred obj)]
       (assoc this :spo idx :pos (multi-delete pos pred obj subj) :osp (multi-delete osp obj subj pred))
@@ -120,7 +122,7 @@ allow rules to successfully use this graph type."
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
-      (reduce (fn [acc [s p o]] (graph-add acc s p o)) graph assertions)))
+      (reduce (fn [acc [s p o]] (graph-add acc s p o tx-id)) graph assertions)))
   (graph-diff [this other]
     (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
                        spo)]
@@ -143,11 +145,11 @@ allow rules to successfully use this graph type."
   (find-triple [this [e a v]] (resolve-triple this e a v)))
 
 (defn multi-graph-add
-  ([graph subj pred obj n]
+  ([graph subj pred obj tx n]
    (binding [*insert-op* (partial + n)]
-     (graph-add graph subj pred obj)))
-  ([graph subj pred obj]
+     (graph-add graph subj pred obj tx)))
+  ([graph subj pred obj tx]
    (binding [*insert-op* inc]
-     (graph-add graph subj pred obj))))
+     (graph-add graph subj pred obj tx))))
 
 (def empty-multi-graph (->MultiGraph {} {} {}))

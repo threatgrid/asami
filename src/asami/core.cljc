@@ -106,7 +106,8 @@
                      (s/optional-key :tx-triples) [[(s/one s/Any "entity")
                                                     (s/one s/Any "attribute")
                                                     (s/one s/Any "value")]]
-                     (s/optional-key :executor) s/Any}
+                     (s/optional-key :executor) s/Any
+                     (s/optional-key :update-fn) (s/pred fn?)}
                     [s/Any]))
 
 (s/defn transact
@@ -140,22 +141,27 @@
   :tempids      mapping of the temporary IDs in entities to the allocated nodes
   :executor     Executor to be used to run the CompletableFuture"
   [{:keys [name state] :as connection} :- ConnectionType
-   {:keys [tx-data tx-triples executor] :as tx-info} :- TransactData]
-  (let [op (fn []
-             (let [tx-id (count (:history @state))
-                   as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
-                   {:keys [graph history] :as db-before} (:db @state)
-                   [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
-                                                [tx-triples nil {}]
-                                                ;; capture the old usage which didn't have an arg map
-                                                (entities/build-triples db-before (or tx-data tx-info)))
-                   [db-before db-after] (storage/transact-data connection triples removals)]
-               {:db-before db-before
-                :db-after db-after
-                :tx-data (concat
-                          (map (partial as-datom false) removals)
-                          (map (partial as-datom true) triples))
-                :tempids tempids}))]
+   {:keys [tx-data tx-triples executor update-fn] :as tx-info} :- TransactData]
+  (let [op (if update-fn
+             (fn []
+               (let [[db-before db-after] (storage/transact-update connection update-fn)]
+                 {:db-before db-before
+                  :db-after db-after}))
+             (fn []
+               (let [tx-id (count (:history @state))
+                     as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
+                     {:keys [graph history] :as db-before} (:db @state)
+                     [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
+                                                  [tx-triples nil {}]
+                                                  ;; capture the old usage which didn't have an arg map
+                                                  (entities/build-triples db-before (or tx-data tx-info)))
+                     [db-before db-after] (storage/transact-data connection triples removals)]
+                 {:db-before db-before
+                  :db-after db-after
+                  :tx-data (concat
+                            (map (partial as-datom false) removals)
+                            (map (partial as-datom true) triples))
+                  :tempids tempids})))]
     #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))
                                            (or executor clojure.lang.Agent/soloExecutor))
        :cljs (let [d (delay (op))]

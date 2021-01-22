@@ -52,8 +52,9 @@
   "Returns all subgraphs for a given graph"
   [graph :- GraphType]
   (letfn [(to-graph [entities]
-            (let [all-edges (resolve-triple graph '?s '?p '?o)
-                  edges (filter (comp entities first) all-edges)]
-              (reduce (partial apply graph-add) (new-graph graph) edges)))]
+            (let [tx 0
+                  edges (->> (resolve-triple graph '?s '?p '?o)
+                             (filter (comp entities first)))]
+              (reduce (fn [g [s p o]] (graph-add g s p o tx)) (new-graph graph) edges)))]
     (let [groups (subgraph-entities graph)]
       (map to-graph groups))))

@@ -23,7 +23,7 @@
    [:c :p4 :t]])
 
 (defn assert-data [g d]
-  (reduce (partial apply graph-add) g d))
+  (reduce (fn [g [s p o]] (graph-add g s p o 1)) g d))
 
 (defn unordered-resolve
   [g pattern]

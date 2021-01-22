@@ -37,7 +37,7 @@
              (< 0 c) (recur low mid)))))))
 
 
-(declare as-of* as-of-t* since* since-t* graph* entity* db* transact-data*)
+(declare as-of* as-of-t* since* since-t* graph* entity* next-tx* db* transact-update* transact-data*)
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
@@ -59,8 +59,10 @@
 ;; :history is a list of tuples of Database, including db
 (defrecord MemoryConnection [name state]
   storage/Connection
+  (next-tx [this] (next-tx* this))
   (db [this] (db* this))
   (delete-database [this]) ;; no-op for memory databases
+  (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
 
 
@@ -68,11 +70,16 @@
 (def empty-multi-graph multi/empty-multi-graph)
 
 
-(defn new-connection
+(s/defn new-connection :- ConnectionType
   "Creates a memory Connection object"
-  [name gr]
+  [name :- s/Str
+   gr :- GraphType]
   (let [db (->MemoryDatabase gr [] (now))]
     (->MemoryConnection name (atom {:db db :history [db]}))))
+
+(s/defn next-tx* :- s/Num
+  [connection :- ConnectionType]
+  (count (:history @(:state connection))))
 
 (s/defn db* :- DatabaseType
   "Retrieves the most recent value of the database for reading."
@@ -134,15 +141,27 @@
   [database :- DatabaseType]
   (:graph database))
 
-(defn transact-data*
-  "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
-   Updates the connection to the new graph."
-  [conn asserts retracts]
+(s/defn transact-update* :- [(s/one DatabaseType "The database before the operation")
+                             (s/one DatabaseType "The database after the operation")]
+  "Updates a graph with a function, updating the connection to the new graph.
+  The function accepts a graph and a transaction ID.
+  Returns a pair containing the old database and the new one."
+  [conn :- ConnectionType
+   update-fn :- (s/pred fn?)]
   (let [{:keys [graph history] :as db-before} (db* conn)
-        next-graph (gr/graph-transact graph (count history) asserts retracts)
+        next-graph (update-fn graph (next-tx* conn))
         db-after (->MemoryDatabase next-graph (conj history db-before) (now))]
     (reset! (:state conn) {:db db-after :history (conj (:history db-after) db-after)})
     [db-before db-after]))
+
+(s/defn transact-data* :- [(s/one DatabaseType "The database before the operation")
+                           (s/one DatabaseType "The database after the operation")]
+  "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
+   Updates the connection to the new graph."
+  [conn :- ConnectionType
+   asserts :- [s/Any]    ;; triples to insert
+   retracts :- [s/Any]]  ;; triples to remove
+  (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts))))
 
 (s/defn entity* :- {s/Any s/Any}
   "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.

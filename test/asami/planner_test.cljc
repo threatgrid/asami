@@ -124,7 +124,7 @@
 
 (defrecord StubResolver [counts]
   Graph
-  (graph-add [this _ _ _] this)
+  (graph-add [this _ _ _ _] this)
   (graph-delete [this _ _ _] this)
   (resolve-triple [store s p o] (repeat (get counts [s p o])
                                         [:s :p :o]))

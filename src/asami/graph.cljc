@@ -8,7 +8,7 @@
 
 (defprotocol Graph
   (new-graph [this] "Creates an empty graph of the same type")
-  (graph-add [this subj pred obj] "Adds triples to the graph")
+  (graph-add [this subj pred obj tx] "Adds triples to the graph")
   (graph-delete [this subj pred obj] "Removes triples from the graph")
   (graph-transact [this tx-id assertions retractions] "Bulk operation to add and remove multiple statements in a single operation")
   (graph-diff [this other] "Returns all subjects that have changed in this graph, compared to other")
