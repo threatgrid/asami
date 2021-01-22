@@ -50,6 +50,6 @@
 (defprotocol TupleStorage
   (write-new-tx-tuple! [this tuple] "Adds a new tuple to the index in the current TX")
   (write-tuple! [this tuple] "Adds a tuple to the index")
-  (delete-tuple! [this tuple] "Removes a tuple from the index")
+  (delete-tuple! [this tuple] "Removes a tuple from the index. Returns both the index and the final element of the tuple")
   (find-tuple [this tuple] "Finds a specific tuple, returning a co-ordinate"))
 

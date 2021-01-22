@@ -221,6 +221,12 @@
     (doseq [n (range tuple-size)]
       (put-long! block (+ n long-offset) (nth tuple n)))))
 
+(defn tuple-at-coord
+  "Retrieves the tuple at a coordinate"
+  [blocks {:keys [node pos]}]
+  (let [block (get-block blocks (get-block-ref node))]
+    (tuple-at block pos)))
+
 (defn next-populated
   "Returns the next node with tuples, starting with the provided node."
   [index node]
@@ -424,8 +430,11 @@
   (delete-tuple! [this tuple]
     (let [delete-coord (find-coord index blocks tuple)]
       (if (or (nil? delete-coord) (vector? delete-coord))
-        this
-        (modify-node-block! this delete-coord delete-single-tuple!))))
+        [this nil]
+        (let [t (if (< (count tuple) tuple-size)
+                  (nth (get-tuple-at blocks delete-coord) dec-tuple-size)
+                  (nth tuple dec-tuple-size))]
+          [(modify-node-block! this delete-coord delete-single-tuple!) t]))))
 
   (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
     (let [coord (find-coord index blocks tuple)]

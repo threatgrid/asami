@@ -258,49 +258,58 @@
          [block1 block2 block3 block4] :tuple-blocks
          {:keys [index blocks]} :tuples} (create-test-tree)
         tuples (->TupleIndex index blocks (get-id root))
-        tuples (delete-tuple! tuples [2 8 14 1])
+        [tuples t] (delete-tuple! tuples [2 8 14 1])
         _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
+        _ (is (= t 1))
         ;; this triple does not exist
-        tuples (delete-tuple! tuples [2 8 9 1])
+        [tuples t] (delete-tuple! tuples [2 8 9 1])
         _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
-        tuples (delete-tuple! tuples [2 8 10 1])
+        _ (is (nil? t))
+        [tuples t] (delete-tuple! tuples [2 8 10 1])
         _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 18 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
-        tuples (delete-tuple! tuples [2 8 18 1])
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [2 8 18 1])
         _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
-        tuples (delete-tuple! tuples [2 4 6 1])
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [2 4 6 1])
         _ (is (= [[2 8 8 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
-        tuples (delete-tuple! tuples [2 8 8 1])
+        [tuples _] (delete-tuple! tuples [2 8 8 1])
         ;; tuple-seq works. Switch to find-tuple
         _ (is (= [[2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [3 1 1 1])
+        [tuples _] (delete-tuple! tuples [3 1 1 1])
         _ (is (= [[2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 3 1] [3 2 1 1]]
                  (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [3 1 3 1])
+        [tuples t] (delete-tuple! tuples [3 1 3])
         _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1] [3 2 1 1]]
                  (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [3 2 1 1])
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [3 2 1])
         _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1]]
                  (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [2 20 8 1])
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [2 20 8])
         _ (is (= [[2 8 20 1] [2 10 4 1]]
                  (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [2 10 4 1])
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [2 10 4])
         _ (is (= [[2 8 20 1]] (find-tuple tuples [])))
-        tuples (delete-tuple! tuples [2 8 20 1])]
-    (is (= nil (find-tuple tuples [])))))
+        _ (is (= t 1))
+        [tuples t] (delete-tuple! tuples [2 8 20 1])]
+    (is (= nil (find-tuple tuples [])))
+    (is (= t 1))))
 
 
 (defn create-test-tuples
