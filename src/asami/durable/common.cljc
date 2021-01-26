@@ -47,6 +47,11 @@
   (write-object! [this obj] "Writes an object to storage. Returns an ID")
   (get-object [this id] "Reads and object from storage, based on an ID"))
 
+(defprotocol FlatRecords
+  (append! [this v] "Writes a vector of long values. Returns an ID")
+  (get-object [this id] "Reads and object from storage, based on an ID")
+  (next-id [this] "Returns the next ID that this store will return"))
+
 (defprotocol TupleStorage
   (write-new-tx-tuple! [this tuple] "Adds a new tuple to the index in the current TX")
   (write-tuple! [this tuple] "Adds a tuple to the index")

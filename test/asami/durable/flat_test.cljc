@@ -99,3 +99,6 @@
                 f (io/file store-name tx-name)]
             (.delete f)
             (.delete d))))
+
+(deftest test-record-store
+  #?(:clj ))

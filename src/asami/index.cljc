@@ -90,8 +90,9 @@
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
       (reduce (fn [acc [s p o]] (graph-add acc s p o tx-id)) graph assertions)))
   (graph-diff [this other]
-    (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s)))
-                       spo)]
+    (when-not (= (type this) (type other))
+      (throw (ex-info "Unable to compare diffs between graphs of different types" {:this this :other other})))
+    (let [s-po (remove (fn [[s po]] (= po (get (:spo other) s))) spo)]
       (map first s-po)))
   (resolve-triple [this subj pred obj]
     (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]

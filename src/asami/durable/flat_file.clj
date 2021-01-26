@@ -4,7 +4,8 @@
   (:require [clojure.java.io :as io]
             [asami.durable.common :refer [Paged refresh! read-byte read-bytes-into read-long
                                           FlatStore write-object! get-object force!
-                                          TxStore Closeable Forceable get-tx tx-count long-size]]
+                                          TxStore Closeable Forceable get-tx tx-count long-size
+                                          FlatRecords]]
             [asami.durable.encoder :as encoder]
             [asami.durable.decoder :as decoder])
   (:import [java.io RandomAccessFile]
@@ -239,6 +240,36 @@
     (clear! paged)
     (.close rfile)))
 
+(defrecord RecordsFile [^RandomAccessFile rfile paged record-size]
+  FlatRecords
+  (append!
+    [this data]
+    (let [sz (.getFilePointer rfile)]
+      (doseq [t data]
+        (.writeLong ^RandomAccessFile rfile ^long t))
+      (long (/ sz record-size))))
+
+  (get-object
+    [this id]
+    (let [offset (* record-size id)
+          timestamp (read-long paged offset)]
+      (mapv #(read-long paged (+ (* long-size %) offset))
+            (range 1 (/ record-size long-size)))))
+
+  (next-id
+    [this]
+    (long (/ (.getFilePointer rfile) record-size)))
+
+  Forceable
+  (force! [this]
+    (.force (.getChannel rfile) true))
+
+  Closeable
+  (close [this]
+    (force! this)
+    (clear! paged)
+    (.close rfile)))
+
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."
   [name fname size]
@@ -257,10 +288,20 @@
   (let [[raf paged] (file-store group-name name default-region-size)]
     (->FlatFile raf paged)))
 
+(defn block-file
+  [group-name name record-size]
+  (let [region-size (* record-size (int (/ default-region-size record-size)))]
+    (file-store group-name name region-size)))
+
 (defn tx-store
   "Creates a transaction store. This wraps an append-only file and a paged reader."
   [group-name name payload-size]
   (let [tx-size (+ long-size payload-size)
-        region-size (* tx-size (int (/ default-region-size tx-size)))
-        [raf paged] (file-store group-name name region-size)]
+        [raf paged] (block-file group-name name tx-size)]
     (->TxFile raf paged tx-size)))
+
+(defn record-store
+  "Creates a record store. This wraps an append-only file and a paged reader."
+  [group-name name record-size]
+  (let [[raf paged] (block-file group-name name record-size)]
+    (->RecordsFile raf paged record-size)))
