@@ -3,6 +3,13 @@
 ## [Unreleased]
 Nothing
 
+## [1.2.13] - 2021-02-03
+### Added
+- Some Trace and Debug level logging for transactions and queries.
+
+### Changed
+- Moved to Zuko 0.4.0.
+
 ## [1.2.12] - 2021-01-19
 ### Added
 - Bindings and Filters are now restricted by default. Introduced `asami.query/*override-restrictions*` flag to avoid restrictions.
@@ -109,7 +116,8 @@ Nothing
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.12...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.13...HEAD
+[1.2.13]: https://github.com/threatgrid/asami/compare/1.2.12...1.2.13
 [1.2.12]: https://github.com/threatgrid/asami/compare/1.2.11...1.2.12
 [1.2.11]: https://github.com/threatgrid/asami/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/threatgrid/asami/compare/1.2.9...1.2.10
