@@ -111,13 +111,13 @@ allow rules to successfully use this graph type."
   Graph
   (new-graph [this] empty-multi-graph)
   (graph-add [this subj pred obj tx]
-    (log/trace "INSERT: " [subj pred obj tx])
+    (log/trace "insert " [subj pred obj tx])
     (assoc this
            :spo (multi-add spo subj pred obj tx)
            :pos (multi-add pos pred obj subj tx)
            :osp (multi-add osp obj subj pred tx)))
   (graph-delete [this subj pred obj]
-    (log/trace "DELETE: " [subj pred obj])
+    (log/trace "delete " [subj pred obj])
     (if-let [idx (multi-delete spo subj pred obj)]
       (assoc this :spo idx :pos (multi-delete pos pred obj subj) :osp (multi-delete osp obj subj pred))
       (do

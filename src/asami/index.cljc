@@ -78,7 +78,7 @@
   Graph
   (new-graph [this] empty-graph)
   (graph-add [this subj pred obj tx]
-    (log/trace "INSERT: " [subj pred obj tx])
+    (log/trace "insert " [subj pred obj tx])
     (let [new-spo (index-add spo subj pred obj)]
       (if (identical? spo new-spo)
         (do
@@ -88,7 +88,7 @@
                :pos (index-add pos pred obj subj)
                :osp (index-add osp obj subj pred)))))
   (graph-delete [this subj pred obj]
-    (log/trace "DELETE: " [subj pred obj])
+    (log/trace "delete " [subj pred obj])
     (if-let [idx (index-delete spo subj pred obj)]
       (assoc this
              :spo idx
