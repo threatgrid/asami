@@ -12,8 +12,8 @@
               [asami.sandbox :as sandbox]
               [zuko.projection :as projection]
               [zuko.util :refer [fn-for]]
-              #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])
+              [zuko.logging :as log :include-macros true]
+              [schema.core :as s :include-macros true]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
@@ -591,6 +591,8 @@
 (s/defn execute-query
   [selection constraints bindings graph project-fn {:keys [query-plan] :as options}]
   ;; joins must happen across a seq that is a conjunction
+  (log/debug "executing selection: " selection " where: " constraints)
+  (log/debug "bindings: " bindings)
   (let [top-conjunction (if (seq? constraints) ;; is this a list?
                           (let [[op & args] constraints]
                             (cond
@@ -604,6 +606,7 @@
                                    (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
                                    xs))]
     (let [resolved (join-patterns graph top-conjunction bindings options)]
+      (log/trace "results: " resolved)
       ;; check if this is a query plan without results
       (if query-plan
         resolved
@@ -672,6 +675,7 @@
 
 (defn aggregate-query
   [find bindings with where graph project-fn {:keys [query-plan] :as options}]
+  (log/debug "aggregate query:" query-plan)
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -680,6 +684,8 @@
           ;; extract every element of the or into an outer/inner pair of queries.
           ;; The inner/outer -wheres zip
           [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
+          _ (log/debug "inner query:" inner-wheres)
+          _ (log/debug "outer query:" outer-wheres)
           ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
           ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
 

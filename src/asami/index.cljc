@@ -5,8 +5,8 @@
             [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
             [zuko.node :refer [NodeAPI]]
-            #?(:clj  [schema.core :as s]
-               :cljs [schema.core :as s :include-macros true])))
+            [zuko.logging :as log :include-macros true]
+            [schema.core :as s :include-macros true]))
 
 (s/defn index-add :- {s/Any {s/Any #{s/Any}}}
   "Add elements to a 3-level index"
@@ -14,7 +14,13 @@
    a :- s/Any
    b :- s/Any
    c :- s/Any]
-  (update-in idx [a b] (fn [v] (if (seq v) (conj v c) #{c}))))
+  (if-let [idxb (get idx a)]
+    (if-let [idxc (get idxb b)]
+      (if (get idxc c)
+        idx
+        (assoc idx a (assoc idxb b (conj idxc c))))
+      (assoc idx a (assoc idxb b #{c})))
+    (assoc idx a {b #{c}})))
 
 (s/defn index-delete :- (s/maybe {s/Any {s/Any #{s/Any}}})
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -72,19 +78,25 @@
   Graph
   (new-graph [this] empty-graph)
   (graph-add [this subj pred obj tx]
+    (log/trace "INSERT: " [subj pred obj tx])
     (let [new-spo (index-add spo subj pred obj)]
       (if (identical? spo new-spo)
-        this
+        (do
+          (log/trace "statement already existed")
+          this)
         (assoc this :spo new-spo
                :pos (index-add pos pred obj subj)
                :osp (index-add osp obj subj pred)))))
   (graph-delete [this subj pred obj]
+    (log/trace "DELETE: " [subj pred obj])
     (if-let [idx (index-delete spo subj pred obj)]
       (assoc this
              :spo idx
              :pos (index-delete pos pred obj subj)
              :osp (index-delete osp obj subj pred))
-      this))
+      (do
+        (log/trace "statement did not exist")
+        this)))
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)

@@ -8,8 +8,8 @@ allow rules to successfully use this graph type."
             [asami.common-index :as common :refer [? NestedIndex]]
             [asami.analytics :as analytics]
             [zuko.node :refer [NodeAPI]]
-            #?(:clj  [schema.core :as s]
-               :cljs [schema.core :as s :include-macros true])))
+            [zuko.logging :as log :include-macros true]
+            [schema.core :as s :include-macros true]))
 
 (def ^:dynamic *insert-op* inc)
 
@@ -111,14 +111,18 @@ allow rules to successfully use this graph type."
   Graph
   (new-graph [this] empty-multi-graph)
   (graph-add [this subj pred obj tx]
+    (log/trace "INSERT: " [subj pred obj tx])
     (assoc this
            :spo (multi-add spo subj pred obj tx)
            :pos (multi-add pos pred obj subj tx)
            :osp (multi-add osp obj subj pred tx)))
   (graph-delete [this subj pred obj]
+    (log/trace "DELETE: " [subj pred obj])
     (if-let [idx (multi-delete spo subj pred obj)]
       (assoc this :spo idx :pos (multi-delete pos pred obj subj) :osp (multi-delete osp obj subj pred))
-      this))
+      (do
+        (log/trace "statement did not exist")
+        this)))
   (graph-transact [this tx-id assertions retractions]
     (as-> this graph
       (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
@@ -146,6 +150,7 @@ allow rules to successfully use this graph type."
 
 (defn multi-graph-add
   ([graph subj pred obj tx n]
+   (log/trace "insert *" n)
    (binding [*insert-op* (partial + n)]
      (graph-add graph subj pred obj tx)))
   ([graph subj pred obj tx]
