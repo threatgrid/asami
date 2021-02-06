@@ -305,3 +305,10 @@
   [group-name name record-size]
   (let [[raf paged] (block-file group-name name record-size)]
     (->RecordsFile raf paged record-size)))
+
+(defn store-exists?
+  "Checks if the resources for a file have been created already"
+  [group-name name]
+  (let [d (io/file group-name)
+        f (io/file group-name fname)]
+    (and (.exists d) (.exists f))))

@@ -3,6 +3,7 @@
     asami.core
     (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
               [asami.memory :as memory]
+              [asami.durable.store :as durable]
               [asami.query :as query]
               [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]
@@ -33,7 +34,7 @@
     (case type
       "mem" (memory/new-connection name memory/empty-graph)
       "multi" (memory/new-connection name memory/empty-multi-graph)
-      "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
+      "local" (store/new-connection name)
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
 (s/defn create-database :- s/Bool

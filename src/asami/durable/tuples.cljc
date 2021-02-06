@@ -416,8 +416,45 @@
       ;; The tuple already exists
       :default nil)))
 
+(defn find-index-tuple
+  "Finds a tuple seq in an index"
+  [index blocks tuple]
+  ;; full length tuples do an existence search. Otherwise, build a seq
+  (let [coord (find-coord index blocks tuple)]
+      ;; a double position indicates that nothing matches
+      (if (map? coord)
+        ;; short circuit for existence test
+        (if (= tuple-size (count tuple))
+          (when (map? coord) [tuple])
+          (let [{:keys [node pos]} coord]
+            (tuple-seq index blocks tuple node pos)))
+        [])))
+
+(declare ->ReadOnlyTupleIndex)
+
+(defrecord ReadOnlyTupleIndex [index blocks root-id]
+  TupleStorage
+  (tuples-at [this root]
+    (->ReadOnlyTuplesIndex (tree/at index root) blocks root))
+
+  (write-new-tx-tuple! [this tuple]
+    (throw (ex-info "Read only indices cannot have data inserted" {:tuple tuple})))
+
+  (write-tuple! [this tuple]
+    (throw (ex-info "Read only indices cannot have data inserted" {:tuple tuple})))
+
+  (delete-tuple! [this tuple]
+    (throw (ex-info "Read only indices cannot have data removed" {:tuple tuple})))
+
+  (find-tuple [this tuple]
+    (find-index-tuple index blocks tuple)))
+
+
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
+  (tuples-at [this root]
+    (->ReadOnlyTuplesIndex (tree/at index root) blocks root))
+
   (write-new-tx-tuple! [this tuple]
     (let [part-tuple (if (vector? tuple)
                        (subvec tuple 0 dec-tuple-size)
@@ -436,16 +473,8 @@
                   (nth tuple dec-tuple-size))]
           [(modify-node-block! this delete-coord delete-single-tuple!) t]))))
 
-  (find-tuple [this tuple] ;; full length tuples do an existence search. Otherwise, build a seq
-    (let [coord (find-coord index blocks tuple)]
-      ;; a double position indicates that nothing matches
-      (if (map? coord)
-        ;; short circuit for existence test
-        (if (= tuple-size (count tuple))
-          (when (map? coord) [tuple])
-          (let [{:keys [node pos]} coord]
-            (tuple-seq index blocks tuple node pos)))
-        [])))
+  (find-tuple [this tuple]
+    (find-index-tuple index blocks tuple))
 
   Transaction
   (rewind! [this]

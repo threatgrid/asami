@@ -4,7 +4,7 @@
   (:require [asami.storage :as storage]
             [asami.graph :as graph]
             [asami.durable.common :as common :refer [find-tuple write-new-tx-tuple! write-tuple! delete-tuple!
-                                                     find-object find-id write! at]]
+                                                     find-object find-id write! at latest]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             #?(:clj [asami.durable.flat-file :as flat-file])))
@@ -27,7 +27,7 @@
 
 (defn unpack-tx
   "Unpacks a transaction vector into a structure when deserializing"
-  [[r-spot r-post r-ospt r-tspo r-pool]]
+  [{[r-spot r-post r-ospt r-tspo r-pool] :tx-data}]
   {:r-spot r-spot :r-post r-post :r-ospt r-ospt :r-tspo r-tspo :r-pool r-pool})
 
 (defmulti get-from-index
@@ -80,23 +80,23 @@
 
 (declare ->BlockGraph)
 
-(defrecord BlockGraph [spot post ospt tspo pool]
+(defrecord BlockGraph [tx spot post ospt tspo pool]
     graph/Graph
   (new-graph
     [this]
     (throw (ex-info "Cannot create a new graph without new storage parameters" {:type "BlockGraph"})))
 
   (graph-add
-    [this subj pred obj tx]
+    [this subj pred obj tx-id]
     (let [[s new-pool] (write! pool subj)
           [p new-pool] (write! pool pred)
           [o new-pool] (write! pool obj)
           stmt-id (next-id tspo)]
-      (if-let [new-spot (write-new-tx-tuple! sptxot [s p o stmt-id])]
+      (if-let [new-spot (write-new-tx-tuple! spot [s p o stmt-id])]
         ;; new statement, so insert it into the other indices and return a new BlockGraph
         (let [new-post (write-tuple! post [p o s stmt-id])
               new-ospt (write-tuple! ospt [o s p stmt-id])
-              new-tspo (write-tuple! tspo [tx s p o])]
+              new-tspo (write-tuple! tspo [tx-id s p o])]
           (->BlockGraph new-spot new-post new-ospt new-tspo new-pool))
         ;; The statement already existed. The pools SHOULD be identical, but check in case they're not
         (if (identical? pool new-pool)
@@ -140,15 +140,36 @@
     (count (graph/resolve-triple this subj pred obj))))
 
 (defn new-block-graph
-  [name]
-  (let [tx #?(:clj (flat-file/tx-store name tx-name))
-        {:keys [r-spot r-post r-ospt r-tspo r-pool]} (unpack-tx (latest tx))
+  [name tx]
+  (let [{:keys [r-spot r-post r-ospt r-tspo r-pool]} (unpack-tx (latest tx))
         spot-index (tuples/create-tuple-index name spot-name r-spot)
         post-index (tuples/create-tuple-index name post-name r-post)
         ospt-index (tuples/create-tuple-index name ospt-name r-ospt)
         tspo-index (flat-file/create-record-store name tspo-name tuples/tuple-size-bytes)
         data-pool (pool/create-pool name r-pool)]
-    (->BlockGraph spot-index post-index tspo-index data-pool)))
+    (->BlockGraph tx spot-index post-index ospt-index tspo-index data-pool)))
+
+
+
+(defrecord DurableConnection [name tx-manager bgraph]
+  storage/Connection
+  (next-tx [this] (common/tx-count tx-manager))
+  (db [this] (db* this))
+  (delete-database [this] (delete-database* this))
+  (transact-update [this] (transact-update* this))
+  (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
+
+(defn db*
+  [{:keys [name tx-manager bgraph]}]
+  (let [{:keys [r-spot r-post r-ospt r-tspo r-pool]} (unpack-tx (latest tx-manager))
+        #_graph #_(->BlockGraph tx-manager
+                            (at bgraph))]
+    ))
 
 (defn create-database
-  [name])
+  [name]
+  (let [exists? (flat-file name tx-name)
+        tx #?(:clj (flat-file/tx-store name tx-name) :cljc nil)
+        block-graph (new-block-graph name tx)]
+    (->DurableConnection name tx block-graph)))
+

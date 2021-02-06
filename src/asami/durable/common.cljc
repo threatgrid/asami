@@ -53,6 +53,7 @@
   (next-id [this] "Returns the next ID that this store will return"))
 
 (defprotocol TupleStorage
+  (tuples-at [this root] "Returns this tuples index at a different root")
   (write-new-tx-tuple! [this tuple] "Adds a new tuple to the index in the current TX")
   (write-tuple! [this tuple] "Adds a tuple to the index")
   (delete-tuple! [this tuple] "Removes a tuple from the index. Returns both the index and the final element of the tuple")
