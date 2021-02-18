@@ -3,6 +3,10 @@
 ## [Unreleased]
 Nothing
 
+## [1.2.14] - 2021-02-18
+### Changed
+- Removed Clojurescript from the dependency tree of the generated artifacts.
+
 ## [1.2.13] - 2021-02-03
 ### Added
 - Some Trace and Debug level logging for transactions and queries.
@@ -116,7 +120,8 @@ Nothing
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.13...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.14...HEAD
+[1.2.14]: https://github.com/threatgrid/asami/compare/1.2.13...1.2.14
 [1.2.13]: https://github.com/threatgrid/asami/compare/1.2.12...1.2.13
 [1.2.12]: https://github.com/threatgrid/asami/compare/1.2.11...1.2.12
 [1.2.11]: https://github.com/threatgrid/asami/compare/1.2.10...1.2.11
