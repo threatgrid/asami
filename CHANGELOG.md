@@ -3,6 +3,10 @@
 ## [Unreleased]
 Nothing
 
+## [1.2.15] - 2021-02-19
+### Fixed
+- Bugfix for multigraph entities
+
 ## [1.2.14] - 2021-02-18
 ### Changed
 - Removed Clojurescript from the dependency tree of the generated artifacts.
@@ -120,7 +124,8 @@ Nothing
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.14...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.15...HEAD
+[1.2.15]: https://github.com/threatgrid/asami/compare/1.2.14...1.2.15
 [1.2.14]: https://github.com/threatgrid/asami/compare/1.2.13...1.2.14
 [1.2.13]: https://github.com/threatgrid/asami/compare/1.2.12...1.2.13
 [1.2.12]: https://github.com/threatgrid/asami/compare/1.2.11...1.2.12
