@@ -8,6 +8,8 @@
               [asami.graph :as gr]
               [asami.entities :as entities]
               [zuko.entity.general :refer [GraphType]]
+              #?(:clj  [clojure.edn :as edn]
+                 :cljs [cljs.reader :as edn])
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true]))
     #?(:clj (:import (java.util.concurrent CompletableFuture)
@@ -194,3 +196,20 @@
    All parameters are identical to the `q` function."
   [query & inputs]
   (query/query-entry query memory/empty-graph (graphs-of inputs) true))
+
+(defn export
+  "Returns a simplified data structures of all statements in a database"
+  [d]
+  (let [g (if (satisfies? storage/Database d)
+            (storage/graph d)
+            (as-graph d))]
+    (gr/resolve-pattern g '[?e ?a ?v ?t]))) ;; Note that transactions are not returned yet
+
+(defn import
+  "Loads raw statements into a connection. This does no checking of existing contents of storage.
+  Accepts either a seq of tuples, or an EDN string which contains a seq of tuples"
+  [connection data]
+  (let [statements (if (string? data)
+                     (edn/read-string data)
+                     data)]
+    (transact connection {:tx-triples statements})))

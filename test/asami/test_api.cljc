@@ -1,6 +1,6 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since]]
+  (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since import export]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [asami.memory :refer [now]]
@@ -545,5 +545,35 @@
                   :where [[?m :movie/title ?name]
                           [?m :movie/release-year 1985]]}
                   (db conn)))))))
+
+(def raw-data
+  [[:tg/node-10511 :db/ident "charles"]
+   [:tg/node-10511 :tg/entity true]
+   [:tg/node-10511 :name "Charles"]
+   [:tg/node-10511 :home :tg/node-10512]
+   [:tg/node-10512 :db/ident "scarborough"]
+   [:tg/node-10512 :town "Scarborough"]
+   [:tg/node-10512 :county "Yorkshire"]
+   [:tg/node-10513 :db/ident "jane"]
+   [:tg/node-10513 :tg/entity true]
+   [:tg/node-10513 :name "Jane"]
+   [:tg/node-10513 :home :tg/node-10512]])
+
+(deftest test-import-export
+  (testing "Loading raw data"
+    (let [conn (connect "asami:mem://test12")
+          {d :db-after} @(import conn raw-data)]
+      (is (= #{[:tg/node-10511 "Charles"]
+               [:tg/node-10513 "Jane"]}
+             (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
+      (is (= (set raw-data)
+             (set (export (db conn))))))
+    (let [conn (connect "asami:mem://test13")
+          {d :db-after} @(import conn (str raw-data))]
+      (is (= #{[:tg/node-10511 "Charles"]
+               [:tg/node-10513 "Jane"]}
+             (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
+      (is (= (set raw-data)
+             (set (export (db conn))))))))
 
 #?(:cljs (run-tests))
