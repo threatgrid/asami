@@ -199,10 +199,10 @@
 
 (defn export
   "Returns a simplified data structures of all statements in a database"
-  [d]
-  (let [g (if (satisfies? storage/Database d)
-            (storage/graph d)
-            (as-graph d))]
+  [database]
+  (let [g (if (satisfies? storage/Database database)
+            (storage/graph database)
+            (as-graph database))]
     (gr/resolve-pattern g '[?e ?a ?v ?t]))) ;; Note that transactions are not returned yet
 
 (defn import
