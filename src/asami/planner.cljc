@@ -564,9 +564,12 @@
 (defn aggregate-form?
   "Determines if a term is an aggregate"
   [s]
-  (and (seq? s)
-       (= 2 (count s))
-       (aggregate-types (first s))))
+  (or
+   (and (vector? s)
+        (some aggregate-form? s))
+   (and (seq? s)
+        (= 2 (count s))
+        (aggregate-types (first s)))))
 
 (def Aggregate (s/pred aggregate-form?))
 
@@ -613,15 +616,22 @@
   "Splits a WHERE clause up into the part suitable for an outer query,
    and the remaining constraints, which will be used for an inner query."
   ;; TODO: consider passing options, to select planning or not
-  [constraints :- Pattern                      ;; the WHERE clause
-   selection :- [(s/cond-pre Var Aggregate)]   ;; the FIND clause
-   withs :- [Var]]                             ;; the WITH clause
+  [constraints :- Pattern                    ;; the WHERE clause
+   selection :- [(s/cond-pre Var Aggregate)] ;; the FIND clause
+   withs :- [Var]]                           ;; the WITH clause
   ;; extract the vars we know have to be in the outer query
   (let [[op & constaint-args] constraints
         _ (assert (= op 'or))
         vars (-> (filter vartest? selection) set (into withs))
         ;; extract the vars from the aggregation terms
-        agg-vars (->> selection (filter aggregate-form?) (map second) set)
+        agg-vars (or (and (= 1 (count selection)) ;; the [expr ...] forms needs separate handling
+                          (let [sel (first selection)]
+                            (and
+                             (vector? sel)
+                             (if (and (= 2 (count sel)) (= '... (second sel)))
+                               (-> sel first second hash-set)
+                               (->> sel (filter aggregate-form?) (map second) set)))))
+                     (->> selection (filter aggregate-form?) (map second) set))
         ;; remove the constraints containing aggregates
         non-agg-constraints (map (partial aggregate-constraint false vars agg-vars) constaint-args)
         agg-constraints (map (partial aggregate-constraint true vars agg-vars) constaint-args)]

@@ -643,35 +643,74 @@
    'first first
    'last last})
 
+(s/defn agg-label :- s/Symbol
+  "Converts an aggregate operation on a symbol into a symbol name"
+  [[op v]]
+  (symbol (str "?" (name op) "-" (subs (name v) 1))))
+
 (s/defn result-label :- s/Symbol
   "Convert an element from a select/find clause into an appropriate label.
    Note that duplicate columns are not considered"
   [e]
   (cond
     (vartest? e) e
-    (and (seq? e) (= 2 (count e))) (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))
+    (and (seq? e) (= 2 (count e))) (agg-label e)
     :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
 
 (s/defn aggregate-over :- Results
   "For each seq of results, aggregates individually, and then together"
   [selection :- [s/Any]
+   with :- [Var]
    partial-results :- [Results]]
-  (letfn [(var-index [columns]
-            (into {} (map-indexed (fn [n c] [c n]) columns)))
-          (get-selectors [idxs]
-            (map (fn [s]
-                   (if (vartest? s)
-                     [first (idxs s)]
-                     [(aggregate-fns (first s)) (idxs (second s))]))
-                 selection))
-          (project-aggregate [result]
-            (let [idxs (var-index (:cols (meta result)))]
-              (for [[col-fn col-offset] (get-selectors idxs)]
-                (let [col-data (map #(nth % col-offset) result)]
-                  (col-fn col-data)))))]
-    (with-meta
-      (map project-aggregate partial-results)
-      {:cols (mapv result-label selection)})))
+  (let [var-index (fn [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
+        selection-count (count selection)
+        single-selection (empty? with)]
+    (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
+            (get-selectors [selected idxs]
+              (map (fn [s]
+                     (if (vartest? s)
+                       [first (idxs s)]
+                       [(aggregate-fns (first s)) (idxs (second s))]))
+                   selected))
+            (project-aggregate [selected result]
+              (let [idxs (var-index (:cols (meta result)))]
+                (for [[col-fn col-offset] (get-selectors selected idxs)]
+                  (let [col-data (map #(nth % col-offset) result)]
+                    (col-fn (if single-selection
+                              (*select-distinct* col-data)
+                              col-data))))))]
+      (cond
+        ;; check for singleton result
+        (and (= 2 selection-count)
+             (= '. (second selection)))
+        (let [[op v :as sel] (first selection)
+              result (first partial-results)
+              idxs (var-index (:cols (meta result)))
+              col-fn (aggregate-fns op)
+              col-data (map #(nth % (idxs v)) result)]
+          (col-fn (*select-distinct* col-data)))
+
+        ;; check for seq result
+        (and (= 1 selection-count)
+             (vector? (first selection)))
+        ;; don't need to check if the first part of sel is an aggregate because we couldn't
+        ;; be here if it weren't
+        (let [selected (first selection)]
+          (if (= '... (second selected))
+            (let [[[op v :as sel] _] selected
+                  col-fn (aggregate-fns op)
+                  single-agg (fn [result]
+                               (let [col (get (var-index (:cols (meta result))) v)
+                                     col-data (map #(nth % col) result)]
+                                 (col-fn (*select-distinct* col-data))))]
+              (map single-agg partial-results))
+            (project-aggregate (first selection) (first partial-results))))
+
+        ;; standard :find clause with some of the selection as aggregates
+        :default
+        (with-meta
+          (map (partial project-aggregate selection) partial-results)
+          {:cols (mapv result-label selection)})))))
 
 (defn aggregate-query
   [find bindings with where graph project-fn {:keys [query-plan] :as options}]
@@ -723,7 +762,7 @@
           ;; remove the empty results. This means that empty values are not counted!
         (let [inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
           ;; calculate the aggregates from the final results and project
-          (aggregate-over find inner-results))))))
+          (aggregate-over find with inner-results))))))
 
 
 (defn ^:private fresh []

@@ -240,9 +240,9 @@
         unaggregated [(with-meta data1 columns)
                       (with-meta data2 columns)
                       (with-meta data3 columns)]
-        results1 (aggregate-over '[?a ?b (count ?c)] unaggregated)
-        results2 (aggregate-over '[?a ?b (first ?c)] unaggregated)
-        results3 (aggregate-over '[?b ?a (last ?c)] unaggregated)]
+        results1 (aggregate-over '[?a ?b (count ?c)] nil unaggregated)
+        results2 (aggregate-over '[?a ?b (first ?c)] nil unaggregated)
+        results3 (aggregate-over '[?b ?a (last ?c)] nil unaggregated)]
     (is (= '[?a ?b ?count-c] (:cols (meta results1))))
     (is (= '[[:a :b 5] [:a :m 2] [:t :u 3]] results1))
     (is (= '[?a ?b ?first-c] (:cols (meta results2))))
@@ -264,11 +264,11 @@
         unaggregated [(with-meta data1 columns)
                       (with-meta data2 columns)
                       (with-meta data3 columns)]
-        results1 (aggregate-over '[(count ?c)] unaggregated)
-        results2 (aggregate-over '[?a (sum ?c)] unaggregated)
-        results3 (aggregate-over '[(avg ?c) ?a] unaggregated)
-        results4 (aggregate-over '[?a (max ?c)] unaggregated)
-        results5 (aggregate-over '[?a (min ?c)] unaggregated)]
+        results1 (aggregate-over '[(count ?c)] nil unaggregated)
+        results2 (aggregate-over '[?a (sum ?c)] nil unaggregated)
+        results3 (aggregate-over '[(avg ?c) ?a] nil unaggregated)
+        results4 (aggregate-over '[?a (max ?c)] nil unaggregated)
+        results5 (aggregate-over '[?a (min ?c)] nil unaggregated)]
     (is (= '[?count-c] (:cols (meta results1))))
     (is (= '[[5] [2] [3]] results1))
     (is (= '[?a ?sum-c] (:cols (meta results2))))
