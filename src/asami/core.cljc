@@ -197,7 +197,7 @@
   [query & inputs]
   (query/query-entry query memory/empty-graph (graphs-of inputs) true))
 
-(defn export
+(defn export-data
   "Returns a simplified data structures of all statements in a database"
   [database]
   (let [g (if (satisfies? storage/Database database)
@@ -205,7 +205,7 @@
             (as-graph database))]
     (gr/resolve-pattern g '[?e ?a ?v ?t]))) ;; Note that transactions are not returned yet
 
-(defn import
+(defn import-data
   "Loads raw statements into a connection. This does no checking of existing contents of storage.
   Accepts either a seq of tuples, or an EDN string which contains a seq of tuples"
   [connection data]

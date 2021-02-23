@@ -1,6 +1,7 @@
 (ns asami.test-api
   "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact entity as-of since import export]]
+  (:require [asami.core :refer [q show-plan create-database connect db transact
+                                entity as-of since import-data export-data]]
             [asami.index :as i]
             [asami.multi-graph :as m]
             [asami.memory :refer [now]]
@@ -562,18 +563,18 @@
 (deftest test-import-export
   (testing "Loading raw data"
     (let [conn (connect "asami:mem://test12")
-          {d :db-after} @(import conn raw-data)]
+          {d :db-after} @(import-data conn raw-data)]
       (is (= #{[:tg/node-10511 "Charles"]
                [:tg/node-10513 "Jane"]}
              (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
       (is (= (set raw-data)
-             (set (export (db conn))))))
+             (set (export-data (db conn))))))
     (let [conn (connect "asami:mem://test13")
-          {d :db-after} @(import conn (str raw-data))]
+          {d :db-after} @(import-data conn (str raw-data))]
       (is (= #{[:tg/node-10511 "Charles"]
                [:tg/node-10513 "Jane"]}
              (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
       (is (= (set raw-data)
-             (set (export (db conn))))))))
+             (set (export-data (db conn))))))))
 
 #?(:cljs (run-tests))
