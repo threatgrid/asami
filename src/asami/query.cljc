@@ -637,6 +637,7 @@
   "Map of aggregate symbols to functions that accept a seq of data to be aggregated"
   {'sum (partial apply +)
    'count count
+   'count-distinct count  ;; removal of duplicates happens in processing the data
    'avg #(/ (apply + %) (count %))
    'max (partial apply max)
    'min (partial apply min)
@@ -646,7 +647,7 @@
 (s/defn agg-label :- s/Symbol
   "Converts an aggregate operation on a symbol into a symbol name"
   [[op v]]
-  (symbol (str "?" (name op) "-" (subs (name v) 1))))
+  (symbol (str "?" (name op) "-" (if (planner/wildcard? v) "all" (subs (name v) 1)))))
 
 (s/defn result-label :- s/Symbol
   "Convert an element from a select/find clause into an appropriate label.
@@ -657,38 +658,52 @@
     (and (seq? e) (= 2 (count e))) (agg-label e)
     :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
 
-(s/defn aggregate-over :- Results
+(defn distinct-fn
+  "Returns a function that may deduplicate results, depending on the type of operator"
+  [op]
+  (if (= 'count-distinct op)
+    identity
+    *select-distinct*))
+
+(s/defn aggregate-over :- s/Any  ;; Usually Results, but can be a seq or a value due to projection
   "For each seq of results, aggregates individually, and then together"
   [selection :- [s/Any]
    with :- [Var]
    partial-results :- [Results]]
   (let [var-index (fn [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
-        selection-count (count selection)
-        single-selection (empty? with)]
+        selection-count (count selection)]
     (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
-            (get-selectors [selected idxs]
+            (get-selectors [idxs selected]
               (map (fn [s]
                      (if (vartest? s)
-                       [first (idxs s)]
-                       [(aggregate-fns (first s)) (idxs (second s))]))
+                       [first #(nth % (idxs s)) *select-distinct*]
+                       (let [[op v] s
+                             dedup-fn (distinct-fn op)]
+                         (if-let [afn (aggregate-fns op)]
+                           (if (planner/wildcard? v)
+                             [afn identity dedup-fn]
+                             [afn #(nth % (idxs v)) dedup-fn])
+                           (throw (ex-info (str "Unknown operation: " op) {:expr s}))))))
                    selected))
             (project-aggregate [selected result]
               (let [idxs (var-index (:cols (meta result)))]
-                (for [[col-fn col-offset] (get-selectors selected idxs)]
-                  (let [col-data (map #(nth % col-offset) result)]
-                    (col-fn (if single-selection
-                              (*select-distinct* col-data)
-                              col-data))))))]
+                (for [[col-fn col-selector dfn] (get-selectors idxs selected)]
+                  (let [col-data (map col-selector result)]
+                    (col-fn (dfn col-data))))))]
       (cond
         ;; check for singleton result
         (and (= 2 selection-count)
              (= '. (second selection)))
         (let [[op v :as sel] (first selection)
               result (first partial-results)
-              idxs (var-index (:cols (meta result)))
               col-fn (aggregate-fns op)
-              col-data (map #(nth % (idxs v)) result)]
-          (col-fn (*select-distinct* col-data)))
+              dfn (distinct-fn op)]
+          (if (planner/wildcard? v)
+            (col-fn (dfn result))
+            (let [idxs (var-index (:cols (meta result)))
+                  col (idxs v)
+                  col-data (map #(nth % col) result)]
+              (col-fn (dfn col-data)))))
 
         ;; check for seq result
         (and (= 1 selection-count)
@@ -699,10 +714,14 @@
           (if (= '... (second selected))
             (let [[[op v :as sel] _] selected
                   col-fn (aggregate-fns op)
-                  single-agg (fn [result]
-                               (let [col (get (var-index (:cols (meta result))) v)
-                                     col-data (map #(nth % col) result)]
-                                 (col-fn (*select-distinct* col-data))))]
+                  dfn (distinct-fn op)
+                  single-agg (if (planner/wildcard? v)
+                               (fn [result]
+                                 (col-fn (dfn result)))
+                               (fn [result]
+                                 (let [col (get (var-index (:cols (meta result))) v)
+                                       col-data (map #(nth % col) result)]
+                                   (col-fn (dfn col-data)))))]
               (map single-agg partial-results))
             (project-aggregate (first selection) (first partial-results))))
 

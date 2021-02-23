@@ -541,6 +541,15 @@
           r4 (sq '[:find (count ?child)
                    :where
                    [?parent :child ?child]])
+          r4b (sq '[:find (count *)
+                    :where
+                    [?parent :child ?child]])
+          r4c (sq '[:find (count-distinct ?child)
+                    :where
+                    [?parent :child ?child]])
+          r4d (sq '[:find (count-distinct *)
+                    :where
+                    [?parent :child ?child]])
           r5 (sq '[:find ?parent (count ?child)
                    :where
                    [?parent :child ?child]])
@@ -560,16 +569,25 @@
                    :where
                    [?parent :gender ?f]
                    [?f :label "female"]
-                   [?parent :child ?child]])
-          ]
+                   [?parent :child ?child]])]
+      (is (thrown-with-msg? ExceptionInfo #"Wildcard is not permitted for sum"
+                            (sq '[:find (sum *) :where [?parent :child ?child]])))
       (is (= '[?count-person] (:cols (meta r1))))
       (is (= [[8]] r1))
       (is (= '[?count-child] (:cols (meta r2))))
       (is (= [[2]] r2))
       (is (= '[?count-child] (:cols (meta r3))))
       (is (= [[2]] r3))
+
       (is (= '[?count-child] (:cols (meta r4))))
       (is (= [[5]] r4))
+      (is (= '[?count-all] (:cols (meta r4b))))
+      (is (= [[7]] r4b))
+      (is (= '[?count-distinct-child] (:cols (meta r4c))))
+      (is (= [[7]] r4c))
+      (is (= '[?count-distinct-all] (:cols (meta r4d))))
+      (is (= [[7]] r4d))
+
       (is (= '[?parent ?count-child] (:cols (meta r5))))
       (is (= #{[pa 3] [pb 2] [pc 2]} (set r5)))
       (is (= '[?pname ?count-child] (:cols (meta r5'))))
@@ -577,9 +595,57 @@
       (is (= '[?count-child] (:cols (meta r6))))
       (is (= [[5]] r6))
       (is (= '[?count-child] (:cols (meta r7))))
-      (is (= #{[3] [2]} (set r7)))
+      (is (= #{[3] [2]} (set r7)))))
 
-      ))
+  (deftest test-agg-projections
+    (let [st (-> empty-graph (assert-data data))
+          sq (fn [query] (q query st))
+
+          r1 (sq '[:find (count ?child) .
+                   :where
+                   [?parent :child ?child]])
+          r1b (sq '[:find (count *) .
+                    :where
+                    [?parent :child ?child]])
+          r1c (sq '[:find (count-distinct ?child) .
+                    :where
+                    [?parent :child ?child]])
+          r1d (sq '[:find (count-distinct *) .
+                    :where
+                    [?parent :child ?child]])
+
+          r2 (sq '[:find [(count ?child) ...]
+                   :where
+                   [?parent :child ?child]])
+          r2b (sq '[:find [(count *) ...]
+                    :where
+                    [?parent :child ?child]])
+          r2c (sq '[:find [(count-distinct ?child) ...]
+                    :where
+                    [?parent :child ?child]])
+          r2d (sq '[:find [(count-distinct *) ...]
+                    :where
+                    [?parent :child ?child]])
+
+          r3 (sq '[:find [(count ?child) (count-distinct ?child)]
+                   :where
+                   [?parent :child ?child]])
+          r3b (sq '[:find [(count *) (count-distinct *)]
+                    :where
+                    [?parent :child ?child]])]
+      
+      (is (= 5 r1))
+      (is (= 7 r1b))
+      (is (= 7 r1c))
+      (is (= 7 r1d))
+
+      (is (= [5] r2))
+      (is (= [7] r2b))
+      (is (= [7] r2c))
+      (is (= [7] r2d))
+
+      (is (= [5 7] r3))
+      (is (= [7 7] r3b))))
 
   (deftest test-ag
     (let [st (-> empty-graph (assert-data data))
@@ -589,12 +655,9 @@
                    :where
                    [?parent :gender ?f]
                    [?f :label "female"]
-                   [?parent :child ?child]])
-          ]
+                   [?parent :child ?child]])]
       (is (= '[?count-child] (:cols (meta r6))))
-      (is (= [[5]] r6))
-      ))
-  )
+      (is (= [[5]] r6)))))
 
 #?(:cljs (run-tests))
 

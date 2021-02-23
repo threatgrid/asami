@@ -561,17 +561,28 @@
   '#{max min count count-distinct sample
      sum avg median variance stddev})
 
+(def wildcard? (partial = '*))
+
+(def wildcard-permitted? '#{count sample count-distinct})
+
 (defn aggregate-form?
-  "Determines if a term is an aggregate"
+  "Determines if a term is an aggregate. Also detects if a wildcard is used for anything that isn't count"
   [s]
   (or
    (and (vector? s)
         (some aggregate-form? s))
    (and (seq? s)
         (= 2 (count s))
-        (aggregate-types (first s)))))
+        (let [fs (first s)]
+          (and
+           (aggregate-types fs)
+           (if (and (wildcard? (second s)) (not (wildcard-permitted? fs)))
+             (throw (ex-info (str "Wildcard is not permitted for " fs) {:form s}))
+             true))))))
 
 (def Aggregate (s/pred aggregate-form?))
+
+(def VarOrWild (s/pred #(or (vartest? %) (wildcard? %))))
 
 (s/defn aggregate-constraint :- (s/maybe Pattern)
   "Returns a constraint when it does or does not contains aggregates, selected by the aggregating? flag.
@@ -579,7 +590,7 @@
    that contain or do-not-contain aggregate vars."
   [aggregating? :- s/Bool
    needed-vars :- #{Var}
-   aggregate-vars :- #{Var}
+   aggregate-vars :- #{VarOrWild}
    constraint :- Pattern]
   (letfn [(agg-constraint [cnstrnt]
             (cond
@@ -610,14 +621,32 @@
         (list 'and top-constraint)
         top-constraint))))
 
+(def dot? (partial = '.))
+(def Dot (s/pred dot?))
+(def tdot? (partial = '...))
+(def TDot (s/pred tdot?))
+
+(def FindVectorElement
+  (s/conditional
+    tdot? TDot
+    symbol? Var
+    seq? Aggregate))
+
+(def FindElement
+  (s/conditional
+    dot? Dot
+    symbol? Var
+    seq? Aggregate
+    vector? [FindVectorElement]))
+
 (s/defn split-aggregate-terms :- [(s/one [s/Any] "outer query constraints")
                                   (s/one [s/Any] "inner query constraints")
-                                  (s/one #{Var} "vars to get aggregations for")]
+                                  (s/one #{VarOrWild} "vars to get aggregations for")]
   "Splits a WHERE clause up into the part suitable for an outer query,
    and the remaining constraints, which will be used for an inner query."
   ;; TODO: consider passing options, to select planning or not
   [constraints :- Pattern                    ;; the WHERE clause
-   selection :- [(s/cond-pre Var Aggregate)] ;; the FIND clause
+   selection :- [FindElement]                ;; the FIND clause
    withs :- [Var]]                           ;; the WITH clause
   ;; extract the vars we know have to be in the outer query
   (let [[op & constaint-args] constraints
