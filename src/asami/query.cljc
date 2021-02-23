@@ -12,8 +12,8 @@
               [asami.sandbox :as sandbox]
               [zuko.projection :as projection]
               [zuko.util :refer [fn-for]]
-              #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])
+              [zuko.logging :as log :include-macros true]
+              [schema.core :as s :include-macros true]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
@@ -591,6 +591,8 @@
 (s/defn execute-query
   [selection constraints bindings graph project-fn {:keys [query-plan] :as options}]
   ;; joins must happen across a seq that is a conjunction
+  (log/debug "executing selection: " selection " where: " constraints)
+  (log/debug "bindings: " bindings)
   (let [top-conjunction (if (seq? constraints) ;; is this a list?
                           (let [[op & args] constraints]
                             (cond
@@ -604,6 +606,7 @@
                                    (let [m (meta xs)] (with-meta (*select-distinct* xs) m))
                                    xs))]
     (let [resolved (join-patterns graph top-conjunction bindings options)]
+      (log/trace "results: " resolved)
       ;; check if this is a query plan without results
       (if query-plan
         resolved
@@ -634,11 +637,17 @@
   "Map of aggregate symbols to functions that accept a seq of data to be aggregated"
   {'sum (partial apply +)
    'count count
+   'count-distinct count  ;; removal of duplicates happens in processing the data
    'avg #(/ (apply + %) (count %))
    'max (partial apply max)
    'min (partial apply min)
    'first first
    'last last})
+
+(s/defn agg-label :- s/Symbol
+  "Converts an aggregate operation on a symbol into a symbol name"
+  [[op v]]
+  (symbol (str "?" (name op) "-" (if (planner/wildcard? v) "all" (subs (name v) 1)))))
 
 (s/defn result-label :- s/Symbol
   "Convert an element from a select/find clause into an appropriate label.
@@ -646,32 +655,85 @@
   [e]
   (cond
     (vartest? e) e
-    (and (seq? e) (= 2 (count e))) (symbol (str "?" (name (first e)) "-" (subs (name (second e)) 1)))
+    (and (seq? e) (= 2 (count e))) (agg-label e)
     :default (throw (ex-info "Bad selection in :find clause with aggregates" {:element e}))))
 
-(s/defn aggregate-over :- Results
+(defn distinct-fn
+  "Returns a function that may deduplicate results, depending on the type of operator"
+  [op]
+  (if (= 'count-distinct op)
+    identity
+    *select-distinct*))
+
+(s/defn aggregate-over :- s/Any  ;; Usually Results, but can be a seq or a value due to projection
   "For each seq of results, aggregates individually, and then together"
   [selection :- [s/Any]
+   with :- [Var]
    partial-results :- [Results]]
-  (letfn [(var-index [columns]
-            (into {} (map-indexed (fn [n c] [c n]) columns)))
-          (get-selectors [idxs]
-            (map (fn [s]
-                   (if (vartest? s)
-                     [first (idxs s)]
-                     [(aggregate-fns (first s)) (idxs (second s))]))
-                 selection))
-          (project-aggregate [result]
-            (let [idxs (var-index (:cols (meta result)))]
-              (for [[col-fn col-offset] (get-selectors idxs)]
-                (let [col-data (map #(nth % col-offset) result)]
-                  (col-fn col-data)))))]
-    (with-meta
-      (map project-aggregate partial-results)
-      {:cols (mapv result-label selection)})))
+  (let [var-index (fn [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
+        selection-count (count selection)]
+    (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
+            (get-selectors [idxs selected]
+              (map (fn [s]
+                     (if (vartest? s)
+                       [first #(nth % (idxs s)) *select-distinct*]
+                       (let [[op v] s
+                             dedup-fn (distinct-fn op)]
+                         (if-let [afn (aggregate-fns op)]
+                           (if (planner/wildcard? v)
+                             [afn identity dedup-fn]
+                             [afn #(nth % (idxs v)) dedup-fn])
+                           (throw (ex-info (str "Unknown operation: " op) {:expr s}))))))
+                   selected))
+            (project-aggregate [selected result]
+              (let [idxs (var-index (:cols (meta result)))]
+                (for [[col-fn col-selector dfn] (get-selectors idxs selected)]
+                  (let [col-data (map col-selector result)]
+                    (col-fn (dfn col-data))))))]
+      (cond
+        ;; check for singleton result
+        (and (= 2 selection-count)
+             (= '. (second selection)))
+        (let [[op v :as sel] (first selection)
+              result (first partial-results)
+              col-fn (aggregate-fns op)
+              dfn (distinct-fn op)]
+          (if (planner/wildcard? v)
+            (col-fn (dfn result))
+            (let [idxs (var-index (:cols (meta result)))
+                  col (idxs v)
+                  col-data (map #(nth % col) result)]
+              (col-fn (dfn col-data)))))
+
+        ;; check for seq result
+        (and (= 1 selection-count)
+             (vector? (first selection)))
+        ;; don't need to check if the first part of sel is an aggregate because we couldn't
+        ;; be here if it weren't
+        (let [selected (first selection)]
+          (if (= '... (second selected))
+            (let [[[op v :as sel] _] selected
+                  col-fn (aggregate-fns op)
+                  dfn (distinct-fn op)
+                  single-agg (if (planner/wildcard? v)
+                               (fn [result]
+                                 (col-fn (dfn result)))
+                               (fn [result]
+                                 (let [col (get (var-index (:cols (meta result))) v)
+                                       col-data (map #(nth % col) result)]
+                                   (col-fn (dfn col-data)))))]
+              (map single-agg partial-results))
+            (project-aggregate (first selection) (first partial-results))))
+
+        ;; standard :find clause with some of the selection as aggregates
+        :default
+        (with-meta
+          (map (partial project-aggregate selection) partial-results)
+          {:cols (mapv result-label selection)})))))
 
 (defn aggregate-query
   [find bindings with where graph project-fn {:keys [query-plan] :as options}]
+  (log/debug "aggregate query:" query-plan)
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -680,6 +742,8 @@
           ;; extract every element of the or into an outer/inner pair of queries.
           ;; The inner/outer -wheres zip
           [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
+          _ (log/debug "inner query:" inner-wheres)
+          _ (log/debug "outer query:" outer-wheres)
           ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
           ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
 
@@ -717,7 +781,7 @@
           ;; remove the empty results. This means that empty values are not counted!
         (let [inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
           ;; calculate the aggregates from the final results and project
-          (aggregate-over find inner-results))))))
+          (aggregate-over find with inner-results))))))
 
 
 (defn ^:private fresh []

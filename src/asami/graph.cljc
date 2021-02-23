@@ -1,8 +1,7 @@
 (ns ^{:doc "The graph index API."
       :author "Paula Gearon"}
     asami.graph
-  (:require #?(:clj  [schema.core :as s]
-               :cljs [schema.core :as s :include-macros true])
+  (:require [schema.core :as s :include-macros true]
             [clojure.string :as string]))
 
 
