@@ -15,6 +15,10 @@
   [t]
   (= #?(:clj Date :cljs js/Date) (type t)))
 
+(defn long-time
+  "Converts a timestamp to a long value as the number of milliseconds"
+  [t]
+  (.getTime t))  ;; this is an identical operation in both Java and Javascript
 
 (def project-args {:new-node graph/new-node
                    :node-label graph/node-label})

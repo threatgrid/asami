@@ -22,6 +22,9 @@
   (rewind! [this] "Revert to the last commit point. Any blocks allocated since the last commit will be invalid.")
   (commit! [this] "Commits all blocks allocated since the last commit. These blocks are now read-only."))
 
+(defprotocol TxData
+  (get-tx-data [this] "Returns the data for a transaction in a vector of long values"))
+
 (defprotocol TxStore
   (append! [this tx] "Writes a transaction record. The record is a seq of longs")
   (get-tx [this id] "Retrieves a transaction record by ID")

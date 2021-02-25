@@ -42,7 +42,7 @@
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
 ;; timestamp is the time the database was created
-(defrecord MemoryDatabase [graph history timestamp]
+(defrecord MemoryDatabase [graph history timestamp t]
   storage/Database
 
   (as-of [this t] (as-of* this t))
@@ -74,7 +74,7 @@
   "Creates a memory Connection object"
   [name :- s/Str
    gr :- GraphType]
-  (let [db (->MemoryDatabase gr [] (now))]
+  (let [db (->MemoryDatabase gr [] (now) 0)]
     (->MemoryConnection name (atom {:db db :history [db]}))))
 
 (s/defn next-tx* :- s/Num
@@ -90,7 +90,7 @@
   "Creates a Database around an existing Graph.
    graph: The graph to build a database around. "
   [graph :- GraphType]
-  (->MemoryDatabase graph [] (now)))
+  (->MemoryDatabase graph [] (now) 0))
 
 (s/defn as-of* :- DatabaseType
   "Retrieves the database as of a given moment, inclusive.
@@ -148,9 +148,9 @@
   Returns a pair containing the old database and the new one."
   [conn :- ConnectionType
    update-fn :- (s/pred fn?)]
-  (let [{:keys [graph history] :as db-before} (db* conn)
+  (let [{:keys [graph history t] :as db-before} (db* conn)
         next-graph (update-fn graph (next-tx* conn))
-        db-after (->MemoryDatabase next-graph (conj history db-before) (now))]
+        db-after (->MemoryDatabase next-graph (conj history db-before) (now) (inc t))]
     (reset! (:state conn) {:db db-after :history (conj (:history db-after) db-after)})
     [db-before db-after]))
 
@@ -166,7 +166,7 @@
 (s/defn entity* :- {s/Any s/Any}
   "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
    Objects may be nested, but references to top level objects will be nil in order to avoid loops."
-  ;; TODO create an Entity type that lazily loads, and references the database it came from
+  ;; TODO Reference the up-coming entity index
   [{graph :graph :as db} id nested?]
   (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
                    (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
