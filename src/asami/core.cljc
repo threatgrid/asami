@@ -36,7 +36,16 @@
     (case type
       "mem" (memory/new-connection name memory/empty-graph)
       "multi" (memory/new-connection name memory/empty-multi-graph)
-      "local" (store/new-connection name)
+      "local" (durable/create-database name)
+      (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
+
+(defn- exists?
+  [uri]
+  (let [{:keys [type name]} (parse-uri uri)]
+    (case type
+      "mem" false
+      "multi" false
+      "local" (durable/exists? uri)
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
 (s/defn create-database :- s/Bool
@@ -71,8 +80,9 @@
       (storage/delete-database conn))
     ;; database not in the connections
     ;; connect to it to free its resources
-    (if-let [conn (connection-for uri)]
-      (storage/delete-database conn))))
+    (when (exists? uri)
+      (if-let [conn (connection-for uri)]
+        (storage/delete-database conn)))))
 
 (def Graphable (s/cond-pre GraphType {:graph GraphType}))
 

@@ -23,8 +23,8 @@
     (is c3)
     (is (not c4))
     (is c5)
-    (is (thrown-with-msg? ExceptionInfo #"Local Databases not yet implemented"
-                          (create-database "asami:local://kumquat")))))
+    (is (thrown-with-msg? ExceptionInfo #"Unknown graph URI schema"
+                          (create-database "asami:other://kumquat")))))
 
 (deftest test-connect
   (let [c (connect "asami:mem://apple")

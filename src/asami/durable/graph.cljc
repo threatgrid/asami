@@ -8,8 +8,8 @@
             [asami.durable.common :as common :refer [TxData Transaction Closeable
                                                      find-tuple tuples-at write-new-tx-tuple!
                                                      write-tuple! delete-tuple!
-                                                     find-object find-id write! at latest rewind! commit! close
-                                                     append! next-id]]
+                                                     find-object find-id write! at latest rewind! commit!
+                                                     close delete! append! next-id]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             #?(:clj [asami.durable.flat-file :as flat-file])))
@@ -155,11 +155,12 @@
 
   Closeable
   (close [this]
-    (close spot)
-    (close post)
-    (close ospt)
-    (close tspo)
-    (close pool)))
+    (doseq [resource (vals this)]
+      (close resource)))
+
+  (delete! [this]
+    (doseq [resource (vals this)]
+      (delete! resource))))
 
 (defn graph-at
   "Returns a graph based on another graph, but with different set of index roots. This returns a historical graph.

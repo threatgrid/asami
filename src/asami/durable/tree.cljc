@@ -9,7 +9,7 @@
                                                    put-block! copy-over!
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx]]
-            [asami.durable.common :refer [Transaction Closeable Forceable close rewind! commit! force! long-size]]
+            [asami.durable.common :refer [Transaction Closeable Forceable close delete! rewind! commit! force! long-size]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
 (def ^:const left -1)
@@ -378,7 +378,10 @@
 
   Closeable
   (close [this]
-    (close block-manager)))
+    (close block-manager))
+
+  (delete! [this]
+    (delete! block-manager)))
 
 
 (defn new-block-tree

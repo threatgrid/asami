@@ -4,7 +4,7 @@
   (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
             [asami.graph :as graph]
             [asami.internal :refer [now instant? long-time]]
-            [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close]]
+            [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             [asami.durable.graph :as dgraph]
@@ -129,9 +129,9 @@
 
 (s/defn delete-database*
   [{:keys [grapha] :as connection} :- ConnectionType]
-  ;; TODO Delete the graph, which will recursively delete all resources
+  ;; Delete the graph, which will recursively delete all resources
   (close @grapha)
-  ;; (delete! @grapha)
+  (delete! @grapha)
   (reset! grapha nil))
 
 (def DBsBeforeAfter [(s/one DatabaseType "db-before")
@@ -188,3 +188,8 @@
         tx (latest tx-manager)
         block-graph (dgraph/new-block-graph name (unpack-tx (latest tx-manager)))]
     (->DurableConnection name tx (atom block-graph))))
+
+(s/defn exists? :- s/Bool
+  "Deletes this database"
+  [uri :- s/Str]
+   #?(:clj (flat-file/store-exists? name tx-name) :cljc nil))

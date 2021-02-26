@@ -157,7 +157,7 @@
 
 ;; rfile: A file that will only be appended to
 ;; paged: A paged reader for the file
-(defrecord FlatFile [^RandomAccessFile rfile paged]
+(defrecord FlatFile [^RandomAccessFile rfile f paged]
   FlatStore
   (write-object!
     [this obj]
@@ -178,7 +178,10 @@
   (close [this]
     (force! this)
     (clear! paged)
-    (.close rfile)))
+    (.close rfile))
+
+  (delete! [this]
+    (.delete f)))
 
 
 (defn tx-file-size
@@ -188,7 +191,7 @@
       (throw (ex-info "Corrupted transaction file" {:file-size fsize :tx-size tx-size})))
     fsize))
 
-(defrecord TxFile [^RandomAccessFile rfile paged tx-size]
+(defrecord TxFile [^RandomAccessFile rfile f paged tx-size]
   TxStore
   (append-tx!
     [this {:keys [timestamp tx-data] :as tx}]
@@ -238,12 +241,16 @@
   (close [this]
     (force! this)
     (clear! paged)
-    (.close rfile)))
+    (.close rfile))
 
-(defrecord RecordsFile [^RandomAccessFile rfile paged record-size]
+  (delete! [this]
+    (.delete f)))
+
+(defrecord RecordsFile [^RandomAccessFile rfile f paged record-size]
   FlatRecords
   (append!
     [this data]
+    (assert (= (* long-size (count data)) record-size))
     (let [sz (.getFilePointer rfile)]
       (doseq [t data]
         (.writeLong ^RandomAccessFile rfile ^long t))
@@ -251,10 +258,9 @@
 
   (get-record
     [this id]
-    (let [offset (* record-size id)
-          timestamp (read-long paged offset)]
+    (let [offset (* record-size id)]
       (mapv #(read-long paged (+ (* long-size %) offset))
-            (range 1 (/ record-size long-size)))))
+            (range (/ record-size long-size)))))
 
   (next-id
     [this]
@@ -268,7 +274,10 @@
   (close [this]
     (force! this)
     (clear! paged)
-    (.close rfile)))
+    (.close rfile))
+
+  (delete! [this]
+    (.delete f)))
 
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."
@@ -280,13 +289,13 @@
         file-length (.length raf)]
     (when-not (zero? file-length)
       (.seek raf file-length))
-    [raf (paged-file raf size)]))
+    [raf f (paged-file raf size)]))
 
 (defn flat-store
   "Creates a flat file store. This wraps an append-only file and a paged reader."
   [group-name name]
-  (let [[raf paged] (file-store group-name name default-region-size)]
-    (->FlatFile raf paged)))
+  (let [[raf f paged] (file-store group-name name default-region-size)]
+    (->FlatFile raf f paged)))
 
 (defn block-file
   [group-name name record-size]
@@ -297,14 +306,15 @@
   "Creates a transaction store. This wraps an append-only file and a paged reader."
   [group-name name payload-size]
   (let [tx-size (+ long-size payload-size)
-        [raf paged] (block-file group-name name tx-size)]
-    (->TxFile raf paged tx-size)))
+        [raf f paged] (block-file group-name name tx-size)]
+    (->TxFile raf f paged tx-size)))
 
 (defn record-store
-  "Creates a record store. This wraps an append-only file and a paged reader."
+  "Creates a record store. This wraps an append-only file and a paged reader.
+  The records size is measured in bytes."
   [group-name name record-size]
-  (let [[raf paged] (block-file group-name name record-size)]
-    (->RecordsFile raf paged record-size)))
+  (let [[raf f paged] (block-file group-name name record-size)]
+    (->RecordsFile raf f paged record-size)))
 
 (defn store-exists?
   "Checks if the resources for a file have been created already"

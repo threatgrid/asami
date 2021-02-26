@@ -265,7 +265,11 @@
   (close [this]
     (let [{:keys [block-file next-id]} @state]
       (force-file block-file)
-      (unmap (assoc block-file :nr-blocks (inc next-id))))))
+      (unmap (assoc block-file :nr-blocks (inc next-id)))))
+
+  (delete! [this]
+    (let [{{file :file} :block-file} @state]
+      (.delete file))))
 
 (defn create-managed-block-file
   [filename block-size]

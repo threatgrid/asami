@@ -1,8 +1,10 @@
 (ns ^{:doc "Tests flat store functionality, saving and retrieving data"
       :author "Paula Gearon"}
     asami.durable.flat-test
-    (:require [asami.durable.common :refer [write-object! get-object force! append!
-                                            long-size get-tx latest tx-count find-tx close]]
+    (:require [asami.durable.common :refer [write-object! get-object force! append-tx!
+                                            long-size get-tx latest tx-count find-tx close delete!
+                                            append! get-record next-id]]
+              [asami.durable.test-utils :as util :include-macros true]
               #?(:clj [asami.durable.flat-file :as ff])
               #?(:clj [clojure.java.io :as io])
               [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]])
@@ -41,16 +43,14 @@
         (is (= (nth data n) (get-object store id))))
       (force! store))
 
-    (with-open [store (ff/flat-store store-name flat-name)]
+    (util/with-cleanup [store (ff/flat-store store-name flat-name)]
       (doseq [[n id] @fmapped]
         (is (= (nth data n) (get-object store id))))
       (doseq [[n id] (shuffle (seq @fmapped))]
         (is (= (nth data n) (get-object store id))))))
   #?(:clj
-     (let [f (io/file store-name flat-name)
-           d (io/file store-name)]
-       (is (.delete f))
-       (is (.delete d)))))
+     (let [d (io/file store-name)]
+       (.delete d))))
 
 
 (deftest test-tx-store
@@ -62,14 +62,14 @@
   (let [store (ff/tx-store store-name tx-name long-size)]
     (is (nil? (latest store)))
     (doseq [t (range 0 10 2)]
-      (append! store {:timestamp t :tx-data [(* t t)]}))
+      (append-tx! store {:timestamp t :tx-data [(* t t)]}))
     (is (= 5 (tx-count store)))
     (is (= {:timestamp 8 :tx-data [64]} (latest store)))
     (is (= [16] (:tx-data (get-tx store 2))))
     (is (= [36] (:tx-data (get-tx store 3))))
     (is (= 6 (:timestamp (get-tx store 3))))
     (doseq [t (range 10 20 2)]
-      (append! store {:timestamp t :tx-data [(* t t)]}))
+      (append-tx! store {:timestamp t :tx-data [(* t t)]}))
     (is (= 10 (tx-count store)))
     (is (= 6 (:timestamp (get-tx store 3))))
     (is (= {:timestamp 18 :tx-data [324]} (latest store)))
@@ -83,7 +83,7 @@
     (doseq [n (range 10) :let [t (* 2 n) r (get-tx store n)]]
       (is (= {:timestamp t :tx-data [(* t t)]} r)))
     (doseq [t (range 20 30 2)]
-      (append! store {:timestamp t :tx-data [(* t t)]}))
+      (append-tx! store {:timestamp t :tx-data [(* t t)]}))
     (is (= {:timestamp 28 :tx-data [784]} (latest store)))
     (doseq [n (range 15) :let [t (* 2 n) r (get-tx store n)]]
       (is (= {:timestamp t :tx-data [(* t t)]} r)))
@@ -93,12 +93,17 @@
     (is (= 0 (find-tx store -1)))
     (is (= 14 (find-tx store 50)))
 
-    (close store))
+    (close store)
+    (delete! store))
 
-  #?(:clj (let [d (io/file store-name)
-                f (io/file store-name tx-name)]
-            (.delete f)
+  #?(:clj (let [d (io/file store-name)]
             (.delete d))))
 
 (deftest test-record-store
-  #?(:clj ))
+  (util/with-cleanup [records #?(:clj (ff/record-store "records" "rec.dat" (* 4 8)))]
+    (is (= 0 (next-id records)))
+    (doseq [x (range 1000) :let [xx (* x x)]]
+      (append! records (vec (range xx (+ xx 4)))))
+    (doseq [x (map #(mod (* 569 %) 1000) (range 1000)) :let [xx (* x x)]]
+      (is (= (vec (range xx (+ 4 xx))) (get-record records x))))
+    (is (= 1000 (next-id records)))))

@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.tuples
   (:require [asami.durable.common :refer [TupleStorage find-tuple long-size Transaction rewind! commit!
-                                          Closeable close]]
+                                          Closeable close delete!]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.block.block-api :refer [get-long put-long! get-id get-block put-block!
@@ -490,7 +490,11 @@
   Closeable
   (close [this]
     (close index)
-    (close blocks)))
+    (close blocks))
+
+  (delete! [this]
+    (delete! index)
+    (delete! blocks)))
 
 
 (defn open-tuples

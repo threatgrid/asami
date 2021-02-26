@@ -16,7 +16,8 @@
   (force! [this] "Ensures that all written data is fully persisted"))
 
 (defprotocol Closeable
-  (close [this] "Closes and invalidates all associated resources"))
+  (close [this] "Closes and invalidates all associated resources")
+  (delete! [this] "Remove any persistent resources"))
 
 (defprotocol Transaction
   (rewind! [this] "Revert to the last commit point. Any blocks allocated since the last commit will be invalid.")

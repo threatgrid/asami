@@ -107,3 +107,33 @@
 
       :cljs
       (->BufferBlock (js/DataView. (js/ArrayBuffer. len)) id len))))
+
+(defmacro assert-args
+  [& pairs]
+  `(do (when-not ~(first pairs)
+         (throw (IllegalArgumentException.
+                  (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
+     ~(let [more (nnext pairs)]
+        (when more
+          (list* `assert-args more)))))
+
+(defmacro with-cleanup
+  "bindings => [name init ...]
+
+  Evaluates body in a try expression with names bound to the values
+  of the inits, and a finally clause that calls (close name) on each
+  name in reverse order, followed by delete!."
+  {:added "1.0"}
+  [bindings & body]
+  (assert-args
+     (vector? bindings) "a vector for its binding"
+     (even? (count bindings)) "an even number of forms in binding vector")
+  (cond
+    (= (count bindings) 0) `(do ~@body)
+    (symbol? (bindings 0)) `(let ~(subvec bindings 0 2)
+                              (try
+                                (with-cleanup ~(subvec bindings 2) ~@body)
+                                (finally
+                                  (asami.durable.common/close ~(bindings 0))
+                                  (asami.durable.common/delete! ~(bindings 0)))))
+    :else (throw (ex-info "with- only allows Symbols in bindings" {:bindings bindings}))))

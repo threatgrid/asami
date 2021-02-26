@@ -3,7 +3,7 @@
     asami.durable.pool
     (:require [asami.durable.common :refer [DataStorage Closeable Forceable Transaction
                                             long-size get-object write-object! get-object
-                                            find-tx get-tx append! commit! rewind! force! close]]
+                                            find-tx get-tx append! commit! rewind! force! close delete!]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.encoder :as encoder :refer [to-bytes]]
@@ -135,7 +135,11 @@
   Closeable
   (close [this]
     (close index)
-    (close data)))
+    (close data))
+
+  (delete! [this]
+    (delete! index)
+    (delete! data)))
 
 (def data-constructor #?(:clj flat-file/flat-store))
 
