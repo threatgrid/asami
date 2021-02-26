@@ -1,7 +1,7 @@
 (ns ^{:doc "Tests the coder/decoder code for accessing index blocks"
       :author "Paula Gearon"}
     asami.durable.idx-codec-test
-    (:require [clojure.test :refer [deftest is]]
+    (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
               [asami.durable.test-utils :refer [new-block]]
               [asami.durable.encoder :refer [to-bytes]]
               [asami.durable.decoder :refer [long-bytes-compare]]

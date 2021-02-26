@@ -7,7 +7,7 @@
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
             [clojure.string :as s]
-            [clojure.test :refer [deftest is]])
+            [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]])
   #?(:clj
      (:import [java.io RandomAccessFile File]
               [java.nio ByteBuffer]

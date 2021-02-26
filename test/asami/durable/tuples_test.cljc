@@ -1,7 +1,7 @@
 (ns ^{:doc "Tests for the tuples store"
       :author "Paula Gearon"}
     asami.durable.tuples-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
             [asami.durable.test-utils :refer [new-block]]
             [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuple
                                           write-tuple! write-new-tx-tuple!]]

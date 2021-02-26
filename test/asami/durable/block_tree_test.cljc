@@ -7,7 +7,7 @@
             [asami.durable.test-utils :refer [get-filename]]
             [asami.durable.common :refer [close rewind! commit! long-size]]
             [asami.durable.block.block-api :refer [get-long put-long! get-id]]
-            [clojure.test :refer [deftest is]]
+            [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
             #?(:clj [asami.durable.block.file.util :as util])
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file]])))
 

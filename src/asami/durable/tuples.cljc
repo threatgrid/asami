@@ -1,7 +1,8 @@
 (ns ^{:doc "Tuples index with blocks"
       :author "Paula Gearon"}
     asami.durable.tuples
-    (:require [asami.durable.common :refer [TupleStorage find-tuple long-size Transaction rewind! commit!]]
+  (:require [asami.durable.common :refer [TupleStorage find-tuple long-size Transaction rewind! commit!
+                                          Closeable close]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.block.block-api :refer [get-long put-long! get-id get-block put-block!
@@ -435,7 +436,7 @@
 (defrecord ReadOnlyTupleIndex [index blocks root-id]
   TupleStorage
   (tuples-at [this root]
-    (->ReadOnlyTuplesIndex (tree/at index root) blocks root))
+    (->ReadOnlyTupleIndex (tree/at index root) blocks root))
 
   (write-new-tx-tuple! [this tuple]
     (throw (ex-info "Read only indices cannot have data inserted" {:tuple tuple})))
@@ -453,7 +454,7 @@
 (defrecord TupleIndex [index blocks root-id]
   TupleStorage
   (tuples-at [this root]
-    (->ReadOnlyTuplesIndex (tree/at index root) blocks root))
+    (->ReadOnlyTupleIndex (tree/at index root) blocks root))
 
   (write-new-tx-tuple! [this tuple]
     (let [part-tuple (if (vector? tuple)
@@ -469,7 +470,7 @@
       (if (or (nil? delete-coord) (vector? delete-coord))
         [this nil]
         (let [t (if (< (count tuple) tuple-size)
-                  (nth (get-tuple-at blocks delete-coord) dec-tuple-size)
+                  (nth (tuple-at-coord blocks delete-coord) dec-tuple-size)
                   (nth tuple dec-tuple-size))]
           [(modify-node-block! this delete-coord delete-single-tuple!) t]))))
 
@@ -484,7 +485,12 @@
 
   (commit! [this]
     (commit! blocks)
-    (assoc this :index (commit! index))))
+    (assoc this :index (commit! index)))
+
+  Closeable
+  (close [this]
+    (close index)
+    (close blocks)))
 
 
 (defn open-tuples

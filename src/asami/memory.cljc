@@ -9,8 +9,7 @@
               [asami.query :as query]
               [zuko.entity.general :as entity :refer [GraphType]]
               [zuko.entity.reader :as reader]
-              #?(:clj  [schema.core :as s]
-                 :cljs [schema.core :as s :include-macros true])))
+              [schema.core :as s :include-macros true]))
 
 (defn ^:private find-index
   "Performs a binary search through a sorted vector, returning the index of a provided value

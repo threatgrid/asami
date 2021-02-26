@@ -1,7 +1,7 @@
 (ns ^{:doc "Tests the Data Pool"
       :author "Paula Gearon"}
     asami.durable.pool-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
             [clojure.string :as s]
             [asami.durable.common :refer [close find-object find-id write! at
                                           get-object]]  ;; TODO remove

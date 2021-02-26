@@ -4,8 +4,12 @@
   (:require [asami.storage :as storage]
             [asami.graph :as graph]
             [asami.internal :refer [now instant? long-time]]
-            [asami.durable.common :as common :refer [find-tuple write-new-tx-tuple! write-tuple! delete-tuple!
-                                                     find-object find-id write! at latest rewind! commit! close]]
+            [asami.common-index :as common-index :refer [?]]
+            [asami.durable.common :as common :refer [TxData Transaction Closeable
+                                                     find-tuple tuples-at write-new-tx-tuple!
+                                                     write-tuple! delete-tuple!
+                                                     find-object find-id write! at latest rewind! commit! close
+                                                     append! next-id]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             #?(:clj [asami.durable.flat-file :as flat-file])))
@@ -18,7 +22,7 @@
 (defmulti get-from-index
   "Lookup an index in the graph for the requested data.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  common/simplify)
+  common-index/simplify)
 
 (def v2 (fn [dp t] (vector (find-object dp (nth t 2)))))
 (def v12 (fn [dp t] (vector
@@ -81,7 +85,7 @@
         ;; new statement, so insert it into the other indices and return a new BlockGraph
         (let [new-post (write-tuple! post [p o s stmt-id])
               new-ospt (write-tuple! ospt [o s p stmt-id])
-              new-tspo (write-tuple! tspo [tx-id s p o])]
+              new-tspo (append! tspo [tx-id s p o])]
           (->BlockGraph new-spot new-post new-ospt new-tspo new-pool))
         ;; The statement already existed. The pools SHOULD be identical, but check in case they're not
         (if (identical? pool new-pool)
@@ -90,13 +94,13 @@
 
   (graph-delete
     [this subj pred obj]
-    (let [new-spot (delete-tuple! spot [s p o])]
-      (if (identical? spot new-spot)
+    (let [[new-spot t] (delete-tuple! spot [subj pred obj])]
+      (if (nil? t)   ;; serves as a proxy for (identical? spot new-spot)
         this
-        (let [[new-post] (delete-tuple! post [p o s t])
-              [new-ospt] (delete-tuple! ospt [o s p t])]
+        (let [[new-post] (delete-tuple! post [pred obj subj t])
+              [new-ospt] (delete-tuple! ospt [obj subj pred t])]
           ;; the statement stays in tspo
-          (->BlockGraph new-spot new-post new-ospt new-tspo)))))
+          (->BlockGraph new-spot new-post new-ospt tspo pool)))))
 
   (graph-transact
     [this tx-id assertions retractions]
@@ -114,7 +118,7 @@
 
   (resolve-triple
     [this subj pred obj]
-    (if-let [[plain-pred trans-tag] (common/check-for-transitive pred)]
+    (if-let [[plain-pred trans-tag] (common-index/check-for-transitive pred)]
         ;; TODO: (common/get-transitive-from-index this trans-tag subj plain-pred obj)
       (throw (ex-info "Transitive resolutions not yet supported" {:pattern [subj pred obj]}))
       (get-from-index this subj pred obj)))
@@ -144,7 +148,10 @@
 
   TxData
   (get-tx-data [this]
-    [(:root-id spot) (:root-id post) (:root-id ospt) (:root-id pool)])
+    {:r-spot (:root-id spot)
+     :r-post (:root-id post)
+     :r-ospt (:root-id ospt)
+     :r-pool (:root-id pool)})
 
   Closeable
   (close [this]
@@ -157,14 +164,14 @@
 (defn graph-at
   "Returns a graph based on another graph, but with different set of index roots. This returns a historical graph.
   graph: The graph to base this on. The same index references will be used.
-  new-tx: A transaction, containing each of the tree roots for the indices."
-  [{:keys [tx spot post ospt tspo pool] :as graph} new-tx]
-  (let [{:keys [r-spot r-post r-ospt r-pool]} (unpack-tx new-tx)]
-    (->BlockGraph (tuples-at spot r-spot)
-                  (tuples-at post r-post)
-                  (tuples-at ospt r-ospt)
-                  tspo
-                  pool)))
+  new-tx: An unpacked transaction, containing each of the tree roots for the indices."
+  [{:keys [spot post ospt tspo pool] :as graph}
+   {:keys [r-spot r-post r-ospt r-pool] :as new-tx}]
+  (->BlockGraph (tuples-at spot r-spot)
+                (tuples-at post r-post)
+                (tuples-at ospt r-ospt)
+                tspo
+                pool))
 
 (defn new-block-graph
   "Creates a new BlockGraph object, under a given name. If the resources for that name exist, then they are opened.

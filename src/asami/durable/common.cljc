@@ -26,7 +26,7 @@
   (get-tx-data [this] "Returns the data for a transaction in a vector of long values"))
 
 (defprotocol TxStore
-  (append! [this tx] "Writes a transaction record. The record is a seq of longs")
+  (append-tx! [this tx] "Writes a transaction record. The record is a seq of longs")
   (get-tx [this id] "Retrieves a transaction record by ID")
   (latest [this] "Retrieves the last transaction record")
   (tx-count [this] "Retrieves the count of transaction records")
@@ -52,7 +52,7 @@
 
 (defprotocol FlatRecords
   (append! [this v] "Writes a vector of long values. Returns an ID")
-  (get-object [this id] "Reads and object from storage, based on an ID")
+  (get-record [this id] "Reads a record of long values from storage, based on an ID")
   (next-id [this] "Returns the next ID that this store will return"))
 
 (defprotocol TupleStorage

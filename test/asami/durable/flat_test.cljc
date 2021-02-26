@@ -5,7 +5,7 @@
                                             long-size get-tx latest tx-count find-tx close]]
               #?(:clj [asami.durable.flat-file :as ff])
               #?(:clj [clojure.java.io :as io])
-              [clojure.test :refer [deftest is]])
+              [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]])
     #?(:clj (:import [java.net URI])))
 
 (def store-name "test-fstore")

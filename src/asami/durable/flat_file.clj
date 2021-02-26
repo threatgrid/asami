@@ -190,7 +190,7 @@
 
 (defrecord TxFile [^RandomAccessFile rfile paged tx-size]
   TxStore
-  (append!
+  (append-tx!
     [this {:keys [timestamp tx-data] :as tx}]
     (let [sz (.getFilePointer rfile)]
       (.writeLong ^RandomAccessFile rfile ^long timestamp)
@@ -249,7 +249,7 @@
         (.writeLong ^RandomAccessFile rfile ^long t))
       (long (/ sz record-size))))
 
-  (get-object
+  (get-record
     [this id]
     (let [offset (* record-size id)
           timestamp (read-long paged offset)]
@@ -310,5 +310,5 @@
   "Checks if the resources for a file have been created already"
   [group-name name]
   (let [d (io/file group-name)
-        f (io/file group-name fname)]
+        f (io/file group-name name)]
     (and (.exists d) (.exists f))))

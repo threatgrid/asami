@@ -1,7 +1,7 @@
 (ns ^{:doc "Tests the LRU cache implementation"
       :author "Paula Gearon"}
     asami.durable.cache-test
-  (:require [clojure.test :refer [is deftest run-tests]]
+  (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [is deftest run-tests]]
             [asami.durable.cache :refer [lookup has? hit miss evict seed
                                          lru-cache-factory]]))
 
