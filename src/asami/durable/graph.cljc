@@ -12,7 +12,8 @@
                                                      close delete! append! next-id]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
-            #?(:clj [asami.durable.flat-file :as flat-file])))
+            #?(:clj [asami.durable.flat-file :as flat-file])
+            [zuko.logging :as log :refer-macros true]))
 
 (def spot-name "eavt.idx")
 (def post-name "avet.idx")
@@ -64,8 +65,8 @@
 
 (defmethod get-from-index [ ?  ?  ?]
   [{idx :spot dp :pool} s p o]
-  (map #(mapv (partial find-object dp) %)
-       (find-tuple idx [s p o])))
+  (map #(mapv (partial find-object dp) (take 3 %))
+       (find-tuple idx [])))
 
 (declare ->BlockGraph)
 
@@ -85,8 +86,9 @@
         ;; new statement, so insert it into the other indices and return a new BlockGraph
         (let [new-post (write-tuple! post [p o s stmt-id])
               new-ospt (write-tuple! ospt [o s p stmt-id])
-              new-tspo (append! tspo [tx-id s p o])]
-          (->BlockGraph new-spot new-post new-ospt new-tspo new-pool))
+              sid (append! tspo [tx-id s p o])]
+          (assert (= stmt-id sid))
+          (->BlockGraph new-spot new-post new-ospt tspo new-pool))
         ;; The statement already existed. The pools SHOULD be identical, but check in case they're not
         (if (identical? pool new-pool)
           this
@@ -121,7 +123,13 @@
     (if-let [[plain-pred trans-tag] (common-index/check-for-transitive pred)]
         ;; TODO: (common/get-transitive-from-index this trans-tag subj plain-pred obj)
       (throw (ex-info "Transitive resolutions not yet supported" {:pattern [subj pred obj]}))
-      (get-from-index this subj pred obj)))
+      (let [get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
+        (if-let [s (get-id subj)]
+          (if-let [p (get-id pred)]
+            (if-let [o (get-id obj)]
+              (do
+                (log/trace "resolving [" s " " p " " o "]")
+                (get-from-index this s p o))))))))
 
   (count-triple
     [this subj pred obj]
