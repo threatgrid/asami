@@ -85,6 +85,17 @@
    [:c :age 25]
    [:a :friend :b]])
 
+(def update-data2
+  [[:a :age 25]
+   [:b :age 25]
+   [:c :age 27]
+   [:a :friend :c]])
+
+(def remove-data2
+  [[:a :age 24]
+   [:b :age 24]
+   [:c :age 26]])
+
 (deftest phased-data
   (util/with-cleanup [graph (make-graph "testdata-phased")]
     (let [graph (commit! (graph-transact graph 0 demo-data nil))
@@ -167,5 +178,98 @@
                (r1 '[:b :age 23])))
         (is (empty? (r1 '[:b :age 24])))
         (is (= (set demo-data) (r1 '[?e ?a ?v])))
-        )))
+
+
+        (let [g3 (commit! (graph-transact g2 1 update-data2 remove-data2))
+              r3 (fn [[e a v]] (set (resolve-triple g3 e a v)))
+              tx3 (get-tx-data g3)
+              g1 (graph-at g3 tx)
+              g2 (graph-at g3 tx2)
+              r1 (fn [[e a v]] (set (resolve-triple g1 e a v)))
+              r2 (fn [[e a v]] (set (resolve-triple g2 e a v)))]
+          (is (not= (:r-spot tx) (:r-spot tx2)))
+          (is (not= (:r-spot tx) (:r-spot tx3)))
+          (is (not= (:r-spot tx2) (:r-spot tx3)))
+          (is (not= (:r-post tx) (:r-post tx2)))
+          (is (not= (:r-post tx) (:r-post tx3)))
+          (is (not= (:r-post tx2) (:r-post tx3)))
+          (is (not= (:r-ospt tx) (:r-ospt tx2)))
+          (is (not= (:r-ospt tx) (:r-ospt tx3)))
+          (is (not= (:r-ospt tx2) (:r-ospt tx3)))
+          (is (= #{[:name "Mary"]
+                   [:age 25]
+                   [:friend :c]}
+                 (r3 '[:a ?a ?v])))
+          (is (= #{[:a "Mary"]
+                   [:b "Jane"]
+                   [:c "Anne"]}
+                 (r3 '[?e :name ?v])))
+          (is (= #{[:a :age]
+                   [:b :age]}
+                 (r3 '[?e ?a 25])))
+          (is (empty? (r3 '[?e ?a 23])))
+          (is (empty? (r3 '[?e ?a 24])))
+          (is (= #{["Jane"]}
+                 (r3 '[:b :name ?v])))
+          (is (empty? (r3 '[:a ?a :b])))
+          (is (= #{[:friend]}
+                 (r3 '[:a ?a :c])))
+          (is (= #{[:a]
+                   [:b]}
+                 (r3 '[?e :age 25])))
+          (is (empty? (r3 '[?e :age 23])))
+          (is (empty? (r3 '[?e :age 24])))
+          (is (= #{[]}
+                 (r3 '[:b :age 25])))
+          (is (empty? (r3 '[:b :age 23])))
+          (is (empty? (r3 '[:b :age 24])))
+          (is (empty? (r3 '[:b :age 26])))
+          (is (= (set (concat update-data2 (filter #(= :name (second %)) demo-data))) (r3 '[?e ?a ?v])))
+
+          (is (= #{[:name "Mary"]
+                   [:age 24]}
+                 (r2 '[:a ?a ?v])))
+          (is (= #{[:a "Mary"]
+                   [:b "Jane"]
+                   [:c "Anne"]}
+                 (r2 '[?e :name ?v])))
+          (is (= #{[:a :age]
+                   [:b :age]}
+                 (r2 '[?e ?a 24])))
+          (is (empty? (r2 '[?e ?a 23])))
+          (is (= #{["Jane"]}
+                 (r2 '[:b :name ?v])))
+          (is (empty? (r2 '[:a ?a :b])))
+          (is (= #{[:a]
+                   [:b]}
+                 (r2 '[?e :age 24])))
+          (is (empty? (r2 '[?e :age 23])))
+          (is (= #{[]}
+                 (r2 '[:b :age 24])))
+          (is (empty? (r2 '[:b :age 23])))
+          (is (empty? (r2 '[:b :age 25])))
+          (is (= (set (concat update-data (filter #(= :name (second %)) demo-data))) (r2 '[?e ?a ?v])))
+
+          (is (= #{[:name "Mary"]
+                   [:age 23]
+                   [:friend :b]}
+                 (r1 '[:a ?a ?v])))
+          (is (= #{[:a "Mary"]
+                   [:b "Jane"]
+                   [:c "Anne"]}
+                 (r1 '[?e :name ?v])))
+          (is (= #{[:a :age]
+                   [:b :age]}
+                 (r1 '[?e ?a 23])))
+          (is (= #{["Jane"]}
+                 (r1 '[:b :name ?v])))
+          (is (= #{[:friend]}
+                 (r1 '[:a ?a :b])))
+          (is (= #{[:a]
+                   [:b]}
+                 (r1 '[?e :age 23])))
+          (is (= #{[]}
+                 (r1 '[:b :age 23])))
+          (is (empty? (r1 '[:b :age 24])))
+          (is (= (set demo-data) (r1 '[?e ?a ?v])))))))
   (is (remove-group "testdata-phased")))
