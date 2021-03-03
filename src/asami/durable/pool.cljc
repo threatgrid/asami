@@ -125,12 +125,14 @@
   Transaction
   (commit! [this]
     (force! data)
-    (let [next-index (commit! index)]
-      (assoc this :index next-index :root-id (get-id (:root next-index)))))
+    (let [{r :root :as next-index} (commit! index)]
+      ;; root can be nil if only small values have been stored
+      (assoc this :index next-index :root-id (and r (get-id r)))))
 
   (rewind! [this]
-    (let [next-index (rewind! index)]
-      (assoc this :index next-index :root-id (get-id (:root index)))))
+    (let [{r :root :as next-index} (rewind! index)]
+      ;; root can be nil if only small values have been stored
+      (assoc this :index next-index :root-id (and r (get-id r)))))
 
   Closeable
   (close [this]

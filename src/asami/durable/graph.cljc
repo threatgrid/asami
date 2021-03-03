@@ -96,13 +96,17 @@
 
   (graph-delete
     [this subj pred obj]
-    (let [[new-spot t] (delete-tuple! spot [subj pred obj])]
-      (if (nil? t)   ;; serves as a proxy for (identical? spot new-spot)
-        this
-        (let [[new-post] (delete-tuple! post [pred obj subj t])
-              [new-ospt] (delete-tuple! ospt [obj subj pred t])]
-          ;; the statement stays in tspo
-          (->BlockGraph new-spot new-post new-ospt tspo pool)))))
+    (or
+     (if-let [s (find-id pool subj)]
+       (if-let [p (find-id pool pred)]
+         (if-let [o (find-id pool obj)]
+           (let [[new-spot t] (delete-tuple! spot [s p o])]
+             (when t   ;; serves as a proxy for (not (identical? spot new-spot))
+               (let [[new-post] (delete-tuple! post [p o s t])
+                     [new-ospt] (delete-tuple! ospt [o s p t])]
+                 ;; the statement stays in tspo
+                 (->BlockGraph new-spot new-post new-ospt tspo pool)))))))
+     this))
 
   (graph-transact
     [this tx-id assertions retractions]
