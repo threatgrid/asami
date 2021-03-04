@@ -105,6 +105,64 @@
 
   (recurse-delete "pool-test"))
 
+
+(deftest usage-test
+  (let [pool (create-pool "usage-test")
+        data [:a
+              :db/ident
+              "p"
+              :a
+              :tg/entity
+              true
+              :a
+              :name
+              "Persephone Konstantopoulos"
+              :a
+              :age
+              23
+              :a
+              :friends
+              :tg/node-b
+              :tg/node-b
+              :tg/first
+              :tg/node-1
+              :tg/node-b
+              :tg/rest
+              :tg/node-c
+              :tg/node-c
+              :tg/first
+              :tg/node-2
+              :tg/node-1
+              :name
+              "Anastasia Christodoulopoulos"
+              :tg/node-1
+              :age
+              23
+              :tg/node-2
+              :name
+              "Anne Richardson"
+              :tg/node-2
+              :age
+              25
+              :tg/node-b
+              :tg/contains
+              :tg/node-1
+              :tg/node-b
+              :tg/contains
+              :tg/node-2]
+        [ids pool] (reduce (fn [[ids p] d]
+                             (let [[id p'] (write! p d)]
+                               [(conj ids id) p']))
+                           [[] pool] data)
+        pairs (map vector ids data)]
+    (doseq [[id value] pairs]
+      (is (= value (find-object pool id))))
+
+    (doseq [[id value] pairs]
+      (is (= id (find-id pool value)) (str "data: " value)))
+    (close pool))
+  (recurse-delete "usage-test"))
+
 (defn load-strings!
   "Loads words into the pool. Returns a pair of the IDs for the words (in order) and the new pool"
   [words pool]

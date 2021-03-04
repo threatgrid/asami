@@ -13,6 +13,7 @@
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             #?(:clj [asami.durable.flat-file :as flat-file])
+            [zuko.node :as node]
             [zuko.logging :as log :refer-macros true]))
 
 (def spot-name "eavt.idx")
@@ -79,8 +80,8 @@
   (graph-add
     [this subj pred obj tx-id]
     (let [[s new-pool] (write! pool subj)
-          [p new-pool] (write! pool pred)
-          [o new-pool] (write! pool obj)
+          [p new-pool] (write! new-pool pred)
+          [o new-pool] (write! new-pool obj)
           stmt-id (next-id tspo)]
       (if-let [new-spot (write-new-tx-tuple! spot [s p o stmt-id])]
         ;; new statement, so insert it into the other indices and return a new BlockGraph
@@ -139,6 +140,14 @@
     [this subj pred obj]
     ;; TODO count by node to make this faster for large numbers
     (count (graph/resolve-triple this subj pred obj)))
+
+  node/NodeAPI
+  (data-attribute [_ _] :tg/first)
+  (container-attribute [_ _] :tg/contains)
+  (new-node [_] (graph/new-node))
+  (node-id [_ n] (graph/node-id n))
+  (node-type? [_ _ n] (graph/node-type? n))
+  (find-triple [this [e a v]] (graph/resolve-triple this e a v))
 
   Transaction
   (rewind! [this]

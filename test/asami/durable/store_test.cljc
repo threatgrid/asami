@@ -272,3 +272,35 @@
         (is (empty? (r1 '[:b :age 24])))
         (is (= (set demo-data) (r1 '[?e ?a ?v])))))
     (delete-database conn)))
+
+(def entity-data
+  [[:a :db/ident "p"]
+   [:a :tg/entity true]
+   [:a :name "Persephone Konstantopoulos"]
+   [:a :age 23]
+   [:a :friends :tg/node-b]
+   [:tg/node-b :tg/first :tg/node-1]
+   [:tg/node-b :tg/rest :tg/node-c]
+   [:tg/node-c :tg/first :tg/node-2]
+   [:tg/node-1 :name "Anastasia Christodoulopoulos"]
+   [:tg/node-1 :age 23]
+   [:tg/node-2 :name "Anne Richardson"]
+   [:tg/node-2 :age 25]
+   [:tg/node-b :tg/contains :tg/node-1]
+   [:tg/node-b :tg/contains :tg/node-2]])
+
+(deftest simple-data
+  (let [dbname "entity-db"
+        conn (create-database dbname)
+        [_ db1] (transact-data conn entity-data nil)]
+    (is (= {:name "Persephone Konstantopoulos"
+            :age 23
+            :friends [{:name "Anastasia Christodoulopoulos" :age 23}
+                      {:name "Anne Richardson" :age 25}]}
+         (entity db1 :a)))
+    (is (= {:name "Persephone Konstantopoulos"
+            :age 23
+            :friends [{:name "Anastasia Christodoulopoulos" :age 23}
+                      {:name "Anne Richardson" :age 25}]}
+         (entity db1 "p")))
+    (delete-database conn)))
