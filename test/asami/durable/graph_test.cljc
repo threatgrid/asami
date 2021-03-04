@@ -7,7 +7,7 @@
             [asami.durable.common :refer [latest close get-tx-data commit!]]
             #?(:clj [asami.durable.flat-file :as flat-file])
             [asami.durable.test-utils :as util]
-            [clojure.java.io :as io]
+            #?(:clj [clojure.java.io :as io])
             [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]))
 
 (defn group-exists
@@ -38,30 +38,30 @@
     (is (remove-group n))))
 
 (def demo-data
-  [[:a :name "Mary"]
+  [[:a :name "Persephone Konstantopoulos"]
    [:a :age 23]
    [:a :friend :b]
-   [:b :name "Jane"]
+   [:b :name "Anastasia Christodoulopoulos"]
    [:b :age 23]
-   [:c :name "Anne"]
+   [:c :name "Anne Richardson"]
    [:c :age 25]])
 
 (deftest simple-data
   (util/with-cleanup [graph (make-graph "testdata-simple")]
     (let [graph (graph-transact graph 0 demo-data nil)
           resolve (fn [[e a v]] (set (resolve-triple graph e a v)))]
-      (is (= #{[:name "Mary"]
+      (is (= #{[:name "Persephone Konstantopoulos"]
                [:age 23]
                [:friend :b]}
              (resolve '[:a ?a ?v])))
-      (is (= #{[:a "Mary"]
-               [:b "Jane"]
-               [:c "Anne"]}
+      (is (= #{[:a "Persephone Konstantopoulos"]
+               [:b "Anastasia Christodoulopoulos"]
+               [:c "Anne Richardson"]}
              (resolve '[?e :name ?v])))
       (is (= #{[:a :age]
                [:b :age]}
              (resolve '[?e ?a 23])))
-      (is (= #{["Jane"]}
+      (is (= #{["Anastasia Christodoulopoulos"]}
              (resolve '[:b :name ?v])))
       (is (= #{[:friend]}
              (resolve '[:a ?a :b])))
@@ -89,30 +89,32 @@
   [[:a :age 25]
    [:b :age 25]
    [:c :age 27]
-   [:a :friend :c]])
+   [:a :friend :c]
+   [:a :name "Persephone Smith"]])
 
 (def remove-data2
   [[:a :age 24]
    [:b :age 24]
-   [:c :age 26]])
+   [:c :age 26]
+   [:a :name "Persephone Konstantopoulos"]])
 
 (deftest phased-data
   (util/with-cleanup [graph (make-graph "testdata-phased")]
     (let [graph (commit! (graph-transact graph 0 demo-data nil))
           resolve (fn [[e a v]] (set (resolve-triple graph e a v)))
           tx (get-tx-data graph)]
-      (is (= #{[:name "Mary"]
+      (is (= #{[:name "Persephone Konstantopoulos"]
                [:age 23]
                [:friend :b]}
              (resolve '[:a ?a ?v])))
-      (is (= #{[:a "Mary"]
-               [:b "Jane"]
-               [:c "Anne"]}
+      (is (= #{[:a "Persephone Konstantopoulos"]
+               [:b "Anastasia Christodoulopoulos"]
+               [:c "Anne Richardson"]}
              (resolve '[?e :name ?v])))
       (is (= #{[:a :age]
                [:b :age]}
              (resolve '[?e ?a 23])))
-      (is (= #{["Jane"]}
+      (is (= #{["Anastasia Christodoulopoulos"]}
              (resolve '[:b :name ?v])))
       (is (= #{[:friend]}
              (resolve '[:a ?a :b])))
@@ -132,18 +134,18 @@
         (is (not= (:r-spot tx) (:r-spot tx2)))
         (is (not= (:r-post tx) (:r-post tx2)))
         (is (not= (:r-ospt tx) (:r-ospt tx2)))
-        (is (= #{[:name "Mary"]
+        (is (= #{[:name "Persephone Konstantopoulos"]
                  [:age 24]}
                (r2 '[:a ?a ?v])))
-        (is (= #{[:a "Mary"]
-                 [:b "Jane"]
-                 [:c "Anne"]}
+        (is (= #{[:a "Persephone Konstantopoulos"]
+                 [:b "Anastasia Christodoulopoulos"]
+                 [:c "Anne Richardson"]}
                (r2 '[?e :name ?v])))
         (is (= #{[:a :age]
                  [:b :age]}
                (r2 '[?e ?a 24])))
         (is (empty? (r2 '[?e ?a 23])))
-        (is (= #{["Jane"]}
+        (is (= #{["Anastasia Christodoulopoulos"]}
                (r2 '[:b :name ?v])))
         (is (empty? (r2 '[:a ?a :b])))
         (is (= #{[:a]
@@ -156,18 +158,18 @@
         (is (empty? (r2 '[:b :age 25])))
         (is (= (set (concat update-data (filter #(= :name (second %)) demo-data))) (r2 '[?e ?a ?v])))
 
-        (is (= #{[:name "Mary"]
+        (is (= #{[:name "Persephone Konstantopoulos"]
                  [:age 23]
                  [:friend :b]}
                (r1 '[:a ?a ?v])))
-        (is (= #{[:a "Mary"]
-                 [:b "Jane"]
-                 [:c "Anne"]}
+        (is (= #{[:a "Persephone Konstantopoulos"]
+                 [:b "Anastasia Christodoulopoulos"]
+                 [:c "Anne Richardson"]}
                (r1 '[?e :name ?v])))
         (is (= #{[:a :age]
                  [:b :age]}
                (r1 '[?e ?a 23])))
-        (is (= #{["Jane"]}
+        (is (= #{["Anastasia Christodoulopoulos"]}
                (r1 '[:b :name ?v])))
         (is (= #{[:friend]}
                (r1 '[:a ?a :b])))
@@ -196,20 +198,20 @@
           (is (not= (:r-ospt tx) (:r-ospt tx2)))
           (is (not= (:r-ospt tx) (:r-ospt tx3)))
           (is (not= (:r-ospt tx2) (:r-ospt tx3)))
-          (is (= #{[:name "Mary"]
+          (is (= #{[:name "Persephone Smith"]
                    [:age 25]
                    [:friend :c]}
                  (r3 '[:a ?a ?v])))
-          (is (= #{[:a "Mary"]
-                   [:b "Jane"]
-                   [:c "Anne"]}
+          (is (= #{[:a "Persephone Smith"]
+                   [:b "Anastasia Christodoulopoulos"]
+                   [:c "Anne Richardson"]}
                  (r3 '[?e :name ?v])))
           (is (= #{[:a :age]
                    [:b :age]}
                  (r3 '[?e ?a 25])))
           (is (empty? (r3 '[?e ?a 23])))
           (is (empty? (r3 '[?e ?a 24])))
-          (is (= #{["Jane"]}
+          (is (= #{["Anastasia Christodoulopoulos"]}
                  (r3 '[:b :name ?v])))
           (is (empty? (r3 '[:a ?a :b])))
           (is (= #{[:friend]}
@@ -224,20 +226,20 @@
           (is (empty? (r3 '[:b :age 23])))
           (is (empty? (r3 '[:b :age 24])))
           (is (empty? (r3 '[:b :age 26])))
-          (is (= (set (concat update-data2 (filter #(= :name (second %)) demo-data))) (r3 '[?e ?a ?v])))
+          (is (= (set (concat update-data2 (remove #(= :a (first %)) (filter #(= :name (second %)) demo-data)))) (r3 '[?e ?a ?v])))
 
-          (is (= #{[:name "Mary"]
+          (is (= #{[:name "Persephone Konstantopoulos"]
                    [:age 24]}
                  (r2 '[:a ?a ?v])))
-          (is (= #{[:a "Mary"]
-                   [:b "Jane"]
-                   [:c "Anne"]}
+          (is (= #{[:a "Persephone Konstantopoulos"]
+                   [:b "Anastasia Christodoulopoulos"]
+                   [:c "Anne Richardson"]}
                  (r2 '[?e :name ?v])))
           (is (= #{[:a :age]
                    [:b :age]}
                  (r2 '[?e ?a 24])))
           (is (empty? (r2 '[?e ?a 23])))
-          (is (= #{["Jane"]}
+          (is (= #{["Anastasia Christodoulopoulos"]}
                  (r2 '[:b :name ?v])))
           (is (empty? (r2 '[:a ?a :b])))
           (is (= #{[:a]
@@ -250,18 +252,18 @@
           (is (empty? (r2 '[:b :age 25])))
           (is (= (set (concat update-data (filter #(= :name (second %)) demo-data))) (r2 '[?e ?a ?v])))
 
-          (is (= #{[:name "Mary"]
+          (is (= #{[:name "Persephone Konstantopoulos"]
                    [:age 23]
                    [:friend :b]}
                  (r1 '[:a ?a ?v])))
-          (is (= #{[:a "Mary"]
-                   [:b "Jane"]
-                   [:c "Anne"]}
+          (is (= #{[:a "Persephone Konstantopoulos"]
+                   [:b "Anastasia Christodoulopoulos"]
+                   [:c "Anne Richardson"]}
                  (r1 '[?e :name ?v])))
           (is (= #{[:a :age]
                    [:b :age]}
                  (r1 '[?e ?a 23])))
-          (is (= #{["Jane"]}
+          (is (= #{["Anastasia Christodoulopoulos"]}
                  (r1 '[:b :name ?v])))
           (is (= #{[:friend]}
                  (r1 '[:a ?a :b])))

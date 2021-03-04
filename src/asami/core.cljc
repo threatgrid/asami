@@ -45,7 +45,7 @@
     (case type
       "mem" false
       "multi" false
-      "local" (durable/exists? uri)
+      "local" (durable/exists? name)
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
 (s/defn create-database :- s/Bool

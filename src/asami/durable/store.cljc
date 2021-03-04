@@ -12,14 +12,14 @@
             [zuko.entity.general :refer [GraphType]]
             [zuko.entity.reader :as reader]
             [schema.core :as s :include-macros true]
-            #?(:clj [asami.durable.flat-file :as flat-file])))
+            #?(:clj [asami.durable.flat-file :as flat-file])
+            #?(:clj [clojure.java.io :as io])))
 
 (def tx-name "tx.dat")
 
 ;; transactions contain tree roots for the 3 tree indices,
 ;; the tree root for the data pool
-;; and a transaction timestamp
-(def tx-record-size (* 5 common/long-size))
+(def tx-record-size (* 4 common/long-size))
 
 (def TxRecord {(s/required-key :r-spot) s/Int
                (s/required-key :r-post) s/Int
@@ -128,11 +128,14 @@
     (->DurableDatabase connection g tx-id timestamp)))
 
 (s/defn delete-database*
-  [{:keys [grapha] :as connection} :- ConnectionType]
+  [{:keys [name grapha tx-manager] :as connection} :- ConnectionType]
   ;; Delete the graph, which will recursively delete all resources
   (close @grapha)
   (delete! @grapha)
-  (reset! grapha nil))
+  (reset! grapha nil)
+  (delete! tx-manager)
+  #?(:clj (when-let [d (io/file name)]
+            (.delete d))))
 
 (def DBsBeforeAfter [(s/one DatabaseType "db-before")
                     (s/one DatabaseType "db-after")])
@@ -153,7 +156,7 @@
         ;; step each underlying index to its new transaction point
         graph-after (commit! next-graph)
         ;; get the metadata (tree roots) for all the transactions
-        new-timestamp (now)
+        new-timestamp (long-time (now))
         tx (assoc (common/get-tx-data graph-after)
                   :timestamp new-timestamp)]
     ;; save the transaction metadata
@@ -185,11 +188,10 @@
   [name :- s/Str]
   (let [exists? #?(:clj (flat-file/store-exists? name tx-name) :cljc nil)
         tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljc nil)
-        tx (latest tx-manager)
         block-graph (dgraph/new-block-graph name (unpack-tx (latest tx-manager)))]
-    (->DurableConnection name tx (atom block-graph))))
+    (->DurableConnection name tx-manager (atom block-graph))))
 
 (s/defn exists? :- s/Bool
   "Deletes this database"
-  [uri :- s/Str]
-   #?(:clj (flat-file/store-exists? name tx-name) :cljc nil))
+  [store-name :- s/Str]
+   #?(:clj (flat-file/store-exists? store-name tx-name) :cljc nil))

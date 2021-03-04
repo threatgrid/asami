@@ -15,6 +15,11 @@
   [t]
   (= #?(:clj Date :cljs js/Date) (type t)))
 
+(defn instant
+  "Creates an instant from a long millisecond value"
+  [ms]
+  #?(:clj (Date. ms) :cljs (js/Date. ms)))
+
 (defn long-time
   "Converts a timestamp to a long value as the number of milliseconds"
   [t]
