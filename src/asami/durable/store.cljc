@@ -119,7 +119,8 @@
 (s/defn db* :- DatabaseType
   "Returns the most recent database value from the connection."
   [{:keys [name tx-manager grapha] :as connection} :- ConnectionType]
-  (let [{:keys [r-spot r-post r-ospt timestamp]} (unpack-tx (latest tx-manager))
+  (let [tx (latest tx-manager)
+        {:keys [r-spot r-post r-ospt timestamp]} (and tx (unpack-tx tx))
         {:keys [spot post ospt] :as g} @grapha
         tx-id (dec (common/tx-count tx-manager))]
     (assert (= r-spot (:root-id spot)))
@@ -186,9 +187,9 @@
   "This opens a connection to an existing database by the name of the location for resources.
   If the database does not exist then it is created."
   [name :- s/Str]
-  (let [exists? #?(:clj (flat-file/store-exists? name tx-name) :cljc nil)
-        tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljc nil)
-        block-graph (dgraph/new-block-graph name (unpack-tx (latest tx-manager)))]
+  (let [tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljc nil)
+        tx (latest tx-manager)
+        block-graph (dgraph/new-block-graph name (and tx (unpack-tx tx)))]
     (->DurableConnection name tx-manager (atom block-graph))))
 
 (s/defn exists? :- s/Bool

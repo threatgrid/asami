@@ -61,7 +61,7 @@
   [{:keys [data index]} object]
   (let [[header body] (to-bytes object)
         node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
-    (when-not (vector? node)
+    (when (and node (not (vector? node)))
       (get-object-ref node))))
 
 (defrecord ReadOnlyPool [data index root-id cache]

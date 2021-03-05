@@ -72,7 +72,7 @@
 (declare ->BlockGraph)
 
 (defrecord BlockGraph [spot post ospt tspo pool]
-    graph/Graph
+  graph/Graph
   (new-graph
     [this]
     (throw (ex-info "Cannot create a new graph without new storage parameters" {:type "BlockGraph"})))
