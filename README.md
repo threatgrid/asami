@@ -1,6 +1,6 @@
 # asami [![Build Status](https://travis-ci.org/threatgrid/asami.svg?branch=main)](https://travis-ci.org/threatgrid/asami) [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
 
-An in-memory graph database, for Clojure and ClojureScript.
+A graph database, for Clojure and ClojureScript.
 
 The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is:
 
