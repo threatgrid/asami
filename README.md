@@ -2,7 +2,13 @@
 
 An in-memory graph database, for Clojure and ClojureScript.
 
+The latest Alpha version is:
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
+
+The most recent stable version is:
+```
+[org.clojars.quoll/asami "1.2.15"]
+```
 
 Asami is a _schemaless_ database, meaning that data may be inserted with no predefined schema. This flexibility has advantages and disadvantages. It is easier to load and evolve data over time without a schema. However, functionality like upsert and basic integrity checking is not available in the same way as with a graph with a predefined schema.
 
