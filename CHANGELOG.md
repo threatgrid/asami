@@ -1,10 +1,11 @@
 # Change Log
 
-## [Unreleased]
+## [2.0.0-alpha] - 2021-03-05
 ### Fixed
 - `count` now de-duplicates, and `count-distinct` introduced.
 
 ### Added
+- Durable storage provisioned on mapped files.
 - Projection styles now work on aggregates
 - `count`, `count-distinct` and `sample` can work on wildcards.
 
@@ -129,7 +130,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/1.2.15...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha...HEAD
+[2.0.0-alpha]: https://github.com/threatgrid/asami/compare/1.2.14...2.0.0-alpha
 [1.2.15]: https://github.com/threatgrid/asami/compare/1.2.14...1.2.15
 [1.2.14]: https://github.com/threatgrid/asami/compare/1.2.13...1.2.14
 [1.2.13]: https://github.com/threatgrid/asami/compare/1.2.12...1.2.13
