@@ -6,6 +6,8 @@ The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is:
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
+Please see [the Wiki for details](https://github.com/threatgrid/asami/wiki/Asami-2).
+
 The most recent stable version is:
 ```
 [org.clojars.quoll/asami "1.2.15"]
