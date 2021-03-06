@@ -138,14 +138,22 @@
     (->DurableDatabase connection g tx-id timestamp)))
 
 (s/defn delete-database*
+  "Delete the graph, which will recursively delete all resources"
   [{:keys [name grapha tx-manager] :as connection} :- ConnectionType]
-  ;; Delete the graph, which will recursively delete all resources
   (close @grapha)
   (delete! @grapha)
   (reset! grapha nil)
+  (close tx-manager)
   (delete! tx-manager)
   #?(:clj (when-let [d (io/file name)]
             (.delete d))))
+
+(s/defn release*
+  "Closes the transaction manager, and the graph, which will recursively close all resources"
+  [{:keys [name grapha tx-manager] :as connection} :- ConnectionType]
+  (close @grapha)
+  (reset! grapha nil)
+  (close tx-manager))
 
 (def DBsBeforeAfter [(s/one DatabaseType "db-before")
                     (s/one DatabaseType "db-after")])
@@ -189,6 +197,7 @@
   (next-tx [this] (common/tx-count tx-manager))
   (db [this] (db* this))
   (delete-database [this] (delete-database* this))
+  (release [this] (release* this))
   (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
 

@@ -113,6 +113,7 @@
 (def since-t storage/since-t)
 (def graph storage/graph)
 (def entity storage/entity)
+(def release storage/release)
 
 (def TransactData (s/if map?
                     {(s/optional-key :tx-data) [s/Any]
