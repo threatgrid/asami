@@ -2,6 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.flat-file
   (:require [clojure.java.io :as io]
+            [clojure.string :as string]
             [asami.durable.common :refer [Paged refresh! read-byte read-bytes-into read-long
                                           FlatStore write-object! get-object force!
                                           TxStore Closeable Forceable get-tx tx-count long-size
@@ -282,6 +283,8 @@
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."
   [name fname size]
+  (when (string/includes? name "..")
+    (throw (ex-info "Illegal path present in database name" {:database name})))
   (let [d (io/file name)
         _ (.mkdirs d)
         f (io/file name fname)

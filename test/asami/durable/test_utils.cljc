@@ -1,7 +1,8 @@
 (ns ^{:doc "Common functions for storage based tests"
       :author "Paula Gearon"}
     asami.durable.test-utils
-    (:require [asami.durable.block.block-api :refer [Block]]
+    (:require [asami.durable.block.block-api :refer [Block put-block!]]
+              [asami.durable.common :refer [long-size int-size]]
               #?(:clj
                  [asami.durable.block.file.util :as util])
               #?(:clj
@@ -64,17 +65,17 @@
        this)
 
      (put-bytes! [this offset len values]
-       (doseq [n (range (min len __size))]
+       (doseq [n (range (min len __len))]
          (.setInt8 __dataView (+ __position offset n) (aget values n)))
        this)
 
      (put-ints! [this offset len values]
-       (doseq [n (range (min len (/ __size int-size)))]
+       (doseq [n (range (min len (/ __len int-size)))]
          (.setInt32 __dataView (+ __position (* (+ offset n) int-size)) (aget values n)))
        this)
 
      (put-longs! [this offset len values]
-       (doseq [n (range (min len (/ __size long-size)))]
+       (doseq [n (range (min len (/ __len long-size)))]
          (.setInt8 __dataView (+ __position (* (+ offset n) long-size)) (aget values n)))
        this)
 
@@ -82,17 +83,17 @@
        [this offset src src-offset length]
        (let [offset_ (+ __position offset)
              sdv (:__dataView src)]
-         (doseq [n (range (min length (- __size offset) (- (:__size src) src-offset)))]
+         (doseq [n (range (min length (- __len offset) (- (:__len src) src-offset)))]
            (.setInt8 __dataView
                      (+ offset_ n)
                      (.getInt8 sdv (+ src-offset n))))))
 
      (put-block!
        [this offset src]
-       (put-block! this offset src 0 (:__size src)))
+       (put-block! this offset src 0 (:__len src)))
 
      (copy-over! [this src src-offset]
-       (put-block! this 0 src src-offset (- (:__size src) src-offset)))))
+       (put-block! this 0 src src-offset (- (:__len src) src-offset)))))
 
 
 (defn new-block
@@ -106,7 +107,7 @@
         (create-block id len 0 bb bb ib lb))
 
       :cljs
-      (->BufferBlock (js/DataView. (js/ArrayBuffer. len)) id len))))
+      (->BufferBlock id (js/DataView. (js/ArrayBuffer. len)) 0 len))))
 
 (defmacro assert-args
   [& pairs]

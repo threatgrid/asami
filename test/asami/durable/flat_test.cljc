@@ -27,23 +27,29 @@
    1812
    "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.\n\nHowever little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters.\n\n“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”\n\nMr. Bennet replied that he had not.\n\n“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”\n\nMr. Bennet made no answer.\n\n“Do you not want to know who has taken it?” cried his wife impatiently.\n\n“You want to tell me, and I have no objection to hearing it.”\n\nThis was invitation enough."])
 
+(def tx-store #?(:clj ff/tx-store :cljs (fn [group name size] nil)))
+(def flat-store #?(:clj ff/flat-store :cljs (fn [group name] nil)))
+(def record-store #?(:clj ff/record-store :cljs (fn [group name size] nil)))
+
 ;; Clojure specific parts are for clearing out the temporary files
 (deftest test-store
   (let [fmapped (volatile! nil)]
     #?(:clj (is (not (.exists (io/file store-name flat-name)))))
-    (with-open [store (ff/flat-store store-name flat-name)]
-      (vreset! fmapped (reduce-kv (fn [m k v]
-                                    (let [id (write-object! store v)]
-                                      (assoc m k id)))
-                                  {} data))
-      (is (= (count data) (count @fmapped)))
-      (doseq [[n id] @fmapped]
-        (is (= (nth data n) (get-object store id))))
-      (doseq [[n id] (shuffle (seq @fmapped))]
-        (is (= (nth data n) (get-object store id))))
-      (force! store))
+    (let [store (flat-store store-name flat-name)]
+      (try
+        (vreset! fmapped (reduce-kv (fn [m k v]
+                                      (let [id (write-object! store v)]
+                                        (assoc m k id)))
+                                    {} data))
+        (is (= (count data) (count @fmapped)))
+        (doseq [[n id] @fmapped]
+          (is (= (nth data n) (get-object store id))))
+        (doseq [[n id] (shuffle (seq @fmapped))]
+          (is (= (nth data n) (get-object store id))))
+        (force! store)
+        (finally (close store))))
 
-    (util/with-cleanup [store (ff/flat-store store-name flat-name)]
+    (util/with-cleanup [store (flat-store store-name flat-name)]
       (doseq [[n id] @fmapped]
         (is (= (nth data n) (get-object store id))))
       (doseq [[n id] (shuffle (seq @fmapped))]
@@ -59,7 +65,7 @@
             (.mkdir d)
             (when (.exists f) (.delete f))))
 
-  (let [store (ff/tx-store store-name tx-name long-size)]
+  (let [store (tx-store store-name tx-name long-size)]
     (is (nil? (latest store)))
     (doseq [t (range 0 10 2)]
       (append-tx! store {:timestamp t :tx-data [(* t t)]}))
@@ -77,7 +83,7 @@
       (is (= {:timestamp t :tx-data [(* t t)]} r)))
     (close store))
 
-  (let [store (ff/tx-store store-name tx-name long-size)]
+  (let [store (tx-store store-name tx-name long-size)]
     (is (= 10 (tx-count store)))
     (is (= {:timestamp 18 :tx-data [324]} (latest store)))
     (doseq [n (range 10) :let [t (* 2 n) r (get-tx store n)]]
@@ -100,7 +106,7 @@
             (.delete d))))
 
 (deftest test-record-store
-  (util/with-cleanup [records #?(:clj (ff/record-store "records" "rec.dat" (* 4 8)))]
+  (util/with-cleanup [records (record-store "records" "rec.dat" (* 4 8))]
     (is (= 0 (next-id records)))
     (doseq [x (range 1000) :let [xx (* x x)]]
       (append! records (vec (range xx (+ xx 4)))))

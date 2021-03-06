@@ -15,12 +15,12 @@
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
 (deftest test-create
-  (let [c1 (create-database "asami:mem://babaco")
-        c2 (create-database "asami:mem://babaco")
-        c3 (create-database "asami:mem://kumquat")
-        c4 (create-database "asami:mem://kumquat")
-        c5 (create-database "asami:multi://kumquat")
-        local-name "asami:local://kumquat"
+  (let [c1 (create-database "asami:mem://papaya")
+        c2 (create-database "asami:mem://papaya")
+        c3 (create-database "asami:mem://cumquat")
+        c4 (create-database "asami:mem://cumquat")
+        c5 (create-database "asami:multi://cumquat")
+        local-name "asami:local://cumquat"
         c6 (create-database local-name)]
     (is c1)
     (is (not c2))
@@ -29,10 +29,10 @@
     (is c5)
     (is c6)
     (is (thrown-with-msg? ExceptionInfo #"Unknown graph URI schema"
-                          (create-database "asami:other://kumquat")))
-    (is (durable/exists? "kumquat"))
+                          (create-database "asami:other://cumquat")))
+    (is (durable/db-exists? "cumquat"))
     (delete-database local-name)
-    (is (not (durable/exists? "kumquat")))))
+    (is (not (durable/db-exists? "cumquat")))))
 
 (deftest test-connect
   (let [c (connect "asami:local://apple")]
@@ -293,34 +293,23 @@
                 {{{s2 :root-id} :spot {p2 :root-id} :post {o2 :root-id} :ospt} :bgraph}]
              (and (= s1 s2) (= p1 p2) (= o1 o2)))]
     
-    (comment
-      (println "DB1'")
-      (println (q '[:find ?e ?a ?v :where [?e ?a ?v]] db1'))
-      (println "DB2")
-      (println (q '[:find ?e ?a ?v :where [?e ?a ?v]] db2))
-      (println "DB3")
-      (println (q '[:find ?e ?a ?v :where [?e ?a ?v]] db3))
-      (println "DB0*'")
-      (println (q '[:find ?e ?a ?v :where [?e ?a ?v]] db0*'))
-      (println "DB1*'")
-      (println (q '[:find ?e ?a ?v :where [?e ?a ?v]] db1*')))
     (is (eq db0 db0'))
     (is (eq db0 db1))
-    (is (eq db2 db1'))   ;;;;;;;;;;;;;;;;
+    (is (eq db2 db1'))
     (is (eq db3 db2'))
     (is (eq db2' db3'))
     (is (eq db0 db0*))
     (is (eq db2 db1*))
     (is (eq db3 db2*))
     (is (= nil db3*))
-    (is (eq db2 db0*'))  ;;;;;;;;;;;;;;;;
-    (is (eq db3 db1*'))  ;;;;;;;;;;;;;;;;
+    (is (eq db2 db0*'))
+    (is (eq db3 db1*'))
     (is (= nil db2*'))
     (is (= nil db3*'))
     (is (eq db3 latest-db))
-    (is (= (set (q '[:find ?name :where [?e :name ?name]] db0))   ;;;;;;;;;;;;;;;;;;;;
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db0))
            #{}))
-    (is (= (set (q '[:find ?name :where [?e :name ?name]] db1))   ;;;;;;;;;;;;;;;;;;;;
+    (is (= (set (q '[:find ?name :where [?e :name ?name]] db1))
            #{}))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db2))
            #{["Maksim"]}))

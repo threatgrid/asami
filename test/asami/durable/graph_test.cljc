@@ -6,7 +6,7 @@
             [asami.durable.store :refer [unpack-tx tx-record-size]]
             [asami.durable.common :refer [latest close get-tx-data commit!]]
             #?(:clj [asami.durable.flat-file :as flat-file])
-            [asami.durable.test-utils :as util]
+            [asami.durable.test-utils :as util :include-macros true]
             #?(:clj [clojure.java.io :as io])
             [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]))
 
@@ -27,7 +27,7 @@
   "Creates a graph with a group name"
   [nm]
   (let [tx-manager #?(:clj (flat-file/tx-store nm "tx.dat" tx-record-size)
-                      :cljc nil)
+                      :cljs nil)
         tx (latest tx-manager)]
     (new-block-graph nm (unpack-tx tx))))
 

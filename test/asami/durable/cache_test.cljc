@@ -65,4 +65,4 @@
       (is (= (lookup cache 4) "four"))
       (is (= (lookup cache 5) "five")))))
 
-#?(:cljs (run-tests))
+#_(:cljs (run-tests))

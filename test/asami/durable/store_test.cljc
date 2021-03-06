@@ -1,7 +1,7 @@
 (ns ^{:doc "Testing the Store API for durable graphs"
       :author "Paula Gearon"}
     asami.durable.store-test
-  (:require [asami.durable.store :refer [exists? create-database]]
+  (:require [asami.durable.store :refer [db-exists? create-database]]
             [asami.storage :refer [db delete-database transact-data as-of as-of-t since since-t graph entity]]
             [asami.graph :refer [resolve-triple]]
             [asami.internal :refer [instant]]
@@ -11,12 +11,12 @@
 
 
 (deftest test-create
-  (let [dbname "empty-db"]
-    (is (not (exists? dbname)))
-    (let [c (create-database dbname)]
-      (is (exists? dbname))
+  (let [db-name "empty-db"]
+    (is (not (db-exists? db-name)))
+    (let [c (create-database db-name)]
+      (is (db-exists? db-name))
       (delete-database c))
-    (is (not (exists? dbname)))))
+    (is (not (db-exists? db-name)))))
 
 
 (def demo-data
@@ -293,7 +293,7 @@
     (common/close @(:grapha conn))
     (common/close (:tx-manager conn))
 
-    (is (exists? dbname))
+    (is (db-exists? dbname))
 
     (let [conn (create-database dbname)
           db3 (db conn)

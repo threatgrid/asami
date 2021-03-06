@@ -21,10 +21,10 @@
 ;; the tree root for the data pool
 (def tx-record-size (* 4 common/long-size))
 
-(def TxRecord {(s/required-key :r-spot) s/Int
-               (s/required-key :r-post) s/Int
-               (s/required-key :r-ospt) s/Int
-               (s/required-key :r-pool) s/Int
+(def TxRecord {(s/required-key :r-spot) (s/maybe s/Int)
+               (s/required-key :r-post) (s/maybe s/Int)
+               (s/required-key :r-ospt) (s/maybe s/Int)
+               (s/required-key :r-pool) (s/maybe s/Int)
                (s/required-key :timestamp) s/Int})
 
 (def TxRecordPacked {(s/required-key :timestamp) s/Int
@@ -33,12 +33,21 @@
 (s/defn pack-tx :- TxRecordPacked
   "Packs a transaction into a vector for serialization"
   [{:keys [r-spot r-post r-ospt r-pool timestamp]} :- TxRecord]
-  {:timestamp timestamp :tx-data [r-spot r-post r-ospt r-pool]})
+  {:timestamp timestamp :tx-data [(or r-spot 0) (or r-post 0) (or r-ospt 0) (or r-pool 0)]})
 
 (s/defn unpack-tx :- TxRecord
   "Unpacks a transaction vector into a structure when deserializing"
   [{[r-spot r-post r-ospt r-pool] :tx-data timestamp :timestamp} :- TxRecordPacked]
-  {:r-spot r-spot :r-post r-post :r-ospt r-ospt :r-pool r-pool :timestamp timestamp})
+  (letfn [(non-zero [v] (and v (when-not (zero? v) v)))]
+    {:r-spot (non-zero r-spot)
+     :r-post (non-zero r-post)
+     :r-ospt (non-zero r-ospt)
+     :r-pool (non-zero r-pool)
+     :timestamp timestamp}))
+
+(s/defn new-db :- TxRecordPacked
+  []
+  {:timestamp (long-time (now)) :tx-data [0 0 0 0]})
 
 (declare ->DurableDatabase)
 
@@ -180,19 +189,22 @@
   (next-tx [this] (common/tx-count tx-manager))
   (db [this] (db* this))
   (delete-database [this] (delete-database* this))
-  (transact-update [this update-fn] (transact-update* this))
+  (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
+
+(s/defn db-exists? :- s/Bool
+  "Tests if this database exists by looking for the transaction file"
+  [store-name :- s/Str]
+   #?(:clj (flat-file/store-exists? store-name tx-name) :cljs nil))
 
 (s/defn create-database :- ConnectionType
   "This opens a connection to an existing database by the name of the location for resources.
   If the database does not exist then it is created."
   [name :- s/Str]
-  (let [tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljc nil)
+  (let [ex (db-exists? name)
+        tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljs nil)
+        _ (when-not ex (common/append-tx! tx-manager (new-db)))
         tx (latest tx-manager)
         block-graph (dgraph/new-block-graph name (and tx (unpack-tx tx)))]
     (->DurableConnection name tx-manager (atom block-graph))))
 
-(s/defn exists? :- s/Bool
-  "Deletes this database"
-  [store-name :- s/Str]
-   #?(:clj (flat-file/store-exists? store-name tx-name) :cljc nil))

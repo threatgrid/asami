@@ -36,16 +36,16 @@
     (case type
       "mem" (memory/new-connection name memory/empty-graph)
       "multi" (memory/new-connection name memory/empty-multi-graph)
-      "local" (durable/create-database name)
+      "local" #?(:clj (durable/create-database name) :cljs (throw (ex-info "Local storage not available" {:reason :cljs})))
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
-(defn- exists?
+(defn- db-exists?
   [uri]
   (let [{:keys [type name]} (parse-uri uri)]
     (case type
       "mem" false
       "multi" false
-      "local" (durable/exists? name)
+      "local" #?(:clj (durable/db-exists? name) :cljs (throw (ex-info "Local storage not available" {:reason :cljs})))
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
 (s/defn create-database :- s/Bool
@@ -80,7 +80,7 @@
       (storage/delete-database conn))
     ;; database not in the connections
     ;; connect to it to free its resources
-    (when (exists? uri)
+    (when (db-exists? uri)
       (if-let [conn (connection-for uri)]
         (storage/delete-database conn)))))
 

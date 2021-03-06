@@ -1,6 +1,7 @@
 (ns ^{:doc "Tests the encoding/decoding operations"
       :author "Paula Gearon"}
     asami.durable.codec-test
+  #?(:cljs (:refer-clojure :exclude [get]))
   (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
             [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id decode-length-node]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
@@ -42,6 +43,8 @@
          (instance? js/Float64Array x)
          #_(instance? js/BigInt64Array x)
          #_(instance? js/BigUint64Array x))))
+
+#?(:cljs (declare get))
 
 ;; TODO: This likely needs to go in a separate file along with many
 ;; of the other helpers in this namespace to provide a platform

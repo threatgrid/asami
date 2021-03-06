@@ -5,18 +5,10 @@
             [asami.durable.block.block-api :refer :all]
             [asami.durable.block.file.block-file :refer :all]
             [asami.durable.block.file.voodoo :as voodoo]
-            [asami.durable.block.file.util :as util])
-  (:import [java.nio.charset Charset]))
+            [asami.durable.block.file.util :as util]
+            [asami.durable.block.test-util :refer [str0 str1 str2 str3 put-string! get-string]]))
 
 (def test-block-size 256)
-
-(def str0 "String in block 0.")
-
-(def str1 "String in block 1.")
-
-(def str2 "String in block 2.")
-
-(def str3 "String in block 3.")
 
 (defn cleanup
   []
@@ -39,19 +31,6 @@
   "Executes the body in a context of an unmanaged block file"
   [filename body]
   `(exec-bf ~filename (fn [bf af] ~@body)))
-
-(def utf8 (Charset/forName "UTF-8"))
-
-(defn put-string! [b s]
-  (let [^bytes bytes (.getBytes s utf8)
-        len (count bytes)]
-    (put-byte! b 0 len)
-    (put-bytes! b 1 len bytes)))
-
-(defn get-string [b]
-  (let [l (get-byte b 0)
-        d (get-bytes b 1 l)]
-    (String. d utf8)))
 
 (deftest test-allocate
   (let [filename (util/temp-file "ualloc")

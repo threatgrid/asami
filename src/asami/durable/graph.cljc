@@ -14,7 +14,7 @@
             [asami.durable.tuples :as tuples]
             #?(:clj [asami.durable.flat-file :as flat-file])
             [zuko.node :as node]
-            [zuko.logging :as log :refer-macros true]))
+            [zuko.logging :as log :include-macros true]))
 
 (def spot-name "eavt.idx")
 (def post-name "avet.idx")
@@ -204,7 +204,7 @@
   (let [spot-index (tuples/create-tuple-index name spot-name r-spot)
         post-index (tuples/create-tuple-index name post-name r-post)
         ospt-index (tuples/create-tuple-index name ospt-name r-ospt)
-        tspo-index (flat-file/record-store name tspo-name tuples/tuple-size-bytes)
+        tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
         data-pool (pool/create-pool name r-pool)]
     (->BlockGraph spot-index post-index ospt-index tspo-index data-pool)))
 

@@ -172,6 +172,15 @@
           [[] pool]
           words))
 
+#?(:cljs
+   (def nodefs (try (js/require "fs") (catch :default _ nil))))
+
+#?(:cljs
+   (defn slurp
+     [filename]
+     (when nodefs
+       (.readFileSync nodefs filename "utf8"))))
+
 (deftest test-words
   (let [book (slurp "test/resources/pride_and_prejudice.txt")
         words (s/split book #"\s")

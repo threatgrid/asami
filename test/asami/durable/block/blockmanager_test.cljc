@@ -3,21 +3,15 @@
     asami.durable.block.blockmanager-test
   (:require [clojure.test :refer [deftest is]]
             [asami.durable.test-utils :refer [get-filename]]
-            [asami.durable.common :refer [close commit! rewind!]]
+            [asami.durable.common :refer [close commit! rewind! long-size]]
             [asami.durable.block.block-api :refer [allocate-block! get-id get-block write-block put-long! get-long]]
             #?(:clj [asami.durable.block.file.block-file :refer [create-managed-block-file get-nr-blocks]])
             #?(:clj [asami.durable.block.file.voodoo :as voodoo])
             #?(:clj [asami.durable.block.file.util :as util])
-            #?(:clj [asami.durable.block.blockfile-test :refer [put-string! get-string str0 str1 str2 str3]]))
+            [asami.durable.block.test-util :refer [put-string! get-string str0 str1 str2 str3]])
   #?(:clj (:import [java.io File])))
 
 (def test-block-size 256)
-
-#?(:cljs
-   (defn get-string [b]))
-
-#?(:cljs
-   (defn put-string! [b s]))
 
 (defn cleanup
   "A windows hack that attempts to prompt the JVM into unmapping unreferenced files"
@@ -104,7 +98,7 @@
         (remove-file filename)))))
 
 (deftest test-performance
-  (let [[filename mbf] (create-block-manager "perftest" Long/BYTES)
+  (let [[filename mbf] (create-block-manager "perftest" long-size)
         nr-blocks 100000]
 
     ;; put numbers in the first 100,000 blocks

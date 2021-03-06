@@ -146,13 +146,14 @@
   ([tree id]
    (get-node tree id nil))
   ([{:keys [block-manager node-cache] :as tree} id parent]
-   (if-let [node (lookup @node-cache id)]
-     (do
-       (swap! node-cache hit id)
-       (assoc node :parent parent))
-     (let [node (->Node (get-block block-manager id) parent)]
-       (swap! node-cache miss id node)
-       node))))
+   (when id
+     (if-let [node (lookup @node-cache id)]
+       (do
+         (swap! node-cache hit id)
+         (assoc node :parent parent))
+       (let [node (->Node (get-block block-manager id) parent)]
+         (swap! node-cache miss id node)
+         node)))))
 
 (defn new-node
   "Returns a new node object"
