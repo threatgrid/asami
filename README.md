@@ -274,8 +274,9 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 
 ## TODO
-- Currently implementing durable storage.
-- More analytics to come!
+- Entity storage and indexing.
+- Transitive attributes in durable storage.
+- ClojureScript durable storage.
 
 ## License
 
