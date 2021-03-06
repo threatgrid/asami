@@ -3,6 +3,7 @@
 An in-memory graph database, for Clojure and ClojureScript.
 
 The latest Alpha version is:
+
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
 The most recent stable version is:
