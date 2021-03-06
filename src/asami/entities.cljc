@@ -2,7 +2,7 @@
             This handles conversion of entities as well as managing updates."
       :author "Paula Gearon"}
     asami.entities
-    (:require [asami.storage :refer [DatabaseType]]
+    (:require [asami.storage :as storage :refer [DatabaseType]]
               [asami.graph :as gr]
               [zuko.util :as util]
               [zuko.node :as node]
@@ -126,9 +126,10 @@
                           (s/one {s/Any s/Any} "ID map of created objects")]
   "Converts a set of transaction data into triples.
   Returns a tuple containing [triples removal-triples tempids]"
-  [{graph :graph :as db} :- DatabaseType
+  [db :- DatabaseType
    data :- [s/Any]]
-  (let [[retractions new-data] (util/divide' #(= :db/retract (first %)) data)
+  (let [graph (storage/graph db)
+        [retractions new-data] (util/divide' #(= :db/retract (first %)) data)
         add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]

@@ -1,4 +1,4 @@
-(ns asami.test-query-internals
+(ns asami.query-internals-test
   "Tests internals of the query portion of the memory storage"
   (:require [asami.planner :refer [Bindings]]
             [asami.core :as core]

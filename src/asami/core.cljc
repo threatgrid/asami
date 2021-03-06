@@ -3,6 +3,7 @@
     asami.core
     (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
               [asami.memory :as memory]
+              [asami.durable.store :as durable]
               [asami.query :as query]
               [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]
@@ -35,7 +36,16 @@
     (case type
       "mem" (memory/new-connection name memory/empty-graph)
       "multi" (memory/new-connection name memory/empty-multi-graph)
-      "local" (throw (ex-info "Local Databases not yet implemented" {:type type :name name}))
+      "local" #?(:clj (durable/create-database name) :cljs (throw (ex-info "Local storage not available" {:reason :cljs})))
+      (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
+
+(defn- db-exists?
+  [uri]
+  (let [{:keys [type name]} (parse-uri uri)]
+    (case type
+      "mem" false
+      "multi" false
+      "local" #?(:clj (durable/db-exists? name) :cljs (throw (ex-info "Local storage not available" {:reason :cljs})))
       (throw (ex-info (str "Unknown graph URI schema" type) {:uri uri :type type :name name})))))
 
 (s/defn create-database :- s/Bool
@@ -70,8 +80,9 @@
       (storage/delete-database conn))
     ;; database not in the connections
     ;; connect to it to free its resources
-    (if-let [conn (connection-for uri)]
-      (storage/delete-database conn))))
+    (when (db-exists? uri)
+      (if-let [conn (connection-for uri)]
+        (storage/delete-database conn)))))
 
 (def Graphable (s/cond-pre GraphType {:graph GraphType}))
 
@@ -150,13 +161,13 @@
                  {:db-before db-before
                   :db-after db-after}))
              (fn []
-               (let [tx-id (count (:history @state))
+               (let [tx-id (storage/next-tx connection)
                      as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
-                     {:keys [graph history] :as db-before} (:db @state)
+                     current-db (storage/db connection)
                      [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
                                                   [tx-triples nil {}]
                                                   ;; capture the old usage which didn't have an arg map
-                                                  (entities/build-triples db-before (or tx-data tx-info)))
+                                                  (entities/build-triples current-db (or tx-data tx-info)))
                      [db-before db-after] (storage/transact-data connection triples removals)]
                  {:db-before db-before
                   :db-after db-after

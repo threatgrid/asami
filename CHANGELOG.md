@@ -1,7 +1,12 @@
 # Change Log
 
 ## [Unreleased]
-Nothing
+### Fixed
+- `count` now de-duplicates, and `count-distinct` introduced.
+
+### Added
+- Projection styles now work on aggregates
+- `count`, `count-distinct` and `sample` can work on wildcards.
 
 ## [1.2.15] - 2021-02-19
 ### Fixed

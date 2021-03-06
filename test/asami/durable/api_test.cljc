@@ -1,10 +1,12 @@
-(ns asami.test-api
-  "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact
+(ns asami.durable.api-test
+  "Tests the public query functionality on the durable store"
+  (:require [asami.core :refer [q show-plan create-database connect db transact delete-database
                                 entity as-of since import-data export-data]]
             [asami.index :as i]
             [asami.multi-graph :as m]
-            [asami.memory :refer [now]]
+            [asami.internal :refer [now]]
+            [asami.durable.store :as durable]
+            [asami.durable.graph]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -13,29 +15,33 @@
   #?(:clj (:import [clojure.lang ExceptionInfo])))
 
 (deftest test-create
-  (let [c1 (create-database "asami:mem://babaco")
-        c2 (create-database "asami:mem://babaco")
-        c3 (create-database "asami:mem://kumquat")
-        c4 (create-database "asami:mem://kumquat")
-        c5 (create-database "asami:multi://kumquat")]
+  (let [c1 (create-database "asami:mem://papaya")
+        c2 (create-database "asami:mem://papaya")
+        c3 (create-database "asami:mem://cumquat")
+        c4 (create-database "asami:mem://cumquat")
+        c5 (create-database "asami:multi://cumquat")
+        local-name "asami:local://cumquat"
+        c6 (create-database local-name)]
     (is c1)
     (is (not c2))
     (is c3)
     (is (not c4))
     (is c5)
-    (is (thrown-with-msg? ExceptionInfo #"Local Databases not yet implemented"
-                          (create-database "asami:local://kumquat")))))
+    (is c6)
+    (is (thrown-with-msg? ExceptionInfo #"Unknown graph URI schema"
+                          (create-database "asami:other://cumquat")))
+    (is (durable/db-exists? "cumquat"))
+    (delete-database local-name)
+    (is (not (durable/db-exists? "cumquat")))))
 
 (deftest test-connect
-  (let [c (connect "asami:mem://apple")
-        cm (connect "asami:multi://banana")]
-    (is (instance? asami.index.GraphIndexed (:graph (:db @(:state c)))))
-    (is (= "apple" (:name c)))
-    (is (instance? asami.multi_graph.MultiGraph (:graph (:db @(:state cm)))))
-    (is (= "banana" (:name cm)))))
+  (let [c (connect "asami:local://apple")]
+    (is (instance? asami.durable.graph.BlockGraph @(:grapha c)))
+    (is (= "apple" (:name c))))
+  (delete-database "asami:local://apple"))
 
 (deftest load-data
-  (let [c (connect "asami:mem://test1")
+  (let [c (connect "asami:local://test1")
         r (transact c {:tx-data [{:db/ident "bobid"
                                   :person/name "Bob"
                                   :person/spouse "aliceid"}
@@ -48,13 +54,13 @@
             set)
        #{"bobid" "aliceid"}))
 
-  (let [c (connect "asami:mem://test2")
+  (let [c (connect "asami:local://test2")
         r (transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
                                  [:db/add :mem/node-2 :property "other"]]})]
 
     (is (= 2 (count (:tx-data @r)))))
 
-  (let [c (connect "asami:mem://test2")
+  (let [c (connect "asami:local://test2")
         maksim {:db/id -1
                 :name  "Maksim"
                 :age   45
@@ -90,7 +96,7 @@
                 (map (partial take 3))
                 set))))
 
-  (let [c (connect "asami:mem://test3")
+  (let [c (connect "asami:local://test3")
         maksim {:db/ident "maksim"
                 :name  "Maksim"
                 :age   45
@@ -126,14 +132,19 @@
                 (map (partial take 3))
                 set))))
 
-  (let [c (connect "asami:mem://test4")
+  (let [c (connect "asami:local://test4")
         r (transact c {:tx-triples [[:mem/node-1 :property "value"]
                                     [:mem/node-2 :property "other"]]})]
 
-    (is (= 2 (count (:tx-data @r))))))
+    (is (= 2 (count (:tx-data @r)))))
+
+  (delete-database "asami:local://test1")
+  (delete-database "asami:local://test2")
+  (delete-database "asami:local://test3")
+  (delete-database "asami:local://test4"))
 
 (deftest test-entity
-  (let [c (connect "asami:mem://test4")
+  (let [c (connect "asami:local://test4")
         maksim {:db/id -1
                 :db/ident :maksim
                 :name  "Maksim"
@@ -172,10 +183,11 @@
     (is (= {:name  #{"Peter" "Pete" "Petrov"}
             :age   25
             :aka ["Peter the Great" ["Petey" "Petie"]]}
-           (entity d three)))))
+           (entity d three))))
+  (delete-database "asami:local://test4"))
 
 (deftest test-entity-arrays
-  (let [c (connect "asami:mem://test4")
+  (let [c (connect "asami:local://test4")
         data {:db/id -1
               :db/ident :home
               :name  "Home"
@@ -189,10 +201,11 @@
     (is (= {:name  "Home"
             :address nil
             :rooms   ["Room 1" nil "Room 2" nil "Room 3"]}
-           (entity d one)))))
+           (entity d one))))
+  (delete-database "asami:local://test4"))
 
 (deftest test-entity-nested
-  (let [c (connect "asami:mem://test4b")
+  (let [c (connect "asami:local://test4b")
         d1 {:db/id -1
             :db/ident "nested-object"
             :name "nested"}
@@ -223,7 +236,8 @@
            (entity d two)))
     (is (= {:name  "Main2"
             :sub   {:name "nested2"}}
-           (entity d two true)))))
+           (entity d two true))))
+  (delete-database "asami:local://test4b"))
 
 (defn sleep [msec]
   #?(:clj
@@ -235,7 +249,7 @@
 (deftest test-as
   (let [t0 (now)
         _ (sleep 100)
-        c (connect "asami:mem://test5")
+        c (connect "asami:local://test5")
         _ (sleep 100)
         t1 (now)
         maksim {:db/id -1
@@ -274,21 +288,25 @@
         db0*' (since latest-db 0)  ;; after first tx
         db1*' (since latest-db 1)  ;; after second tx 
         db2*' (since latest-db 2)  ;; still after second tx
-        db3*' (since latest-db 3)] ;; still after second tx
-    (is (= db0 db0'))
-    (is (= db0 db1))
-    (is (= db2 db1'))
-    (is (= db3 db2'))
-    (is (= db2' db3'))
-    (is (= db0 db0*))
-    (is (= db2 db1*))
-    (is (= db3 db2*))
+        db3*' (since latest-db 3)  ;; still after second tx
+        eq (fn [{{{s1 :root-id} :spot {p1 :root-id} :post {o1 :root-id} :ospt} :bgraph}
+                {{{s2 :root-id} :spot {p2 :root-id} :post {o2 :root-id} :ospt} :bgraph}]
+             (and (= s1 s2) (= p1 p2) (= o1 o2)))]
+    
+    (is (eq db0 db0'))
+    (is (eq db0 db1))
+    (is (eq db2 db1'))
+    (is (eq db3 db2'))
+    (is (eq db2' db3'))
+    (is (eq db0 db0*))
+    (is (eq db2 db1*))
+    (is (eq db3 db2*))
     (is (= nil db3*))
-    (is (= db2 db0*'))
-    (is (= db3 db1*'))
+    (is (eq db2 db0*'))
+    (is (eq db3 db1*'))
     (is (= nil db2*'))
     (is (= nil db3*'))
-    (is (= db3 latest-db))
+    (is (eq db3 latest-db))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db0))
            #{}))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db1))
@@ -296,10 +314,11 @@
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db2))
            #{["Maksim"]}))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db3))
-           #{["Maksim"] ["Anna"]}))))
+           #{["Maksim"] ["Anna"]})))
+  (delete-database "asami:local://test5"))
 
 (deftest test-update
-  (let [c (connect "asami:mem://test6")
+  (let [c (connect "asami:local://test6")
         maksim {:db/id -1
                 :db/ident :maksim
                 :name  "Maksim"
@@ -330,10 +349,11 @@
     (is (= (set (q '[:find ?name :where [?e :db/ident :anna] [?e :name ?name]] db2))
            #{["Anne"]}))
     (is (= (set (q '[:find ?aka :where [?e :name "Maksim"] [?e :aka ?a] [?a :tg/contains ?aka]] db3))
-           #{["Maks Otto von Stirlitz"]}))))
+           #{["Maks Otto von Stirlitz"]})))
+  (delete-database "asami:local://test6"))
 
 (deftest test-append
-  (let [c (connect "asami:mem://test7")
+  (let [c (connect "asami:local://test7")
         maksim {:db/id -1
                 :db/ident :maksim
                 :name  "Maksim"
@@ -365,11 +385,12 @@
     (is (= (set (q '[:find ?friend :where [?e :name "Anna"] [?e :friend ?f] [?f :tg/contains ?friend]] db2))
            #{["Peter"]}))
     (is (= {:name "Anna" :age #{31 32} :aka ["Anitzka" "Annie" "Anne"] :friend ["Peter"] :husband {:db/ident :maksim}}
-           (entity db2 :anna)))))
+           (entity db2 :anna))))
+  (delete-database "asami:local://test7"))
 
 (deftest test-filter-function
   (testing "filter function is constructed properly"
-    (let [conn (connect "asami:mem://test8")]
+    (let [conn (connect "asami:local://test8")]
       (deref (transact conn {:tx-data [{:movie/title "Explorers"
                                         :movie/genre "adventure/comedy/family"
                                         :movie/release-year 1985}
@@ -388,7 +409,8 @@
                   :where [[?m :movie/title ?name]
                           [?m :movie/genre ?genre]
                           [(re-find #"comedy|animation" ?genre)]]}
-                (db conn)))))))
+                (db conn)))))
+    (delete-database "asami:local://test8")))
 
 (def transitive-data
     [{:db/id -1 :name "Washington Monument"}
@@ -407,8 +429,8 @@
      [:db/add -6 :is-in -7]
      [:db/add -7 :is-in -8]])
 
-(deftest test-transitive
-  (let [c (connect "asami:mem://test8")
+#_(deftest test-transitive
+  (let [c (connect "asami:local://test8")
         tx (transact c {:tx-data transitive-data})
         d (:db-after @tx)]
     (is (=
@@ -428,11 +450,12 @@
               :where [[?e :name "Washington Monument"]
                       [?e :is-in+ ?e2]
                       [?e2 :name ?name]]} d)
-         ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))))
+         ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"])))
+  (delete-database "asami:local://test8"))
 
 ;; tests both the show-plan function and the options
 (deftest test-plan
-  (let [c (connect "asami:mem://test9")
+  (let [c (connect "asami:local://test9")
         {d :db-after :as tx} @(transact c {:tx-data transitive-data})
         p1 (show-plan '[:find [?name ...]
                          :where [?e :name "Washington Monument"]
@@ -458,10 +481,11 @@
                        [?e2 :name ?name]]}))
     (is (= p3 '{:plan [[?e2 :name ?name]
                        [?e :is-in ?e2]
-                       [?e :name "Washington Monument"]]}))))
+                       [?e :name "Washington Monument"]]})))
+  (delete-database "asami:local://test9"))
 
 (deftest test-plan-with-opt
-  (let [c (connect "asami:mem://test10")
+  (let [c (connect "asami:local://test10")
         {d :db-after :as tx} @(transact c {:tx-data [{:movie/title "Explorers"
                                                       :movie/genre "adventure/comedy/family"
                                                       :movie/release-year 1985}
@@ -482,7 +506,8 @@
                         :where [?m :movie/title ?name]
                         [?m :movie/release-year 1995]
                         (optional [?m :movie/sequel ?sequel])] d)]
-    (is (= p1 '{:plan ([?m :movie/release-year 1995] (optional [?m :movie/sequel ?sequel]) [?m :movie/title ?name])}))))
+    (is (= p1 '{:plan ([?m :movie/release-year 1995] (optional [?m :movie/sequel ?sequel]) [?m :movie/title ?name])})))
+  (delete-database "asami:local://test10"))
 
 (def opt-data
   [{:db/ident "austen"
@@ -501,7 +526,7 @@
     :name "Shelley, Mary"}])
 
 (deftest test-optional
-  (let [c (connect "asami:mem://test10")
+  (let [c (connect "asami:local://test10")
         {d :db-after :as tx} @(transact c {:tx-data opt-data})
         rx (q '[:find ?name ?t
                 :where [?a :name ?name]
@@ -532,11 +557,12 @@
              ["Austen, Jane" "Emma"]
              ["Brontë, Charlotte" "Jane Eyre"]
              ["Shelley, Mary" nil]}
-           (set r2)))))
+           (set r2))))
+  (delete-database "asami:local://test10"))
 
 (deftest test-explicit-default-graph
   (testing "explicity default graph"
-    (let [conn (connect "asami:mem://test11")]
+    (let [conn (connect "asami:local://test11")]
       (deref (transact conn {:tx-data [{:movie/title "Explorers"
                                         :movie/genre "adventure/comedy/family"
                                         :movie/release-year 1985}]}))
@@ -545,7 +571,8 @@
                   :in [$]
                   :where [[?m :movie/title ?name]
                           [?m :movie/release-year 1985]]}
-                  (db conn)))))))
+                (db conn)))))
+    (delete-database "asami:local://test11")))
 
 (def raw-data
   [[:tg/node-10511 :db/ident "charles"]
@@ -562,19 +589,21 @@
 
 (deftest test-import-export
   (testing "Loading raw data"
-    (let [conn (connect "asami:mem://test12")
+    (let [conn (connect "asami:local://test12")
           {d :db-after} @(import-data conn raw-data)]
       (is (= #{[:tg/node-10511 "Charles"]
                [:tg/node-10513 "Jane"]}
              (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
       (is (= (set raw-data)
              (set (export-data (db conn))))))
-    (let [conn (connect "asami:mem://test13")
+    (let [conn (connect "asami:local://test13")
           {d :db-after} @(import-data conn (str raw-data))]
       (is (= #{[:tg/node-10511 "Charles"]
                [:tg/node-10513 "Jane"]}
              (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
       (is (= (set raw-data)
-             (set (export-data (db conn))))))))
+             (set (export-data (db conn))))))
+    (delete-database "asami:local://test12")
+    (delete-database "asami:local://test13")))
 
-#?(:cljs (run-tests))
+#_(:cljs (run-tests))

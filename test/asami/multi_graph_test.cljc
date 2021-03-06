@@ -1,4 +1,4 @@
-(ns asami.test-multi-graph
+(ns asami.multi-graph-test
   #?(:clj
      (:require [asami.graph :refer [resolve-pattern count-pattern]]
                [asami.multi-graph :refer [empty-multi-graph multi-graph-add]]

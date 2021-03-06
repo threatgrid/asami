@@ -1,4 +1,4 @@
-(ns asami.test-memory-index
+(ns asami.memory-index-test
   #?(:clj
      (:require [asami.graph :refer [graph-add resolve-pattern count-pattern]]
                [asami.index :refer [empty-graph]]

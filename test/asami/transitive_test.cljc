@@ -1,4 +1,4 @@
-(ns asami.test-transitive
+(ns asami.transitive-test
   "Tests internals of the query portion of the memory storage"
   (:require
             [asami.graph :refer [Graph graph-add resolve-pattern]]

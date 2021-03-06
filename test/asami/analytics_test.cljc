@@ -1,4 +1,4 @@
-(ns asami.test-analytics
+(ns asami.analytics-test
   "Tests analytics functions"
   (:require
             [asami.graph :refer [Graph graph-add resolve-triple]]
