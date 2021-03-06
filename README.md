@@ -2,7 +2,7 @@
 
 An in-memory graph database, for Clojure and ClojureScript.
 
-The latest [Alpha version](/threatgrid/asami/wiki/Asami-2) is:
+The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is:
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
