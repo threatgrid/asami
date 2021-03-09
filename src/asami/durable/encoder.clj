@@ -2,7 +2,10 @@
       :author "Paula Gearon"}
     asami.durable.encoder
     (:require [clojure.string :as s]
-              [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8]])
+              [asami.graph :as graph]
+              [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8
+                                           long-type-mask date-type-mask inst-type-mask
+                                           sstr-type-mask skey-type-mask node-type-mask]])
     (:import [clojure.lang Keyword BigInt]
              [java.io RandomAccessFile]
              [java.math BigInteger BigDecimal]
@@ -74,22 +77,6 @@
   (body [this] "Returns a byte array containing the encoded data")
   (encapsulate-id [this] "Returns an ID that encapsulates the type"))
 
-;; Encapsualted IDs are IDs containing all of the information without requiring additional storage
-;; The data type is contained in the top 4 bits. The remaining 60 bit hold the data:
-;; Top 4 bits:
-;; 1 0 0 0: long
-;; 1 1 0 0: Date
-;; 1 0 1 0: Instant
-;; 1 1 1 0: Short String
-;; 1 0 0 1: Short Keyword
-;; 1 0 1 1: Internal Node
-
-(def ^:const long-type-mask -0x8000000000000000) ;; 0x8000000000000000
-(def ^:const date-type-mask -0x4000000000000000) ;; 0xC000000000000000
-(def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
-(def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
-(def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
-(def ^:const node-type-mask -0x5000000000000000) ;; 0xB000000000000000
 (def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
 (def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
 
@@ -236,7 +223,15 @@
       (.getBytes (str this) utf8)
       (if-let [[_ encoder] (type-code this)]
         (encoder this))))
-  (encapsulate-id [this] nil))
+  (encapsulate-id [this] nil)
+
+  asami.graph.InternalNode
+  (header [this len]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (body [this]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (encapsulate-id [this]
+    (bit-or node-type-mask (bit-and data-mask (.id this)))))
 
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"

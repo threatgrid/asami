@@ -11,6 +11,7 @@
              #^{:static true} [tempid [Object long] Object]
              #^{:static true} [tempid [] Object]])
   (:require [asami.core :as core]
+            [asami.graph :as graph]
             [asami.storage :as storage]))
 
 (defn -connect
@@ -42,7 +43,7 @@
 
 (defn -tempid
   "Generates a temporary internal ID"
-  ([])
+  ([] (graph/new-node))
   ([connection] (storage/new-node connection))
   ([connection id]
    (let [id-for (fn [m i]

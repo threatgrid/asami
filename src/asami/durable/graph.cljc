@@ -176,11 +176,11 @@
 
   Closeable
   (close [this]
-    (doseq [resource (vals this)]
+    (doseq [resource [spot post ospt tspo pool]]
       (close resource)))
 
   (delete! [this]
-    (doseq [resource (vals this)]
+    (doseq [resource [spot post ospt tspo pool]]
       (delete! resource))))
 
 (defn graph-at

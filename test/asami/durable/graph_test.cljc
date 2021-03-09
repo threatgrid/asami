@@ -1,7 +1,7 @@
 (ns ^{:doc "Testing the block graph integration"
       :author "Paula Gearon"}
     asami.durable.graph-test
-  (:require [asami.graph :refer [resolve-triple graph-transact]]
+  (:require [asami.graph :refer [resolve-triple graph-transact new-node]]
             [asami.durable.graph :refer [graph-at new-block-graph]]
             [asami.durable.store :refer [unpack-tx tx-record-size]]
             [asami.durable.common :refer [latest close get-tx-data commit!]]
@@ -28,8 +28,10 @@
   [nm]
   (let [tx-manager #?(:clj (flat-file/tx-store nm "tx.dat" tx-record-size)
                       :cljs nil)
-        tx (latest tx-manager)]
-    (new-block-graph nm (unpack-tx tx))))
+        tx (latest tx-manager)
+        counter (atom 0)
+        node-allocator (fn [] (new-node (swap! counter inc)))]
+    (new-block-graph nm (unpack-tx tx) node-allocator)))
 
 (deftest test-new-graph
   (let [n "testdata-new"]
