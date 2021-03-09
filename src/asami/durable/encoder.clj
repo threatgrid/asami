@@ -25,7 +25,8 @@
    UUID (byte 11)
    :blob (byte 12)
    :xsd (byte 13)
-   :pojo (byte 14)})
+   :pojo (byte 14)
+   :internal (byte 15)})
 
 (def
   registered-xsd-types
@@ -81,12 +82,14 @@
 ;; 1 0 1 0: Instant
 ;; 1 1 1 0: Short String
 ;; 1 0 0 1: Short Keyword
+;; 1 0 1 1: Internal Node
 
 (def ^:const long-type-mask -0x8000000000000000) ;; 0x8000000000000000
 (def ^:const date-type-mask -0x4000000000000000) ;; 0xC000000000000000
 (def ^:const inst-type-mask -0x6000000000000000) ;; 0xA000000000000000
 (def ^:const sstr-type-mask -0x2000000000000000) ;; 0xE000000000000000
 (def ^:const skey-type-mask -0x7000000000000000) ;; 0x9000000000000000
+(def ^:const node-type-mask -0x5000000000000000) ;; 0xB000000000000000
 (def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
 (def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
 

@@ -84,6 +84,11 @@
       (if-let [conn (connection-for uri)]
         (storage/delete-database conn)))))
 
+(s/defn get-database-names
+  "Returns a seq of database names that this instance is aware of."
+  []
+  (keys @connections))
+
 (def Graphable (s/cond-pre GraphType {:graph GraphType}))
 
 (defn ^:private as-graph
