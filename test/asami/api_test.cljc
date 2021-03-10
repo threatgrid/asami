@@ -133,6 +133,36 @@
 
     (is (= 2 (count (:tx-data @r))))))
 
+(deftest test-retractions
+  (let [c (connect "asami:mem://testr")
+        {d :db-after} @(transact c {:tx-data [{:db/ident "bobid"
+                                               :person/name "Bob"
+                                               :person/spouse "aliceid"}
+                                              {:db/ident "aliceid"
+                                               :person/name "Alice"
+                                               :person/spouse "bobid"}]})
+        bob (entity d "bobid")
+        alice (entity d "aliceid")]
+    (is (= {:person/name "Bob" :person/spouse "aliceid"} bob))
+    (is (= {:person/name "Alice" :person/spouse "bobid"} alice))
+    (let [id (q '[:find ?id . :where [?id :db/ident "bobid"]] d)
+          {d :db-after} @(transact c {:tx-data [[:db/retract id :person/spouse "aliceid"]]})
+          bob (entity d "bobid")
+          alice (entity d "aliceid")]
+      (is (= {:person/name "Bob"} bob))
+      (is (= {:person/name "Alice" :person/spouse "bobid"} alice))))
+
+  (let [c (connect "asami:mem://testr2")
+        r @(transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
+                                  [:db/add :mem/node-2 :property "other"]]})]
+    (is (= 2 (count (:tx-data r))))
+    (is (= 2 (count (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r)))))
+    (let [r2 @(transact c {:tx-data [[:db/retract :mem/node-1 :property "value"]
+                                     [:db/retract :mem/node-1 :property "missing"]]})]
+      (is (= 2 (count (:tx-data r2))))
+      (is (= [[:mem/node-2 :property "other"]]
+             (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2)))))))
+
 (deftest test-entity
   (let [c (connect "asami:mem://test4")
         maksim {:db/id -1

@@ -129,7 +129,8 @@
   [db :- DatabaseType
    data :- [s/Any]]
   (let [graph (storage/graph db)
-        [retractions new-data] (util/divide' #(= :db/retract (first %)) data)
+        [retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
+        retractions (mapv #(subvec % 1 4) retract-stmts)
         add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
@@ -145,5 +146,5 @@
                                    [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
                            [(conj acc (mapv #(ids % %) (rest obj))) racc ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
-        [triples rtriples id-map] (reduce add-triples [[] (vec retractions) {}] new-data)]
+        [triples rtriples id-map] (reduce add-triples [[] retractions {}] new-data)]
     [triples rtriples id-map]))
