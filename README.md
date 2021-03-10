@@ -2,7 +2,10 @@
 
 A graph database, for Clojure and ClojureScript.
 
-The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is:
+The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is :
+```
+[org.clojars.quoll/asami "2.0.0-alpha3"]
+```
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
@@ -10,7 +13,7 @@ Please see [the Wiki for details](https://github.com/threatgrid/asami/wiki/Asami
 
 The most recent stable version is:
 ```
-[org.clojars.quoll/asami "1.2.15"]
+[org.clojars.quoll/asami "1.2.16"]
 ```
 
 Asami is a _schemaless_ database, meaning that data may be inserted with no predefined schema. This flexibility has advantages and disadvantages. It is easier to load and evolve data over time without a schema. However, functionality like upsert and basic integrity checking is not available in the same way as with a graph with a predefined schema.
@@ -37,7 +40,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "1.2.15"}
+    org.clojars.quoll/asami {:mvn/version "1.2.16"}
   }
 }
 ```
