@@ -1,6 +1,9 @@
 # Change Log
 
 ## [Unreleased]
+No changes.
+
+## [2.0.0-alpha3]
 ### Fixed
 - Fixed bug that ignored :db/retract statements.
 
@@ -146,7 +149,9 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha3...HEAD
+[2.0.0-alpha3]: https://github.com/threatgrid/asami/compare/2.0.0-alpha2...2.0.0-alpha3
+[2.0.0-alpha2]: https://github.com/threatgrid/asami/compare/2.0.0-alpha...2.0.0-alpha2
 [2.0.0-alpha]: https://github.com/threatgrid/asami/compare/1.2.14...2.0.0-alpha
 [1.2.15]: https://github.com/threatgrid/asami/compare/1.2.14...1.2.15
 [1.2.14]: https://github.com/threatgrid/asami/compare/1.2.13...1.2.14
