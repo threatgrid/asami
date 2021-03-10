@@ -1,5 +1,9 @@
 # Change Log
 
+## [Unreleased]
+### Fixed
+- Fixed bug that ignored :db/retract statements.
+
 ## [2.0.0-alpha2]
 ### Added
 - Internal node type. This avoids the need for interning keywords as nodes.
