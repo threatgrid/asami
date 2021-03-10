@@ -1,8 +1,9 @@
 (ns asami.api-test
   "Tests the public query functionality"
   (:require [asami.core :refer [q show-plan create-database connect db transact
-                                entity as-of since import-data export-data]]
+                                entity as-of since import-data export-data delete-database]]
             [asami.index :as i]
+            [asami.graph :as graph]
             [asami.multi-graph :as m]
             [asami.internal :refer [now]]
             [schema.core :as s]
@@ -560,6 +561,18 @@
    [:tg/node-10513 :name "Jane"]
    [:tg/node-10513 :home :tg/node-10512]])
 
+(def io-entities
+  [{:db/ident "charles"
+    :name "Charles"
+    :home {:db/ident "scarborough"
+           :town "Scarborough"
+           :county "Yorkshire"}}
+   {:db/ident "jane"
+    :name "Jane"
+    :home {:db/ident "scarborough"}}])
+
+(defn node [id] (asami.graph.InternalNode. id))
+
 (deftest test-import-export
   (testing "Loading raw data"
     (let [conn (connect "asami:mem://test12")
@@ -575,6 +588,30 @@
                [:tg/node-10513 "Jane"]}
              (set (q '[:find ?e ?n :where [?e :name ?n]] d))))
       (is (= (set raw-data)
-             (set (export-data (db conn))))))))
+             (set (export-data (db conn)))))))
+  (testing "Loading entities durably"
+    (let [[db-io db-new] #?(:clj ["asami:local://test-io" "asami:local://new-io"]
+                            :cljs ["asami:mem://test-io" "asami:mem://new-io"])
+          conn (connect db-io)
+          {d :db-after} @(transact conn {:tx-data io-entities})
+          r (set (q '[:find ?e ?n :where [?e :name ?n]] d))]
+      #?(:clj
+         (is (= #{[(node 1) "Charles"] [(node 3) "Jane"]} r))
+         :cljs
+         (do
+           (is (= #{"Charles" "Jane"} (set (map second r))))
+           (is (every? graph/node-type? (map first r)))))
+      (let [serialized (pr-str (export-data (db conn)))
+            new-conn (connect db-new)
+            {d2 :db-after} @(import-data new-conn serialized)
+            r2 (set (q '[:find ?e ?n :where [?e :name ?n]] d2))]
+        #?(:clj
+           (is (= #{[(node 1) "Charles"] [(node 3) "Jane"]} r2))
+           :cljs
+           (do
+             (is (= #{"Charles" "Jane"} (set (map second r2))))
+             (is (every? graph/node-type? (map first r2))))))
+      (delete-database db-io)
+      (delete-database db-new))))
 
 #?(:cljs (run-tests))

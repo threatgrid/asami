@@ -2,7 +2,8 @@
       :author "Paula Gearon"}
     asami.graph
   (:require [schema.core :as s :include-macros true]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            #?(:cljs [cljs.reader :as reader]))
   #?(:clj (:import [java.io Writer])))
 
 
@@ -62,6 +63,8 @@
       :cljs (long s))))
 
 (def node-reader {'a/n node-read})
+
+#?(:cljs (swap! reader/*tag-table* assoc 'a/n node-read))
 
 ;; common implementations of the NodeAPI functions
 (def tg-ns "tg")

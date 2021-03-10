@@ -153,7 +153,8 @@
   (close tx-manager)
   (delete! tx-manager)
   #?(:clj (when-let [d (io/file name)]
-            (.delete d))))
+            (.delete d))
+     :cljs true))
 
 (s/defn release*
   "Closes the transaction manager, and the graph, which will recursively close all resources"

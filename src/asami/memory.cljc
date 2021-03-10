@@ -61,7 +61,7 @@
   (get-name [this] name)
   (next-tx [this] (next-tx* this))
   (db [this] (db* this))
-  (delete-database [this]) ;; no-op for memory databases
+  (delete-database [this] true) ;; no-op for memory databases
   (release [this]) ;; no-op for memory databases
   (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this asserts retracts] (transact-data* this asserts retracts)))

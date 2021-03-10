@@ -227,6 +227,6 @@
   Accepts either a seq of tuples, or an EDN string which contains a seq of tuples"
   [connection data]
   (let [statements (if (string? data)
-                     (edn/read-string data)
+                     (edn/read-string {:readers gr/node-reader} data)
                      data)]
     (transact connection {:tx-triples statements})))
