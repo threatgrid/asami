@@ -18,36 +18,43 @@
 (def tx-name "tx.dat")
 
 ;; transactions contain tree roots for the 3 tree indices,
-;; the tree root for the data pool
-(def tx-record-size (* 4 common/long-size))
+;; the tree root for the data pool,
+;; the internal node counter
+(def tx-record-size (* 5 common/long-size))
 
 (def TxRecord {(s/required-key :r-spot) (s/maybe s/Int)
                (s/required-key :r-post) (s/maybe s/Int)
                (s/required-key :r-ospt) (s/maybe s/Int)
                (s/required-key :r-pool) (s/maybe s/Int)
+               (s/required-key :nodes) s/Int
                (s/required-key :timestamp) s/Int})
 
 (def TxRecordPacked {(s/required-key :timestamp) s/Int
-                     (s/required-key :tx-data) [s/Int]})
+                     (s/required-key :tx-data) [(s/one s/Int "spot root id")
+                                                (s/one s/Int "post root id")
+                                                (s/one s/Int "ospt root id")
+                                                (s/one s/Int "pool root id")
+                                                (s/one s/Int "node id counter")]})
 
 (s/defn pack-tx :- TxRecordPacked
   "Packs a transaction into a vector for serialization"
-  [{:keys [r-spot r-post r-ospt r-pool timestamp]} :- TxRecord]
-  {:timestamp timestamp :tx-data [(or r-spot 0) (or r-post 0) (or r-ospt 0) (or r-pool 0)]})
+  [{:keys [r-spot r-post r-ospt r-pool nodes timestamp]} :- TxRecord]
+  {:timestamp timestamp :tx-data [(or r-spot 0) (or r-post 0) (or r-ospt 0) (or r-pool 0) nodes]})
 
 (s/defn unpack-tx :- TxRecord
   "Unpacks a transaction vector into a structure when deserializing"
-  [{[r-spot r-post r-ospt r-pool] :tx-data timestamp :timestamp} :- TxRecordPacked]
+  [{[r-spot r-post r-ospt r-pool nodes] :tx-data timestamp :timestamp} :- TxRecordPacked]
   (letfn [(non-zero [v] (and v (when-not (zero? v) v)))]
     {:r-spot (non-zero r-spot)
      :r-post (non-zero r-post)
      :r-ospt (non-zero r-ospt)
      :r-pool (non-zero r-pool)
+     :nodes nodes
      :timestamp timestamp}))
 
 (s/defn new-db :- TxRecordPacked
   []
-  {:timestamp (long-time (now)) :tx-data [0 0 0 0]})
+  {:timestamp (long-time (now)) :tx-data [0 0 0 0 0]})
 
 (declare ->DurableDatabase)
 
@@ -163,7 +170,7 @@
 
 (s/defn transact-update* :- DBsBeforeAfter
   "Updates a graph according to a provided function. This will be done in a new, single transaction."
-  [{:keys [tx-manager grapha] :as connection} :- ConnectionType
+  [{:keys [tx-manager grapha nodea] :as connection} :- ConnectionType
    update-fn :- UpdateFunction]
   ;; keep a reference of what the data looks like now
   (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
@@ -176,6 +183,7 @@
         ;; get the metadata (tree roots) for all the transactions
         new-timestamp (long-time (now))
         tx (assoc (common/get-tx-data graph-after)
+                  :nodes @nodea
                   :timestamp new-timestamp)]
     ;; save the transaction metadata
     (common/append-tx! tx-manager (pack-tx tx))
@@ -192,8 +200,9 @@
    retracts :- [Triple]]
   (transact-update* connection (fn [graph tx-id] (graph/graph-transact graph tx-id asserts retracts))))
 
-(defrecord DurableConnection [name tx-manager grapha]
+(defrecord DurableConnection [name tx-manager grapha nodea]
   storage/Connection
+  (get-name [this] name)
   (next-tx [this] (common/tx-count tx-manager))
   (db [this] (db* this))
   (delete-database [this] (delete-database* this))
@@ -214,6 +223,10 @@
         tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljs nil)
         _ (when-not ex (common/append-tx! tx-manager (new-db)))
         tx (latest tx-manager)
-        block-graph (dgraph/new-block-graph name (and tx (unpack-tx tx)))]
-    (->DurableConnection name tx-manager (atom block-graph))))
+        unpacked-tx (and tx (unpack-tx tx))
+        node-ct (get :nodes unpacked-tx 0)
+        node-counter (atom node-ct)
+        node-allocator (fn [] (graph/new-node (swap! node-counter inc)))
+        block-graph (dgraph/new-block-graph name unpacked-tx node-allocator)]
+    (->DurableConnection name tx-manager (atom block-graph) node-counter)))
 

@@ -5,6 +5,7 @@
                  :cljs [schema.core :as s :include-macros true])))
 
 (defprotocol Connection
+  (get-name [this] "Retrieves the name of the database")
   (next-tx [this] "Returns the next transaction ID that this connection will use")
   (db [this] "Retrieves the latest database from this connection")
   (delete-database [this] "Removes all resources for a given connection")

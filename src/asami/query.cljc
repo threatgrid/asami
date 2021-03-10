@@ -9,7 +9,7 @@
               [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
-              [asami.sandbox :as sandbox]
+              [zuko.sandbox :as sandbox]
               [zuko.projection :as projection]
               [zuko.util :refer [fn-for]]
               [zuko.logging :as log :include-macros true]
@@ -183,7 +183,8 @@
   [s :- s/Symbol]
   (when (or *override-restrictions*
             (if-let [n (namespace s)]
-              (and (= n "clojure.core") (sandbox/allowed-fns (symbol (name s))))
+              (and (#{"clojure.core" "cljs.core" "clojure.string"} n)
+                   (sandbox/allowed-fns (symbol (name s))))
               (sandbox/allowed-fns s)))
     (fn-for s)))
 

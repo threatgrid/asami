@@ -2,7 +2,8 @@
       :author "Paula Gearon"}
     asami.durable.codec-test
   #?(:cljs (:refer-clojure :exclude [get]))
-  (:require [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
+  (:require [asami.durable.codec :as codec]
+            [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
             [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id decode-length-node]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
@@ -231,7 +232,7 @@
 
 #?(:clj
    (deftest test-string-encapsulation
-     (let [ess #(encoder/encapsulate-sstr % encoder/sstr-type-mask)]
+     (let [ess #(encoder/encapsulate-sstr % codec/sstr-type-mask)]
        (is (= (ess "")        -0x2000000000000000))  ;; 0xE000000000000000
        (is (= (ess "a")       -0x1E9F000000000000))  ;; 0xE161000000000000
        (is (= (ess "at")      -0x1D9E8C0000000000))  ;; 0xE261740000000000

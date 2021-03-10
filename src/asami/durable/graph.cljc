@@ -71,7 +71,7 @@
 
 (declare ->BlockGraph)
 
-(defrecord BlockGraph [spot post ospt tspo pool]
+(defrecord BlockGraph [spot post ospt tspo pool node-allocator]
   graph/Graph
   (new-graph
     [this]
@@ -89,7 +89,7 @@
               new-ospt (write-tuple! ospt [o s p stmt-id])
               sid (append! tspo [tx-id s p o])]
           (assert (= stmt-id sid))
-          (->BlockGraph new-spot new-post new-ospt tspo new-pool))
+          (->BlockGraph new-spot new-post new-ospt tspo new-pool node-allocator))
         ;; The statement already existed. The pools SHOULD be identical, but check in case they're not
         (if (identical? pool new-pool)
           this
@@ -106,7 +106,7 @@
                (let [[new-post] (delete-tuple! post [p o s t])
                      [new-ospt] (delete-tuple! ospt [o s p t])]
                  ;; the statement stays in tspo
-                 (->BlockGraph new-spot new-post new-ospt tspo pool)))))))
+                 (->BlockGraph new-spot new-post new-ospt tspo pool node-allocator)))))))
      this))
 
   (graph-transact
@@ -144,7 +144,7 @@
   node/NodeAPI
   (data-attribute [_ _] :tg/first)
   (container-attribute [_ _] :tg/contains)
-  (new-node [_] (graph/new-node))
+  (new-node [_] (node-allocator))
   (node-id [_ n] (graph/node-id n))
   (node-type? [_ _ n] (graph/node-type? n))
   (find-triple [this [e a v]] (graph/resolve-triple this e a v))
@@ -156,7 +156,7 @@
           ospt* (rewind! ospt)
           ;; tspo does not currently rewind
           pool* (rewind! pool)]
-      (->BlockGraph spot* post* ospt* tspo pool*)))
+      (->BlockGraph spot* post* ospt* tspo pool* node-allocator)))
 
   (commit! [this]
     (let [spot* (commit! spot)
@@ -164,7 +164,7 @@
           ospt* (commit! ospt)
           ;; tspo does not currently commit
           pool* (commit! pool)]
-      (->BlockGraph spot* post* ospt* tspo pool*)))
+      (->BlockGraph spot* post* ospt* tspo pool* node-allocator)))
 
 
   TxData
@@ -176,35 +176,36 @@
 
   Closeable
   (close [this]
-    (doseq [resource (vals this)]
+    (doseq [resource [spot post ospt tspo pool]]
       (close resource)))
 
   (delete! [this]
-    (doseq [resource (vals this)]
+    (doseq [resource [spot post ospt tspo pool]]
       (delete! resource))))
 
 (defn graph-at
   "Returns a graph based on another graph, but with different set of index roots. This returns a historical graph.
   graph: The graph to base this on. The same index references will be used.
   new-tx: An unpacked transaction, containing each of the tree roots for the indices."
-  [{:keys [spot post ospt tspo pool] :as graph}
+  [{:keys [spot post ospt tspo pool node-allocator] :as graph}
    {:keys [r-spot r-post r-ospt r-pool] :as new-tx}]
   (->BlockGraph (tuples-at spot r-spot)
                 (tuples-at post r-post)
                 (tuples-at ospt r-ospt)
                 tspo
-                pool))
+                pool
+                node-allocator))
 
 (defn new-block-graph
   "Creates a new BlockGraph object, under a given name. If the resources for that name exist, then they are opened.
   If the resources do not exist, then they are created.
   name: the label of the location for the graph resources.
   tx: The transaction record for this graph."
-  [name {:keys [r-spot r-post r-ospt r-pool]}]
+  [name {:keys [r-spot r-post r-ospt r-pool]} node-allocator]
   (let [spot-index (tuples/create-tuple-index name spot-name r-spot)
         post-index (tuples/create-tuple-index name post-name r-post)
         ospt-index (tuples/create-tuple-index name ospt-name r-ospt)
         tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
         data-pool (pool/create-pool name r-pool)]
-    (->BlockGraph spot-index post-index ospt-index tspo-index data-pool)))
+    (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator)))
 
