@@ -1,10 +1,23 @@
 # Change Log
 
-## [Unreleased]
+## [2.0.0-alpha2]
+### Added
+- Internal node type. This avoids the need for interning keywords as nodes.
+- Added the `asami.Peer` class. This is very early access.
+
+### Changed
+- Updated to Zuko 0.4.4. This shifts the function whitelist into Zuko, and reduces the number of functions referenced in ClojureScript.
+- Added functions for `and` and `or`.
+
+### Fixed
+- Functions from `clojure.string` can now be accessed in Clojure.
+
+## [2.0.0-alpha]
 ### Fixed
 - `count` now de-duplicates, and `count-distinct` introduced.
 
 ### Added
+- Durability layer, implemented over files.
 - Projection styles now work on aggregates
 - `count`, `count-distinct` and `sample` can work on wildcards.
 

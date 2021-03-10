@@ -6,13 +6,15 @@
   :dependencies [[org.clojure/clojure "1.10.2"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/zuko "0.4.3-SNAPSHOT"]
+                 [org.clojars.quoll/zuko "0.4.4"]
                  [org.clojure/data.priority-map "1.0.0"]]
   :plugins [[lein-cljsbuild "1.1.8"]]
   :profiles {
     :dev {
       :dependencies [[org.clojure/clojurescript "1.10.773"]
-                     [tailrecursion/cljs-priority-map "1.2.1"]]}}
+                     [tailrecursion/cljs-priority-map "1.2.1"]]}
+    :uberjar {
+      :aot [asami.peer]}}
   :cljsbuild {
     :builds {
       :dev

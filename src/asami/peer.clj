@@ -12,6 +12,8 @@
              #^{:static true} [tempid [] Object]])
   (:require [asami.core :as core]
             [asami.graph :as graph]
+            [asami.storage :as storage]
+            [zuko.node :refer [new-node]]
             [asami.storage :as storage]))
 
 (defn -connect
@@ -19,19 +21,19 @@
   [^String uri]
   (core/connect uri))
 
-(defn -createDatabase ^Boolean
+(defn -createDatabase
   "Creates a database described in the uri"
-  [^String uri]
+  ^Boolean [^String uri]
   (core/create-database uri))
 
-(defn -deleteDatabase ^Boolean
+(defn -deleteDatabase
   "Removes a database of the given uri"
-  [^String uri]
+  ^Boolean [^String uri]
   (core/delete-database uri))
 
-(defn -getDatabaseNames ^java.util.List
+(defn -getDatabaseNames
   "Retrieves the names of the known databases"
-  []
+  ^java.util.List []
   (core/get-database-names))
 
 (defn -q
@@ -44,11 +46,11 @@
 (defn -tempid
   "Generates a temporary internal ID"
   ([] (graph/new-node))
-  ([connection] (storage/new-node connection))
+  ([connection] (new-node (storage/graph (storage/db connection))))
   ([connection id]
    (let [id-for (fn [m i]
                   (if (contains? m i)
                     m
-                    (assoc m i (storage/new-node connection))))
-         ident (str (storage/name connection) id)]
+                    (assoc m i (-tempid connection))))
+         ident (str (storage/get-name connection) id)]
      (get (swap! ids id-for ident) ident))))
