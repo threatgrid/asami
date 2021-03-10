@@ -1,9 +1,12 @@
 # asami [![Build Status](https://travis-ci.org/threatgrid/asami.svg?branch=main)](https://travis-ci.org/threatgrid/asami) [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
 
-An in-memory graph database, for Clojure and ClojureScript.
+A graph database, for Clojure and ClojureScript.
 
-The latest Alpha version is:
+The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is:
+
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
+
+Please see [the Wiki for details](https://github.com/threatgrid/asami/wiki/Asami-2).
 
 The most recent stable version is:
 ```
@@ -76,7 +79,7 @@ Once a repl has been configured for Asami, the following can be copy/pasted to t
 
 @(d/transact conn {:tx-data first-movies})
 ```
-The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other paramters are to be provided, or just as a raw sequence without the wrapping map.
+The [`transact`](https://github.com/threatgrid/asami/wiki/Asami-API#transact) operation returns an object that can be _dereferenced_ (via `clojure.core/deref` or the `@` macro) to provide information about the state of the database before and after the transaction. (A _future_ in Clojure, or a _delay_ in ClojureScript). Note that the transaction data can be provided as the `:tx-data` in a map object if other parameters are to be provided, or just as a raw sequence without the wrapping map.
 
 For more information about loading data and executing `transact` see the [Transactions documentation](https://github.com/threatgrid/asami/wiki/Transactions).
 
@@ -90,7 +93,7 @@ With the data loaded, a database value can be retrieved from the database and th
 (d/q '[:find ?movie-title
        :where [?m :movie/title ?movie-title]] db)
 ```
-This returns the a sequence of results, with each result being a sequence of the selected vars in the `:find` clause (just `?movie-title` in this case):
+This returns a sequence of results, with each result being a sequence of the selected vars in the `:find` clause (just `?movie-title` in this case):
 ```
 (["Explorers"]
  ["Demolition Man"]
@@ -152,7 +155,7 @@ Addressing nodes by their internal ID can be cumbersome. They can also be addres
 (def sense (get (:tempids @tx) "sense"))
 (d/entity (d/db conn) sense)
 ```
-This returns the new movie. The `:db/ident` attribute does not appeaer in the entity:
+This returns the new movie. The `:db/ident` attribute does not appear in the entity:
 ```clojure
 #:movie{:title "Sense and Sensibility", :genre "drama/romance", :release-year 1996}
 ```
@@ -271,8 +274,9 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 
 ## TODO
-- Currently implementing durable storage.
-- More analytics to come!
+- Entity storage and indexing.
+- Transitive attributes in durable storage.
+- ClojureScript durable storage.
 
 ## License
 
