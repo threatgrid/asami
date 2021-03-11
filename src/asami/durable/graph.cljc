@@ -12,7 +12,7 @@
                                                      close delete! append! next-id]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
-            [asami.durable.resolver :as resolver :refer [get-from-index]]
+            [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
             #?(:clj [asami.durable.flat-file :as flat-file])
             [zuko.node :as node]
             [zuko.logging :as log :include-macros true]))
@@ -85,7 +85,7 @@
             (if plain-pred
               (when-let [p (get-id plain-pred)]
                 (log/trace "transitive resolving [" s " " p " " o "]")
-                (get-transitive-from-index this trans-tag s plain-pred o))
+                (get-transitive-from-index this trans-tag s p o))
               (when-let [p (get-id pred)]
                 (log/trace "resolving [" s " " p " " o "]")
                 (get-from-index this s p o))))))))

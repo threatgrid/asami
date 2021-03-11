@@ -52,26 +52,39 @@
   (map #(mapv (partial find-object dp) (take 3 %))
        (find-tuple idx [])))
 
+(defn zero-step
+  "Prepend a zero step value if the tag requests it"
+  [tag pool zero result]
+  (if (= :star tag)
+    (let [z [(find-object pool zero)]]
+      (cons z result))
+    result))
+
 (defmulti get-transitive-from-index
   "Lookup an index in the graph for the requested data, and returns all data where the required predicate
    is a transitive relationship. Unspecified predicates extend across the graph.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  trans-simplify)
+  common-index/trans-simplify)
 
-(defn get-o
-  [idx s p]
-  (find-tuple idx [s p]))
+(defn get-single-from-index
+  [idx data-pool tag st p srch]
+  (loop [seen? #{} starts [st] result []]
+    (let [step (for [st' starts n (map #(nth % 2) (find-tuple idx (srch st'))) :when (not (seen? n))] n)]
+      (if (empty? step)
+        (->> result
+             (map (fn [x] [(find-object data-pool x)]))
+             (zero-step tag data-pool st))
+        (recur (into seen? step) step (concat result step))))))
 
 ;; follows a predicate transitively from a node
 (defmethod get-transitive-from-index [:v :v  ?]
-  [{idx :spot dp :pool :as graph} tag s p o]
-  (loop [seen? #{} starts [s] result []]
-    (let [step (for [s' starts o (get-in idx [s' p]) :when (not (seen? o))] o)]
-      (if (empty? step)
-        (->> result
-             (map (fn [[o]] (v2 dp o)))
-             (common-index/zero-step tag [s]))
-        (recur (into seen? step) step (concat result step))))))
+  [{idx :spot pool :pool :as graph} tag s p o]
+  (get-single-from-index idx pool tag s p (fn [s'] [s' p])))
+
+;; finds all transitive paths that end at a node
+(defmethod get-transitive-from-index [ ? :v :v]
+  [{idx :post pool :pool :as graph} tag s p o]
+  (get-single-from-index idx pool tag o p (fn [o'] [p o'])))
 
 (defmethod get-transitive-from-index :default
   [graph tag s p o]
