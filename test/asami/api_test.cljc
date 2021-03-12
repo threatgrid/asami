@@ -165,15 +165,25 @@
 
 (deftest test-assertions-retractions-using-lookup-refs
   (let [c (connect "asami:mem://testlr")
-        {d :db-after} @(transact c {:tx-data [{:db/ident "bobid"
+        {d :db-after} @(transact c {:tx-data [{:db/id -1
+                                               :db/ident "bobid"
                                                :person/name "Bob"
-                                               :person/age 42}]})
-        bob (entity d "bobid")]
+                                               :person/age 42}
+                                              {:db/ident "bettyid"
+                                               :person/name "Betty"
+                                               :person/age 43
+                                               :person/friend [:db/id -1]}]})
+        bob (entity d "bobid")
+        betty (entity d "bettyid" true)]
     (is (= {:person/name "Bob" :person/age 42} bob))
+    (is (= {:person/name "Betty" :person/age 43 :person/friend bob} betty))
     (let [{d :db-after} @(transact c {:tx-data [[:db/add [:db/ident "bobid"] :person/street "First Street"]
-                                                [:db/retract [:db/ident "bobid"] :person/age 42]]})
-          bob (entity d "bobid")]
-      (is (= {:person/street "First Street" :person/name "Bob"} bob))))  )
+                                                [:db/retract [:db/ident "bobid"] :person/age 42]
+                                                [:db/retract [:db/ident "bettyid"] :person/friend [:db/ident "bobid"]]]})
+          bob (entity d "bobid")
+          betty (entity d "bettyid")]
+      (is (= {:person/street "First Street" :person/name "Bob"} bob))
+      (is (= {:person/name "Betty" :person/age 43} betty)))))
 
 (deftest test-entity
   (let [c (connect "asami:mem://test4")

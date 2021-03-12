@@ -104,7 +104,7 @@
               [new-obj removals append-triples]))
           [obj nil nil])]
     (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)
-          ;; if updates occurred new new entity statements are redundant
+          ;; if updates occurred new entity statements are redundant
           triples (if (or (seq removals) (seq additions) (not (identical? obj new-obj)))
                     (remove #(= :tg/entity (second %)) triples)
                     triples)]
@@ -143,7 +143,7 @@
   (let [graph (storage/graph db)
         [retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
         ref->id (partial resolve-lookup-refs graph)
-        retractions (mapv (partial mapv ref->id) retract-stmts)
+        retractions (mapv (comp (partial mapv ref->id) rest) retract-stmts)
         add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
