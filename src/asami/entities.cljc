@@ -143,7 +143,7 @@
   (let [graph (storage/graph db)
         [retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
         ref->id (partial resolve-lookup-refs graph)
-        retractions (mapv #(into [(ref->id (second %))] (subvec % 2 4)) retract-stmts)
+        retractions (mapv (partial mapv ref->id) retract-stmts)
         add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
