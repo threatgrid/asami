@@ -163,6 +163,28 @@
       (is (= [[:mem/node-2 :property "other"]]
              (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2)))))))
 
+(deftest test-assertions-retractions-using-lookup-refs
+  (let [c (connect "asami:mem://testlr")
+        {d :db-after} @(transact c {:tx-data [{:db/id -1
+                                               :db/ident "bobid"
+                                               :person/name "Bob"
+                                               :person/age 42}
+                                              {:db/ident "bettyid"
+                                               :person/name "Betty"
+                                               :person/age 43
+                                               :person/friend [:db/id -1]}]})
+        bob (entity d "bobid")
+        betty (entity d "bettyid" true)]
+    (is (= {:person/name "Bob" :person/age 42} bob))
+    (is (= {:person/name "Betty" :person/age 43 :person/friend bob} betty))
+    (let [{d :db-after} @(transact c {:tx-data [[:db/add [:db/ident "bobid"] :person/street "First Street"]
+                                                [:db/retract [:db/ident "bobid"] :person/age 42]
+                                                [:db/retract [:db/ident "bettyid"] :person/friend [:db/ident "bobid"]]]})
+          bob (entity d "bobid")
+          betty (entity d "bettyid")]
+      (is (= {:person/street "First Street" :person/name "Bob"} bob))
+      (is (= {:person/name "Betty" :person/age 43} betty)))))
+
 (deftest test-entity
   (let [c (connect "asami:mem://test4")
         maksim {:db/id -1
@@ -303,7 +325,7 @@
         db2* (since latest-db t2)  ;; after second tx
         db3* (since latest-db t3)  ;; well after second tx
         db0*' (since latest-db 0)  ;; after first tx
-        db1*' (since latest-db 1)  ;; after second tx 
+        db1*' (since latest-db 1)  ;; after second tx
         db2*' (since latest-db 2)  ;; still after second tx
         db3*' (since latest-db 3)] ;; still after second tx
     (is (= db0 db0'))

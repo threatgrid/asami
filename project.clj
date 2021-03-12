@@ -1,4 +1,4 @@
-(defproject org.clojars.quoll/asami "2.0.0-alpha3"
+(defproject org.clojars.quoll/asami "2.0.0-alpha4-SNAPSHOT"
   :description "An in memory graph store for Clojure and ClojureScript"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.2"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "0.8.2"]
-                 [org.clojars.quoll/zuko "0.4.5"]
+                 [org.clojars.quoll/zuko "0.4.6"]
                  [org.clojure/data.priority-map "1.0.0"]]
   :plugins [[lein-cljsbuild "1.1.8"]]
   :profiles {
