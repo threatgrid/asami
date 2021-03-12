@@ -121,15 +121,8 @@
   [i]
   (and (number? i) (neg? i)))
 
-(defn- lookup-ref?
-  "Tests if i is a lookup ref"
-  [i]
-  (and (vector? i)
-       (keyword? (first i))
-       (= 2 (count i))))
-
 (defn resolve-lookup-refs [graph i]
-  (if (lookup-ref? i)
+  (if (writer/lookup-ref? i)
     (ffirst (gr/resolve-triple graph '?r (first i) (second i)))
     i))
 
