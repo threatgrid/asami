@@ -163,6 +163,18 @@
       (is (= [[:mem/node-2 :property "other"]]
              (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2)))))))
 
+(deftest test-assertions-retractions-using-lookup-refs
+  (let [c (connect "asami:mem://testlr")
+        {d :db-after} @(transact c {:tx-data [{:db/ident "bobid"
+                                               :person/name "Bob"
+                                               :person/age 42}]})
+        bob (entity d "bobid")]
+    (is (= {:person/name "Bob" :person/age 42} bob))
+    (let [{d :db-after} @(transact c {:tx-data [[:db/add [:db/ident "bobid"] :person/street "First Street"]
+                                                [:db/retract [:db/ident "bobid"] :person/age 42]]})
+          bob (entity d "bobid")]
+      (is (= {:person/street "First Street" :person/name "Bob"} bob))))  )
+
 (deftest test-entity
   (let [c (connect "asami:mem://test4")
         maksim {:db/id -1
@@ -303,7 +315,7 @@
         db2* (since latest-db t2)  ;; after second tx
         db3* (since latest-db t3)  ;; well after second tx
         db0*' (since latest-db 0)  ;; after first tx
-        db1*' (since latest-db 1)  ;; after second tx 
+        db1*' (since latest-db 1)  ;; after second tx
         db2*' (since latest-db 2)  ;; still after second tx
         db3*' (since latest-db 3)] ;; still after second tx
     (is (= db0 db0'))

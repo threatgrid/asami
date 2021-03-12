@@ -121,6 +121,18 @@
   [i]
   (and (number? i) (neg? i)))
 
+(defn- lookup-ref?
+  "Tests if i is a lookup ref"
+  [i]
+  (and (vector? i)
+       (keyword? (first i))
+       (= 2 (count i))))
+
+(defn resolve-lookup-refs [graph i]
+  (if (lookup-ref? i)
+    (ffirst (gr/resolve-triple graph '?r (first i) (second i)))
+    i))
+
 (s/defn build-triples :- [(s/one [Triple] "Data to be asserted")
                           (s/one [Triple] "Data to be retracted")
                           (s/one {s/Any s/Any} "ID map of created objects")]
@@ -130,7 +142,8 @@
    data :- [s/Any]]
   (let [graph (storage/graph db)
         [retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
-        retractions (mapv #(subvec % 1 4) retract-stmts)
+        ref->id (partial resolve-lookup-refs graph)
+        retractions (mapv (partial mapv ref->id) retract-stmts)
         add-triples (fn [[acc racc ids] obj]
                       (if (map? obj)
                         (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
@@ -139,12 +152,12 @@
                                  (= 4 (count obj))
                                  (= :db/add (first obj)))
                           (or
-                           (if (= (nth obj 2) :db/id)
+                           (when (= (nth obj 2) :db/id)
                              (let [id (nth obj 3)]
-                               (if (temp-id? id)
+                               (when (temp-id? id)
                                  (let [new-id (or (ids id) (node/new-node graph))]
                                    [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
-                           [(conj acc (mapv #(ids % %) (rest obj))) racc ids])
+                           [(conj acc (mapv #(or (ids %) (ref->id %)) (rest obj))) racc ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
         [triples rtriples id-map] (reduce add-triples [[] retractions {}] new-data)]
     [triples rtriples id-map]))
