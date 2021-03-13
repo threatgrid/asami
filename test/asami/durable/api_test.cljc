@@ -449,7 +449,7 @@
      {:db/id -2 :name "National Mall"}
      {:db/id -3 :name "Washington, DC"}
      {:db/id -4 :name "USA"}
-     {:db/id -5 :name "Earth"}
+     {:db/id -5 :name "Earth" :db/ident "earth"}
      {:db/id -6 :name "Solar System"}
      {:db/id -7 :name "Orion-Cygnus Arm"}
      {:db/id -8 :name "Milky Way Galaxy"}
@@ -462,7 +462,7 @@
      [:db/add -7 :is-in -8]])
 
 (deftest test-transitive
-  (let [c (connect "asami:local://test8")
+  (let [c (connect "asami:local://testt")
         {{wm -1 nm -2 wd -3 us -4 ea -5 ss -6 oc -7 mw -8} :tempids
          d :db-after} @(transact c {:tx-data transitive-data})]
     (is (=
@@ -479,6 +479,43 @@
            [mw oc ss ea us wd nm wm]))
     (is (= (q {:find '[[?e ...]] :where [['?e :is-in+ mw]]} d)
            [oc ss ea us wd nm wm]))
+    (is (= (set (q {:find '[?a ?v] :where [[ea '?a* '?v]]} d))
+           #{[:is-in "Solar System"]
+             [:is-in "Orion-Cygnus Arm"]
+             [:is-in "Milky Way Galaxy"]
+             [:is-in ss]
+             [:is-in oc]
+             [:is-in mw]
+             [:is-in true]
+             [:is-in ea]
+             [:db/ident "earth"]
+             [:db/ident ea]
+             [:name "Earth"]      
+             [:name ea]
+             [:tg/entity true]
+             [:tg/entity ea]}))
+    (is (= (set (q {:find '[?a ?v] :where [[ea '?a+ '?v]]} d))
+           #{[:is-in "Solar System"]
+             [:is-in "Orion-Cygnus Arm"]
+             [:is-in "Milky Way Galaxy"]
+             [:is-in ss]
+             [:is-in oc]
+             [:is-in mw]
+             [:is-in true]
+             [:db/ident "earth"]
+             [:name "Earth"]      
+             [:tg/entity true]}))
+    (is (= (set (q {:find '[?e ?a] :where [['?e '?a* ea]]} d))
+           #{[us :is-in]
+             [wd :is-in]
+             [nm :is-in]
+             [wm :is-in]
+             [ea :is-in]}))
+    (is (= (set (q {:find '[?e ?a] :where [['?e '?a+ ea]]} d))
+           #{[us :is-in]
+             [wd :is-in]
+             [nm :is-in]
+             [wm :is-in]}))
     #_(is (=
            (q '{:find [[?name ...]]
                 :where [[?e :name "Washington Monument"]
@@ -491,7 +528,7 @@
                         [?e :is-in+ ?e2]
                         [?e2 :name ?name]]} d)
            ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"])))
-  (delete-database "asami:local://test8"))
+  (delete-database "asami:local://testt"))
 
 ;; tests both the show-plan function and the options
 (deftest test-plan
