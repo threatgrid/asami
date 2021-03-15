@@ -1,8 +1,7 @@
 (ns ^{:doc "The implements the Graph over durable storage"
       :author "Paula Gearon"}
     asami.durable.graph
-  (:require [asami.storage :as storage]
-            [asami.graph :as graph]
+  (:require [asami.graph :as graph]
             [asami.internal :refer [now instant? long-time]]
             [asami.common-index :as common-index :refer [?]]
             [asami.durable.common :as common :refer [TxData Transaction Closeable
@@ -30,6 +29,8 @@
     [this]
     (throw (ex-info "Cannot create a new graph without new storage parameters" {:type "BlockGraph"})))
 
+  (graph-add [this subj pred obj]
+    (throw (ex-info "Transaction info is required for durable graphs" {:operation :graph-add})))
   (graph-add
     [this subj pred obj tx-id]
     (let [[s new-pool] (write! pool subj)

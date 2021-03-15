@@ -77,6 +77,8 @@
 
   Graph
   (new-graph [this] empty-graph)
+  (graph-add [this subj pred obj]
+    (graph-add this subj pred obj gr/*default-tx-id*))
   (graph-add [this subj pred obj tx]
     (log/trace "insert " [subj pred obj tx])
     (let [new-spo (index-add spo subj pred obj)]
