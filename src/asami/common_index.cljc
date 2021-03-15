@@ -179,23 +179,25 @@ and multigraph implementations."
   (let [object-sets-fn (lowest-level-sets-fn graph)
         object-set-fn (lowest-level-set-fn graph)
         s-idx (idx s)
-        starred (= :star tag)]
+        starred (= :star tag)
+        knowns (if starred #{s} #{})]
     (for [pred (keys s-idx)
           obj (let [objs (object-set-fn (s-idx pred))
-                    down-from (reduce (partial downstream-from idx object-sets-fn) (set objs) objs)]
-                (concat objs (if starred (conj down-from s) down-from)))]
+                    down-from (reduce (partial downstream-from idx object-sets-fn) knowns objs)]
+                (concat objs down-from))]
       [pred obj])))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :osp pos :pos :as graph} tag s p o]
   (let [get-subjects (lowest-level-fn graph)
-        starred (= :star tag)]
-  (for [pred (keys pos)
-        subj (let [subjs (get-subjects (get-in pos [pred o]))
-                   up-from (reduce (partial upstream-from idx) (set subjs) subjs)]
-               (concat subjs (if starred (conj up-from o) up-from)))]
-    [subj pred])))
+        starred (= :star tag)
+        knowns (if starred #{o} #{})]
+    (for [pred (keys pos)
+          subj (let [subjs (get-subjects (get-in pos [pred o]))
+                     up-from (and (seq subjs) (reduce (partial upstream-from idx) knowns subjs))]
+                 (concat subjs up-from))]
+      [subj pred])))
 
 ;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]

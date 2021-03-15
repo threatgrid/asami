@@ -98,50 +98,49 @@
                 (stream-from n))))]  ;; go to the next step for each node
     (stream-from initial-node)))
 
+
+(defn transitive-from
+  "Steps out from a provided node either forwards or backwards, to the next nodes in the required direction.
+  idx: The index to use for lookups in the required direction
+  pool: The datapool to turn local nodes (numbers) into global nodes (values)
+  tag: Indicates is the transitive operation is * or +
+  x: The starting node. A subject when going downstream, or an object when going upstream.
+  tproject: A function for projecting tuples of predicates and the next node from x.
+  ypos: The position in the index of the next nodes in the required direction.
+        subjects when starting at an object, and objects when starting at a subject.
+  rproject: A function for projecting the final result as a vector in the expected order for the operation."
+  [idx pool tag x tproject ypos rproject]
+  (let [f-obj (partial find-object pool)
+        x-val (f-obj x)
+        starred (= :star tag) ;; was the transitive operation * or +
+        tuples (map tproject (find-tuple idx [x]))
+        ;; the following includes state, but this is in order to stay relatively lazy
+        all-pred (volatile! {})
+        knowns (volatile! #{})]
+    (for [[pred y] tuples
+          y' (do
+               (when-not (@all-pred pred) ;; when the predicate changes
+                 (vreset! knowns #{y}) ;; start with a fresh set of known nodes
+                 (vswap! all-pred assoc pred (f-obj pred))) ;; remember the new predicate & its global form
+               ;; accumulate all nodes up/down-stream from the object node
+               (*stream-from (fn [x] (into #{} (map #(nth % ypos) (find-tuple idx [x]))))
+                             knowns y)
+               ;; extract the accumulated nodes. Add the zero-step node if needed
+               (conj (if starred (conj @knowns x) @knowns) y))]
+      ;; emit the global forms of the predicate and each object
+      (rproject (@all-pred pred) (f-obj y')))))
+
 ;; entire graph from a node
 ;; the predicates returned are the first step in the path
 ;; consider the entire path, as per the [:v ? :v] function
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spot pool :pool :as graph} tag s p o]
-  (let [f-obj (partial find-object pool)
-        s-val (f-obj s)
-        starred (= :star tag)  ;; was the transitive operation * or +
-        s-tuples (map #(subvec % 1 3) (find-tuple idx [s]))
-        ;; the following includes state, but this is in order to stay relatively lazy
-        all-pred (volatile! {})
-        knowns (volatile! #{})]
-    (for [[pred obj] s-tuples
-          obj' (do
-                 (when-not (@all-pred pred)  ;; when the predicate changes
-                   (vreset! knowns #{obj})   ;; start with a fresh set of known nodes
-                   (vswap! all-pred assoc pred (f-obj pred)))  ;; remember the new predicate & its global form
-                 ;; accumulate all nodes downstream from the object node
-                 (*stream-from (fn [x] (into #{} (map #(nth % 2) (find-tuple idx [x]))))
-                               knowns obj)
-                 ;; extract the accumulated nodes. Add the zero-step node if needed
-                 (conj (if starred (conj @knowns s) @knowns) obj))]
-      ;; emit the global forms of the predicate and each object
-      [(@all-pred pred) (f-obj obj')])))
+  (transitive-from idx pool tag s #(subvec % 1 3) 2 vector))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :ospt pos :pos pool :pool :as graph} tag s p o]
-  (let [f-obj (partial find-object pool)
-        o-val (f-obj o)
-        starred (= :star tag)
-        o-tuples (map #(subvec % 1 3) (find-tuple idx [o]))
-        ;; the following includes state, but this is in order to stay relatively lazy
-        all-pred (volatile! {})
-        knowns (volatile! #{})]
-    (for [[subj pred] o-tuples
-          subj' (do
-                  (when-not (@all-pred pred)
-                    (vreset! knowns #{subj})
-                    (vswap! all-pred assoc pred (f-obj pred)))
-                  (*stream-from (fn [x] (into #{} (map #(nth % 1) (find-tuple idx [x]))))
-                                knowns subj)
-                  (conj (if starred (conj @knowns o) @knowns) subj))]
-      [(f-obj subj') (@all-pred pred)])))
+  (transitive-from idx pool tag o (fn [[_ s p]] [p s]) 1 (fn [pr sb] [sb pr])))
 
 
 (defmethod get-transitive-from-index :default

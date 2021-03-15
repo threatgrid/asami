@@ -41,9 +41,9 @@
     (is (= #{[:b] [:a]} r2))
     (is (= #{[:c] [:b] [:a]} r2'))
     (is (= #{[:p1 :b] [:p1 :c]} r3))
-    (is (= #{[nil :a] [:p1 :b] [:p1 :c]} r3'))
+    (is (= #{[:p1 :a] [:p1 :b] [:p1 :c]} r3'))
     (is (= #{[:b :p1] [:a :p1]} r4))
-    (is (= #{[:c nil] [:b :p1] [:a :p1]} r4'))
+    (is (= #{[:c :p1] [:b :p1] [:a :p1]} r4'))
     (is (= #{[:p1 :b] [:p1 :c]} r5))
     (is (= #{[:b :p1] [:a :p1]} r6))))
 
@@ -92,17 +92,17 @@
     (is (= #{[:c] [:b] [:a]} r2))
     (is (= #{[:e] [:c] [:b] [:a]} r2'))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3))
-    (is (= #{[nil :a] [:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3'))
+    (is (= #{[:p1 :a] [:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3'))
     (is (= #{[:c :p1] [:b :p1] [:a :p1]} r4))
-    (is (= #{[:e nil] [:c :p1] [:b :p1] [:a :p1]} r4'))
+    (is (= #{[:e :p1] [:c :p1] [:b :p1] [:a :p1]} r4'))
     (is (= #{[:c] [:d] [:e] [:f]} r5))
     (is (= #{[:b] [:c] [:d] [:e] [:f]} r5'))
     (is (= #{[:b] [:a]} r6))
     (is (= #{[:c] [:b] [:a]} r6'))
     (is (= #{[:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r7))
-    (is (= #{[nil :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r7'))
+    (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r7'))
     (is (= #{[:b :p1] [:a :p1]} r8))
-    (is (= #{[:c nil] [:b :p1] [:a :p1]} r8'))))
+    (is (= #{[:c :p1] [:b :p1] [:a :p1]} r8'))))
 
 (deftest test-branch
   (let [g (assert-data empty-graph simple-branch-data)
@@ -153,17 +153,22 @@
     (is (= #{[:c] [:b]} r2))
     (is (= #{[:e] [:c] [:b]} r2'))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3))
-    (is (= #{[nil :a] [:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3'))
+    (is (= #{[:p1 :a] [:p1 :b] [:p1 :c] [:p1 :d] [:p1 :e] [:p1 :f]} r3'))
     (is (= #{[:c :p2] [:b :p2] [:a :p2]} r4))
-    (is (= #{[:e nil] [:c :p2] [:b :p2] [:a :p2]} r4'))
+    (is (= #{[:e :p2] [:c :p2] [:b :p2] [:a :p2]} r4'))
     (is (= #{[:c] [:d]} r5))
     (is (= #{[:b] [:c] [:d]} r5'))
     (is (= #{[:b] [:a]} r6))
     (is (= #{[:c] [:b] [:a]} r6'))
     (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e] [:p1 :f]} r7))
-    (is (= #{[nil :b] [:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e] [:p1 :f]} r7'))
+    (is (= #{[:p1 :b] [:p2 :b] [:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e] [:p1 :f]} r7'))
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8))
-    (is (= #{[:c nil] [:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8'))))
+    (is (= #{[:c :p1] [:c :p2] [:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8'))))
+
+(deftest test-dbb
+  (let [g (assert-data empty-graph dbl-branch-data)
+        r4' (unordered-resolve g '[?x ?p* :e])]
+    (is (= #{[:e :p2] [:c :p2] [:b :p2] [:a :p2]} r4'))))
 
 (deftest test-dbl-branch
   (let [g (assert-data empty-graph dbl-branch-data)
@@ -204,9 +209,9 @@
     (is (= #{[:c] [:b] [:a]} r2))
     (is (= #{[:c] [:b] [:a]} r2'))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :a]} r3))
-    (is (= #{[:p1 :b] [:p1 :c] [nil :a]} r3'))
+    (is (= #{[:p1 :b] [:p1 :c] [:p1 :a]} r3'))
     (is (= #{[:c :p1] [:b :p1] [:a :p1]} r4))
-    (is (= #{[:c :p1] [:b :p1] [:a nil]} r4'))))
+    (is (= #{[:c :p1] [:b :p1] [:a :p1]} r4'))))
 
 (deftest test-loop
   (let [g (assert-data empty-graph simple-loop-data)
@@ -261,9 +266,9 @@
     (is (= #{[:c] [:b] [:e]} r2))
     (is (= #{[:c] [:b] [:e]} r2'))
     (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :a] [:p1 :e] [:p1 :f]} r3))
-    (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [nil :a] [:p1 :e] [:p1 :f]} r3'))
+    (is (= #{[:p1 :b] [:p1 :c] [:p1 :d] [:p1 :a] [:p1 :e] [:p1 :f]} r3'))
     (is (= #{[:c :p2] [:b :p2] [:a :p2] [:e :p2] [:d :p2]} r4))
-    (is (= #{[:c :p2] [:b :p2] [:a :p2] [:e nil] [:d :p2]} r4'))
+    (is (= #{[:c :p2] [:b :p2] [:a :p2] [:e :p2] [:d :p2]} r4'))
     (is (= #{[:c] [:d] [:a] [:b]} r5))
     (is (= #{[:c] [:d] [:a] [:b]} r5'))
     (is (= #{[:b] [:a] [:d]} r6))
@@ -271,11 +276,11 @@
     (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
              [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f] [:p1 :a] [:p2 :a]} r7))
     (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e]
-             [nil :b] [:p1 :f] [:p1 :a]} r7'))
+             [:p1 :b] [:p2 :b] [:p1 :f] [:p1 :a]} r7'))
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2] [:d :p1] [:d :p2]
              [:c :p1] [:c :p2] [:e :p1] [:e :p2]} r8))
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2] [:d :p1] [:d :p2]
-             [:c nil] [:e :p1] [:e :p2]} r8'))))
+             [:c :p1] [:c :p2] [:e :p1] [:e :p2]} r8'))))
 
 (deftest test-dbl-branch-loop
   (let [g (assert-data empty-graph dbl-branch-loop-data)
