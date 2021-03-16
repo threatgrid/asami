@@ -1,7 +1,9 @@
 (ns ^{:doc "Handles resolving patterns on a graph"
       :author "Paula Gearon"}
     asami.durable.resolver
-  (:require [asami.common-index :as common-index :refer [?]]
+  (:require [asami.graph :refer [broad-node-type?]]
+            [asami.common-index :as common-index :refer [?]]
+            [asami.durable.decoder :as decoder]
             [asami.durable.common :as common :refer [find-tuple find-object]]
             [clojure.set :as set]))
 
@@ -159,7 +161,7 @@
 ;; This result is in-memory. It can be done with lazy joins, but will be significantly slower
 ;; Revist this is scalability becomes an issue
 (defmethod get-transitive-from-index [ ? :v  ?]
-  [{idx :post :as graph} tag s p o]
+  [{idx :post pool :pool :as graph} tag s p o]
   (let [os-pairs (map project-after-first (find-tuple idx [p]))
         result-index (loop [result (ordered-collect os-pairs)]
                        (let [next-result (common-index/step-by-predicate result)]
@@ -167,15 +169,20 @@
                          (if (= next-result result)
                            result
                            (recur next-result))))]
-    (for [s' (keys result-index) o' (result-index s')]
-      [s' o'])))
+    (for [s' (keys result-index) :let [gs (find-object pool s')] o' (result-index s')]
+      [gs (find-object pool o')])))
 
 ;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
-  [{idx :spot :as graph} tag s p o]
-  (letfn [(edges-from [n] ;; finds all property/value pairs from an entity
-            (map project-after-first (find-tuple idx [n])))]
-    (common-index/get-path-between idx edges-from tag s o)))
+  [{idx :spot pool :pool :as graph} tag s p o]
+  (let [edges-from (fn [n] ;; finds all property/value pairs from an entity
+                     (map project-after-first (find-tuple idx [n])))
+        node-type? (fn [n] (or (decoder/encapsulated-node? n)
+                               (broad-node-type? (find-object pool n))))
+        [path] (common-index/get-path-between idx edges-from node-type? tag s o)]
+    (if path
+      (vector (map (partial mapv (partial find-object pool)) path))
+      [])))
 
 ;; every node that can reach every node
 ;; expensive and pointless, so throw exception

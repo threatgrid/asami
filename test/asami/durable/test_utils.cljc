@@ -136,5 +136,8 @@
                                 (with-cleanup ~(subvec bindings 2) ~@body)
                                 (finally
                                   (asami.durable.common/close ~(bindings 0))
-                                  (asami.durable.common/delete! ~(bindings 0)))))
+                                  (asami.durable.common/delete! ~(bindings 0))
+                                  (when-let [c# (:to-close ~(bindings 0))]
+                                    (asami.durable.common/close c#)
+                                    (asami.durable.common/delete! c#)))))
     :else (throw (ex-info "with- only allows Symbols in bindings" {:bindings bindings}))))

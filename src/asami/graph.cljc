@@ -83,6 +83,14 @@
    (instance? InternalNode n)
    (and (keyword? n) (= tg-ns (namespace n)) (string/starts-with? (name n) node-prefix))))
 
+(defn broad-node-type?
+  [n]
+  (or
+   (instance? InternalNode n)
+   (keyword? n)
+   (uri? n)
+   (uuid? n)))
+
 (defn node-label
   "Returns a keyword label for a node"
   [n]

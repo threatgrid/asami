@@ -209,6 +209,11 @@
         0xD (extract-node id)                          ;; node-type-code
         nil))))
 
+(defn encapsulated-node?
+  [^long id]
+  (let [top-nb (bit-and (bit-shift-right id type-nybble-shift) nybble-mask)]
+    (or (= top-nb skey-type-code) (= top-nb node-type-code))))
+
 (defn type-info
   "Returns the type information encoded in a header-byte"
   [b]

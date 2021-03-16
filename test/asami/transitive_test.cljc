@@ -165,11 +165,6 @@
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8))
     (is (= #{[:c :p1] [:c :p2] [:b :p1] [:b :p2] [:a :p1] [:a :p2]} r8'))))
 
-(deftest test-dbb
-  (let [g (assert-data empty-graph dbl-branch-data)
-        r4' (unordered-resolve g '[?x ?p* :e])]
-    (is (= #{[:e :p2] [:c :p2] [:b :p2] [:a :p2]} r4'))))
-
 (deftest test-dbl-branch
   (let [g (assert-data empty-graph dbl-branch-data)
         gm (assert-data empty-multi-graph dbl-branch-data)]

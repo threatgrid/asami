@@ -2,7 +2,7 @@
 and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple node-type?]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple broad-node-type?]]
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -201,7 +201,7 @@ and multigraph implementations."
 
 ;; finds a path between 2 nodes
 (defn get-path-between
-  [idx edges-from tag s o]
+  [idx edges-from node? tag s o]
   (letfn [(not-solution? [path-nodes]
             (and (seq path-nodes)
                  (or (second path-nodes) ;; more than one result
@@ -215,7 +215,7 @@ and multigraph implementations."
               (if path-node
                 (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
                                                 (if edge
-                                                  (if (or (seen? o') (not (keyword? o')))
+                                                  (if (or (seen? o') (not (node? o')))
                                                     (recur redges edge-result seen?)
                                                     (let [new-path-node [(conj path p') o']]
                                                       (if (= o o')
@@ -244,7 +244,7 @@ and multigraph implementations."
         edges-from (fn [n] ;; finds all property/value pairs from an entity
                      (let [edge-idx (idx n)]
                        (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))]
-    (get-path-between idx edges-from tag s o)))
+    (get-path-between idx edges-from broad-node-type? tag s o)))
 
 (defn step-by-predicate
   "Function to add an extra step to a current resolution.
