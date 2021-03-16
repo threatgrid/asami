@@ -200,46 +200,51 @@ and multigraph implementations."
       [subj pred])))
 
 ;; finds a path between 2 nodes
+(defn get-path-between
+  [idx edges-from tag s o]
+  (letfn [(not-solution? [path-nodes]
+            (and (seq path-nodes)
+                 (or (second path-nodes) ;; more than one result
+                     (not= o (second (first path-nodes)))))) ;; single result, but not ending at the terminator
+          (step [path-nodes seen]
+            ;; Extends path/node pairs to add all each property of the node to the path
+            ;; and each associated value as the new node for that path.
+            ;; If the node being added is the terminator, then the current path is the solution
+            ;; and only that solution is returned, dropping everything else
+            (loop [[[path node :as path-node] & rpathnodes] path-nodes result [] seen* seen]
+              (if path-node
+                (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
+                                                (if edge
+                                                  (if (or (seen? o') (not (keyword? o')))
+                                                    (recur redges edge-result seen?)
+                                                    (let [new-path-node [(conj path p') o']]
+                                                      (if (= o o')
+                                                        [[new-path-node] seen?] ;; first solution, terminate early
+                                                        (recur redges (conj edge-result new-path-node) (conj seen? o')))))
+                                                  [edge-result seen?]))]
+                  (if (not-solution? next-result)
+                    (recur rpathnodes next-result next-seen)
+                    [next-result next-seen]))
+                [result seen*])))] ;; solution found, or else empty result found
+    (if (and (= s o) (= tag :star))
+      [[[]]]
+      (loop [paths [[[] s]] seen #{}]
+        (let [[next-paths next-seen] (step paths seen)]
+          (if (not-solution? next-paths)
+            (recur next-paths next-seen)
+            (let [path (ffirst next-paths)]
+              (if (seq path)
+                [[(ffirst next-paths)]]
+                []))))))))
+
+;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spo :as graph} tag s p o]
-  (let [get-objects (lowest-level-fn graph)]
-    (letfn [(not-solution? [path-nodes]
-              (and (seq path-nodes)
-                   (or (second path-nodes) ;; more than one result
-                       (not= o (second (first path-nodes)))))) ;; single result, but not ending at the terminator
-            (edges-from [n] ;; finds all property/value pairs from an entity
-              (let [edge-idx (idx n)]
-                (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))
-            (step [path-nodes seen]
-              ;; Extends path/node pairs to add all each property of the node to the path
-              ;; and each associated value as the new node for that path.
-              ;; If the node being added is the terminator, then the current path is the solution
-              ;; and only that solution is returned, dropping everything else
-              (loop [[[path node :as path-node] & rpathnodes] path-nodes result [] seen* seen]
-                (if path-node
-                  (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
-                                                  (if edge
-                                                    (if (or (seen? o') (not (keyword? o')))
-                                                      (recur redges edge-result seen?)
-                                                      (let [new-path-node [(conj path p') o']]
-                                                        (if (= o o')
-                                                          [[new-path-node] seen?] ;; first solution, terminate early
-                                                          (recur redges (conj edge-result new-path-node) (conj seen? o')))))
-                                                    [edge-result seen?]))]
-                    (if (not-solution? next-result)
-                      (recur rpathnodes next-result next-seen)
-                      [next-result next-seen]))
-                  [result seen*])))] ;; solution found, or else empty result found
-      (if (and (= s o) (= tag :star))
-        [[[]]]
-        (loop [paths [[[] s]] seen #{}]
-          (let [[next-paths next-seen] (step paths seen)]
-            (if (not-solution? next-paths)
-              (recur next-paths next-seen)
-              (let [path (ffirst next-paths)]
-                (if (seq path)
-                  [[(ffirst next-paths)]]
-                  [])))))))))
+  (let [get-objects (lowest-level-fn graph)
+        edges-from (fn [n] ;; finds all property/value pairs from an entity
+                     (let [edge-idx (idx n)]
+                       (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))]
+    (get-path-between idx edges-from tag s o)))
 
 (defn step-by-predicate
   "Function to add an extra step to a current resolution.

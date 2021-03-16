@@ -170,6 +170,18 @@
     (for [s' (keys result-index) o' (result-index s')]
       [s' o'])))
 
+;; finds a path between 2 nodes
+(defmethod get-transitive-from-index [:v  ? :v]
+  [{idx :spot :as graph} tag s p o]
+  (letfn [(edges-from [n] ;; finds all property/value pairs from an entity
+            (map project-after-first (find-tuple idx [n])))]
+    (common-index/get-path-between idx edges-from tag s o)))
+
+;; every node that can reach every node
+;; expensive and pointless, so throw exception
+(defmethod get-transitive-from-index [ ?  ?  ?]
+  [graph tag s p o]
+  (throw (ex-info "Unable to do transitive closure with nothing bound" {:args [s p o]})))
 
 (defmethod get-transitive-from-index :default
   [graph tag s p o]

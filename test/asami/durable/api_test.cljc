@@ -516,13 +516,13 @@
              [wd :is-in]
              [nm :is-in]
              [wm :is-in]}))
-    #_(is (=
-           (q '{:find [[?name ...]]
-                :where [[?e :name "Washington Monument"]
-                        [?e :is-in* ?e2]
-                        [?e2 :name ?name]]} d)
-           ["Washington Monument" "National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))
-    #_(is (=
+    (is (=
+         (q '{:find [[?name ...]]
+              :where [[?e :name "Washington Monument"]
+                      [?e :is-in* ?e2]
+                      [?e2 :name ?name]]} d)
+         ["Washington Monument" "National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))
+    (is (=
            (q '{:find [[?name ...]]
                 :where [[?e :name "Washington Monument"]
                         [?e :is-in+ ?e2]
