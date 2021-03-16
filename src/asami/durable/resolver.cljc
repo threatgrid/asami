@@ -61,6 +61,8 @@
       (cons z result))
     result))
 
+(def project-after-first #(subvec % 1 3))
+
 (defmulti get-transitive-from-index
   "Lookup an index in the graph for the requested data, and returns all data where the required predicate
    is a transitive relationship. Unspecified predicates extend across the graph.
@@ -135,12 +137,38 @@
 ;; consider the entire path, as per the [:v ? :v] function
 (defmethod get-transitive-from-index [:v  ?  ?]
   [{idx :spot pool :pool :as graph} tag s p o]
-  (transitive-from idx pool tag s #(subvec % 1 3) 2 vector))
+  (transitive-from idx pool tag s project-after-first 2 vector))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :ospt pos :pos pool :pool :as graph} tag s p o]
   (transitive-from idx pool tag o (fn [[_ s p]] [p s]) 1 (fn [pr sb] [sb pr])))
+
+(defn ordered-collect
+  "Converts a sequence of key/value pairs that are grouped by key, and returns a map of keys to sets of values.
+  The grouping of keys allows the avoidance of map lookups."
+  [pairs]
+  (loop [[[k v :as p] & rpairs] pairs prev-key nil vls #{} result {}]
+    (if-not p
+      (if prev-key (assoc result prev-key vls) result)
+      (if (= k prev-key)
+        (recur rpairs prev-key (conj vls v) result)
+        (recur rpairs k (conj #{} v) (if prev-key (assoc result prev-key vls) result))))))
+
+;; every node that can reach every node with a specified predicate
+;; This result is in-memory. It can be done with lazy joins, but will be significantly slower
+;; Revist this is scalability becomes an issue
+(defmethod get-transitive-from-index [ ? :v  ?]
+  [{idx :post :as graph} tag s p o]
+  (let [os-pairs (map project-after-first (find-tuple idx [p]))
+        result-index (loop [result (ordered-collect os-pairs)]
+                       (let [next-result (common-index/step-by-predicate result)]
+                         ;; note: consider a faster comparison
+                         (if (= next-result result)
+                           result
+                           (recur next-result))))]
+    (for [s' (keys result-index) o' (result-index s')]
+      [s' o'])))
 
 
 (defmethod get-transitive-from-index :default

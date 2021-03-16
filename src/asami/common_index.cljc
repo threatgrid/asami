@@ -241,36 +241,39 @@ and multigraph implementations."
                   [[(ffirst next-paths)]]
                   [])))))))))
 
+(defn step-by-predicate
+  "Function to add an extra step to a current resolution.
+  Takes a map of nodes to sets of nodes that they are connected to"
+  [resolution]
+  ;; for each object node...
+  (loop [[o & os] (keys resolution) result resolution]
+    (if o
+      ;; for each subject associated with the current object...
+      (let [next-result (loop [[s & ss] (result o) o-result result]
+                          (if s
+                            ;; find all connections for this object with the current predicate
+                            (let [next-result (if-let [next-ss (result s)]
+                                                ;; add all of these to the resolution
+                                                ;; consider only adding if there are things to add
+                                                (update o-result o into next-ss)
+                                                o-result)]
+                              (recur ss next-result))
+                            o-result))]
+        (recur os next-result))
+      result)))
+
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos :as graph} tag s p o]
-  ;; function to add an extra step to a current resolution
-  (letfn [(step [resolution]
-            ;; for each object node...
-            (loop [[o & os] (keys resolution) result resolution]
-              (if o
-                ;; for each subject associated with the current object...
-                (let [next-result (loop [[s & ss] (result o) o-result result]
-                                    (if s
-                                      ;; find all connections for this object with the current predicate
-                                      (let [next-result (if-let [next-ss (result s)]
-                                                          ;; add all of these to the resolution
-                                                          ;; consider only adding if there are things to add
-                                                          (update o-result o into next-ss)
-                                                          o-result)]
-                                        (recur ss next-result))
-                                      o-result))]
-                  (recur os next-result))
-                result)))]
-    (let [o->s-map (mid-level-map-fn graph)
-          result-index (loop [result (o->s-map (idx p))]
-                         (let [next-result (step result)]
-                           ;; note: consider a faster comparison
-                           (if (= next-result result)
-                             result
-                             (recur next-result))))]
-      (for [s' (keys result-index) o' (result-index s')]
-        [s' o']))))
+  (let [o->s-map (mid-level-map-fn graph)
+        result-index (loop [result (o->s-map (idx p))]
+                       (let [next-result (step-by-predicate result)]
+                         ;; note: consider a faster comparison
+                         (if (= next-result result)
+                           result
+                           (recur next-result))))]
+    (for [s' (keys result-index) o' (result-index s')]
+      [s' o'])))
 
 ;; every node that can reach every node
 ;; expensive and pointless, so throw exception

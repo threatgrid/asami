@@ -30,7 +30,9 @@
     (throw (ex-info "Cannot create a new graph without new storage parameters" {:type "BlockGraph"})))
 
   (graph-add [this subj pred obj]
-    (throw (ex-info "Transaction info is required for durable graphs" {:operation :graph-add})))
+    (when (zero? graph/*default-tx-id*)
+      (throw (ex-info "Transaction info is required for durable graphs" {:operation :graph-add})))
+    (graph/graph-add this subj pred obj graph/*default-tx-id*))
   (graph-add
     [this subj pred obj tx-id]
     (let [[s new-pool] (write! pool subj)
