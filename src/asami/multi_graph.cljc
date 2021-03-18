@@ -110,6 +110,8 @@ allow rules to successfully use this graph type."
 
   Graph
   (new-graph [this] empty-multi-graph)
+  (graph-add [this subj pred obj]
+    (graph-add this subj pred obj gr/*default-tx-id*))
   (graph-add [this subj pred obj tx]
     (log/trace "insert " [subj pred obj tx])
     (assoc this

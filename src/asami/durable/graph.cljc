@@ -1,8 +1,7 @@
 (ns ^{:doc "The implements the Graph over durable storage"
       :author "Paula Gearon"}
     asami.durable.graph
-  (:require [asami.storage :as storage]
-            [asami.graph :as graph]
+  (:require [asami.graph :as graph]
             [asami.internal :refer [now instant? long-time]]
             [asami.common-index :as common-index :refer [?]]
             [asami.durable.common :as common :refer [TxData Transaction Closeable
@@ -12,6 +11,7 @@
                                                      close delete! append! next-id]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
+            [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
             #?(:clj [asami.durable.flat-file :as flat-file])
             [zuko.node :as node]
             [zuko.logging :as log :include-macros true]))
@@ -21,54 +21,6 @@
 (def ospt-name "veat.idx")
 (def tspo-name "teav.tdx")  ;; a flat file transaction index
 
-(defmulti get-from-index
-  "Lookup an index in the graph for the requested data.
-   Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."
-  common-index/simplify)
-
-(def v2 (fn [dp t] (vector (find-object dp (nth t 2)))))
-(def v12 (fn [dp t] (vector
-                     (find-object dp (nth t 1))
-                     (find-object dp (nth t 2)))))
-(def v21 (fn [dp t] (vector
-                     (find-object dp (nth t 2))
-                     (find-object dp (nth t 1)))))
-
-;; Extracts the required index (idx), and looks up the requested fields.
-;; If an embedded index is pulled out, then this is referred to as edx.
-(defmethod get-from-index [:v :v :v]
-  [{idx :spot dp :pool} s p o]
-  (if (seq (find-tuple idx [s p o])) [[]] []))
-
-(defmethod get-from-index [:v :v  ?]
-  [{idx :spot dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [s p])))
-
-(defmethod get-from-index [:v  ? :v]
-  [{idx :ospt dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [o s])))
-
-(defmethod get-from-index [:v  ?  ?]
-  [{idx :spot dp :pool} s p o]
-  (map (partial v12 dp) (find-tuple idx [s])))
-
-(defmethod get-from-index [ ? :v :v]
-  [{idx :post dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [p o])))
-
-(defmethod get-from-index [ ? :v  ?]
-  [{idx :post dp :pool} s p o]
-  (map (partial v21 dp) (find-tuple idx [p])))
-
-(defmethod get-from-index [ ?  ? :v]
-  [{idx :ospt dp :pool} s p o]
-  (map (partial v12 dp) (find-tuple idx [o])))
-
-(defmethod get-from-index [ ?  ?  ?]
-  [{idx :spot dp :pool} s p o]
-  (map #(mapv (partial find-object dp) (take 3 %))
-       (find-tuple idx [])))
-
 (declare ->BlockGraph)
 
 (defrecord BlockGraph [spot post ospt tspo pool node-allocator]
@@ -77,6 +29,10 @@
     [this]
     (throw (ex-info "Cannot create a new graph without new storage parameters" {:type "BlockGraph"})))
 
+  (graph-add [this subj pred obj]
+    (when (zero? graph/*default-tx-id*)
+      (throw (ex-info "Transaction info is required for durable graphs" {:operation :graph-add})))
+    (graph/graph-add this subj pred obj graph/*default-tx-id*))
   (graph-add
     [this subj pred obj tx-id]
     (let [[s new-pool] (write! pool subj)
@@ -102,7 +58,7 @@
        (if-let [p (find-id pool pred)]
          (if-let [o (find-id pool obj)]
            (let [[new-spot t] (delete-tuple! spot [s p o])]
-             (when t   ;; serves as a proxy for (not (identical? spot new-spot))
+             (when t ;; serves as a proxy for (not (identical? spot new-spot))
                (let [[new-post] (delete-tuple! post [p o s t])
                      [new-ospt] (delete-tuple! ospt [o s p t])]
                  ;; the statement stays in tspo
@@ -125,14 +81,15 @@
 
   (resolve-triple
     [this subj pred obj]
-    (if-let [[plain-pred trans-tag] (common-index/check-for-transitive pred)]
-        ;; TODO: (common/get-transitive-from-index this trans-tag subj plain-pred obj)
-      (throw (ex-info "Transitive resolutions not yet supported" {:pattern [subj pred obj]}))
+    (let [[plain-pred trans-tag] (common-index/check-for-transitive pred)]
       (let [get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
         (if-let [s (get-id subj)]
-          (if-let [p (get-id pred)]
-            (if-let [o (get-id obj)]
-              (do
+          (if-let [o (get-id obj)]
+            (if plain-pred
+              (when-let [p (get-id plain-pred)]
+                (log/trace "transitive resolving [" s " " p " " o "]")
+                (get-transitive-from-index this trans-tag s p o))
+              (when-let [p (get-id pred)]
                 (log/trace "resolving [" s " " p " " o "]")
                 (get-from-index this s p o))))))))
 

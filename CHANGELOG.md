@@ -1,7 +1,19 @@
 # Change Log
 
 ## [Unreleased]
-No changes.
+### Added
+- Supporting lookup refs in transactions (thanks to @mk)
+- Supporting transitive attributes for durable graphs.
+
+### Fixed
+- Fixed some transitive attribute operations that did not handle zero-steps correctly.
+
+### Changed
+- Updated to Zuko 0.4.6. This adds lookup refs to entities in transactions.
+
+## [2.0.0-alpha3]
+### Fixed
+- Fixed bug that ignored :db/retract statements.
 
 ## [2.0.0-alpha3]
 ### Fixed

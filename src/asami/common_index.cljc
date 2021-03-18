@@ -2,7 +2,7 @@
 and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple node-type?]]
+  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple broad-node-type?]]
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -162,14 +162,12 @@ and multigraph implementations."
     (stream-from all-knowns initial-node)))
 
 (defn downstream-from
-  ([idx get-object-sets-fn node] (downstream-from idx get-object-sets-fn #{} node))
-  ([idx get-object-sets-fn all-knowns node]
-   (*stream-from #(apply set/union (get-object-sets-fn (vals (idx %1)))) all-knowns node)))
+  [idx get-object-sets-fn all-knowns node]
+  (*stream-from #(apply set/union (get-object-sets-fn (vals (idx %1)))) all-knowns node))
 
 (defn upstream-from
-  ([osp node] (downstream-from osp #{} node))
-  ([osp all-knowns node]
-   (*stream-from #(set (keys (osp %1))) all-knowns node)))
+  [osp all-knowns node]
+  (*stream-from #(set (keys (osp %1))) all-knowns node))
 
 ;; entire graph from a node
 ;; the predicates returned are the first step in the path
@@ -179,100 +177,104 @@ and multigraph implementations."
   (let [object-sets-fn (lowest-level-sets-fn graph)
         object-set-fn (lowest-level-set-fn graph)
         s-idx (idx s)
-        starred (= :star tag)
-        knowns (if starred #{s} #{})
-        tuples (for [pred (keys s-idx)
-                     obj (let [objs (object-set-fn (s-idx pred))
-                               down-from (reduce (partial downstream-from idx object-sets-fn) knowns objs)]
-                           (concat objs (if starred (disj down-from s) down-from)))]
-                 [pred obj])]
-    (zero-step tag [nil s] tuples)))
+        starred (= :star tag)]
+    (for [pred (keys s-idx)
+          obj (let [objs (object-set-fn (s-idx pred))
+                    down-from (reduce (partial downstream-from idx object-sets-fn) #{} objs)]
+                (concat objs (and (seq down-from) (if starred (conj down-from s) down-from))))]
+      [pred obj])))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :osp pos :pos :as graph} tag s p o]
   (let [get-subjects (lowest-level-fn graph)
-        starred (= :star tag)
-        knowns (if starred #{o} #{})
-        tuples (for [pred (keys pos)
-                     subj (let [subjs (get-subjects (get-in pos [pred o]))
-                                up-from (reduce (partial upstream-from idx) knowns subjs)]
-                            (concat subjs (if starred (disj up-from o) up-from)))]
-                 [subj pred])]
-    (zero-step tag [o nil] tuples)))
+        starred (= :star tag)]
+    (for [pred (keys pos)
+          subj (let [subjs (get-subjects (get-in pos [pred o]))
+                     up-from (and (seq subjs) (reduce (partial upstream-from idx) #{} subjs))]
+                 (concat subjs (and (seq up-from) (if starred (conj up-from o) up-from))))]
+      [subj pred])))
+
+;; finds a path between 2 nodes
+(defn get-path-between
+  [idx edges-from node? tag s o]
+  (letfn [(not-solution? [path-nodes]
+            (and (seq path-nodes)
+                 (or (second path-nodes) ;; more than one result
+                     (not= o (second (first path-nodes)))))) ;; single result, but not ending at the terminator
+          (step [path-nodes seen]
+            ;; Extends path/node pairs to add all each property of the node to the path
+            ;; and each associated value as the new node for that path.
+            ;; If the node being added is the terminator, then the current path is the solution
+            ;; and only that solution is returned, dropping everything else
+            (loop [[[path node :as path-node] & rpathnodes] path-nodes result [] seen* seen]
+              (if path-node
+                (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
+                                                (if edge
+                                                  (if (or (seen? o') (not (node? o')))
+                                                    (recur redges edge-result seen?)
+                                                    (let [new-path-node [(conj path p') o']]
+                                                      (if (= o o')
+                                                        [[new-path-node] seen?] ;; first solution, terminate early
+                                                        (recur redges (conj edge-result new-path-node) (conj seen? o')))))
+                                                  [edge-result seen?]))]
+                  (if (not-solution? next-result)
+                    (recur rpathnodes next-result next-seen)
+                    [next-result next-seen]))
+                [result seen*])))] ;; solution found, or else empty result found
+    (if (and (= s o) (= tag :star))
+      [[[]]]
+      (loop [paths [[[] s]] seen #{}]
+        (let [[next-paths next-seen] (step paths seen)]
+          (if (not-solution? next-paths)
+            (recur next-paths next-seen)
+            (let [path (ffirst next-paths)]
+              (if (seq path)
+                [[(ffirst next-paths)]]
+                []))))))))
 
 ;; finds a path between 2 nodes
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spo :as graph} tag s p o]
-  (let [get-objects (lowest-level-fn graph)]
-    (letfn [(not-solution? [path-nodes]
-              (and (seq path-nodes)
-                   (or (second path-nodes) ;; more than one result
-                       (not= o (second (first path-nodes)))))) ;; single result, but not ending at the terminator
-            (edges-from [n] ;; finds all property/value pairs from an entity
-              (let [edge-idx (idx n)]
-                (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))
-            (step [path-nodes seen]
-              ;; Extends path/node pairs to add all each property of the node to the path
-              ;; and each associated value as the new node for that path.
-              ;; If the node being added is the terminator, then the current path is the solution
-              ;; and only that solution is returned, dropping everything else
-              (loop [[[path node :as path-node] & rpathnodes] path-nodes result [] seen* seen]
-                (if path-node
-                  (let [[next-result next-seen] (loop [[[p' o' :as edge] & redges] (edges-from node) edge-result result seen? seen*]
-                                                  (if edge
-                                                    (if (or (seen? o') (not (keyword? o')))
-                                                      (recur redges edge-result seen?)
-                                                      (let [new-path-node [(conj path p') o']]
-                                                        (if (= o o')
-                                                          [[new-path-node] seen?] ;; first solution, terminate early
-                                                          (recur redges (conj edge-result new-path-node) (conj seen? o')))))
-                                                    [edge-result seen?]))]
-                    (if (not-solution? next-result)
-                      (recur rpathnodes next-result next-seen)
-                      [next-result next-seen]))
-                  [result seen*])))] ;; solution found, or else empty result found
-      (if (and (= s o) (= tag :star))
-        [[[]]]
-        (loop [paths [[[] s]] seen #{}]
-          (let [[next-paths next-seen] (step paths seen)]
-            (if (not-solution? next-paths)
-              (recur next-paths next-seen)
-              (let [path (ffirst next-paths)]
-                (if (seq path)
-                  [[(ffirst next-paths)]]
-                  [])))))))))
+  (let [get-objects (lowest-level-fn graph)
+        edges-from (fn [n] ;; finds all property/value pairs from an entity
+                     (let [edge-idx (idx n)]
+                       (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))]
+    (get-path-between idx edges-from broad-node-type? tag s o)))
+
+(defn step-by-predicate
+  "Function to add an extra step to a current resolution.
+  Takes a map of nodes to sets of nodes that they are connected to"
+  [resolution]
+  ;; for each object node...
+  (loop [[o & os] (keys resolution) result resolution]
+    (if o
+      ;; for each subject associated with the current object...
+      (let [next-result (loop [[s & ss] (result o) o-result result]
+                          (if s
+                            ;; find all connections for this object with the current predicate
+                            (let [next-result (if-let [next-ss (result s)]
+                                                ;; add all of these to the resolution
+                                                ;; consider only adding if there are things to add
+                                                (update o-result o into next-ss)
+                                                o-result)]
+                              (recur ss next-result))
+                            o-result))]
+        (recur os next-result))
+      result)))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos :as graph} tag s p o]
-  ;; function to add an extra step to a current resolution
-  (letfn [(step [resolution]
-            ;; for each object node...
-            (loop [[o & os] (keys resolution) result resolution]
-              (if o
-                ;; for each subject associated with the current object...
-                (let [next-result (loop [[s & ss] (result o) o-result result]
-                                    (if s
-                                      ;; find all connections for this object with the current predicate
-                                      (let [next-result (if-let [next-ss (result s)]
-                                                          ;; add all of these to the resolution
-                                                          ;; consider only adding if there are things to add
-                                                          (update o-result o into next-ss)
-                                                          o-result)]
-                                        (recur ss next-result))
-                                      o-result))]
-                  (recur os next-result))
-                result)))]
-    (let [o->s-map (mid-level-map-fn graph)
-          result-index (loop [result (o->s-map (idx p))]
-                         (let [next-result (step result)]
-                           ;; note: consider a faster comparison
-                           (if (= next-result result)
-                             result
-                             (recur next-result))))]
-      (for [s' (keys result-index) o' (result-index s')]
-        [s' o']))))
+  (let [o->s-map (mid-level-map-fn graph)
+        result-index (loop [result (o->s-map (idx p))]
+                       (let [next-result (step-by-predicate result)]
+                         ;; note: consider a faster comparison
+                         (if (= next-result result)
+                           result
+                           (recur next-result))))]
+    (for [s' (keys result-index) o' (result-index s')]
+      [s' o'])))
 
 ;; every node that can reach every node
 ;; expensive and pointless, so throw exception

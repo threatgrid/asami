@@ -222,6 +222,7 @@
   [name :- s/Str]
   (let [ex (db-exists? name)
         tx-manager #?(:clj (flat-file/tx-store name tx-name tx-record-size) :cljs nil)
+        ;; initialize new databases with a transaction that indicates an empty store
         _ (when-not ex (common/append-tx! tx-manager (new-db)))
         tx (latest tx-manager)
         unpacked-tx (and tx (unpack-tx tx))

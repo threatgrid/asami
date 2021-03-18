@@ -143,6 +143,38 @@
   (delete-database "asami:local://test3")
   (delete-database "asami:local://test4"))
 
+(deftest test-retractions
+  (let [c (connect "asami:local://testr")
+        {d :db-after} @(transact c {:tx-data [{:db/ident "bobid"
+                                               :person/name "Bob"
+                                               :person/spouse "aliceid"}
+                                              {:db/ident "aliceid"
+                                               :person/name "Alice"
+                                               :person/spouse "bobid"}]})
+        bob (entity d "bobid")
+        alice (entity d "aliceid")]
+    (is (= {:person/name "Bob" :person/spouse "aliceid"} bob))
+    (is (= {:person/name "Alice" :person/spouse "bobid"} alice))
+    (let [id (q '[:find ?id . :where [?id :db/ident "bobid"]] d)
+          {d :db-after} @(transact c {:tx-data [[:db/retract id :person/spouse "aliceid"]]})
+          bob (entity d "bobid")
+          alice (entity d "aliceid")]
+      (is (= {:person/name "Bob"} bob))
+      (is (= {:person/name "Alice" :person/spouse "bobid"} alice))))
+
+  (let [c (connect "asami:local://testr2")
+        r @(transact c {:tx-data [[:db/add :mem/node-1 :property "value"]
+                                  [:db/add :mem/node-2 :property "other"]]})]
+    (is (= 2 (count (:tx-data r))))
+    (is (= 2 (count (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r)))))
+    (let [r2 @(transact c {:tx-data [[:db/retract :mem/node-1 :property "value"]
+                                     [:db/retract :mem/node-1 :property "missing"]]})]
+      (is (= 2 (count (:tx-data r2))))
+      (is (= [[:mem/node-2 :property "other"]]
+             (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2))))))
+  (delete-database "asami:local://testr")
+  (delete-database "asami:local://testr2"))
+
 (deftest test-entity
   (let [c (connect "asami:local://test4")
         maksim {:db/id -1
@@ -417,7 +449,7 @@
      {:db/id -2 :name "National Mall"}
      {:db/id -3 :name "Washington, DC"}
      {:db/id -4 :name "USA"}
-     {:db/id -5 :name "Earth"}
+     {:db/id -5 :name "Earth" :db/ident "earth"}
      {:db/id -6 :name "Solar System"}
      {:db/id -7 :name "Orion-Cygnus Arm"}
      {:db/id -8 :name "Milky Way Galaxy"}
@@ -429,16 +461,61 @@
      [:db/add -6 :is-in -7]
      [:db/add -7 :is-in -8]])
 
-#_(deftest test-transitive
-  (let [c (connect "asami:local://test8")
-        tx (transact c {:tx-data transitive-data})
-        d (:db-after @tx)]
+(deftest test-transitive
+  (let [c (connect "asami:local://testt")
+        {{wm -1 nm -2 wd -3 us -4 ea -5 ss -6 oc -7 mw -8} :tempids
+         d :db-after} @(transact c {:tx-data transitive-data})]
     (is (=
          (q '{:find [[?name ...]]
               :where [[?e :name "Washington Monument"]
                       [?e :is-in ?e2]
                       [?e2 :name ?name]]} d)
          ["National Mall"]))
+    (is (= (q {:find '[[?e2 ...]] :where [[wm :is-in* '?e2]]} d)
+           [wm nm wd us ea ss oc mw]))
+    (is (= (q {:find '[[?e2 ...]] :where [[wm :is-in+ '?e2]]} d)
+           [nm wd us ea ss oc mw]))
+    (is (= (q {:find '[[?e ...]] :where [['?e :is-in* mw]]} d)
+           [mw oc ss ea us wd nm wm]))
+    (is (= (q {:find '[[?e ...]] :where [['?e :is-in+ mw]]} d)
+           [oc ss ea us wd nm wm]))
+    (is (= (set (q {:find '[?a ?v] :where [[ea '?a* '?v]]} d))
+           #{[:is-in "Solar System"]
+             [:is-in "Orion-Cygnus Arm"]
+             [:is-in "Milky Way Galaxy"]
+             [:is-in ss]
+             [:is-in oc]
+             [:is-in mw]
+             [:is-in true]
+             [:is-in ea]
+             [:db/ident "earth"]
+             [:db/ident ea]
+             [:name "Earth"]      
+             [:name ea]
+             [:tg/entity true]
+             [:tg/entity ea]}))
+    (is (= (set (q {:find '[?a ?v] :where [[ea '?a+ '?v]]} d))
+           #{[:is-in "Solar System"]
+             [:is-in "Orion-Cygnus Arm"]
+             [:is-in "Milky Way Galaxy"]
+             [:is-in ss]
+             [:is-in oc]
+             [:is-in mw]
+             [:is-in true]
+             [:db/ident "earth"]
+             [:name "Earth"]      
+             [:tg/entity true]}))
+    (is (= (set (q {:find '[?e ?a] :where [['?e '?a* ea]]} d))
+           #{[us :is-in]
+             [wd :is-in]
+             [nm :is-in]
+             [wm :is-in]
+             [ea :is-in]}))
+    (is (= (set (q {:find '[?e ?a] :where [['?e '?a+ ea]]} d))
+           #{[us :is-in]
+             [wd :is-in]
+             [nm :is-in]
+             [wm :is-in]}))
     (is (=
          (q '{:find [[?name ...]]
               :where [[?e :name "Washington Monument"]
@@ -446,12 +523,12 @@
                       [?e2 :name ?name]]} d)
          ["Washington Monument" "National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"]))
     (is (=
-         (q '{:find [[?name ...]]
-              :where [[?e :name "Washington Monument"]
-                      [?e :is-in+ ?e2]
-                      [?e2 :name ?name]]} d)
-         ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"])))
-  (delete-database "asami:local://test8"))
+           (q '{:find [[?name ...]]
+                :where [[?e :name "Washington Monument"]
+                        [?e :is-in+ ?e2]
+                        [?e2 :name ?name]]} d)
+           ["National Mall" "Washington, DC" "USA" "Earth" "Solar System" "Orion-Cygnus Arm" "Milky Way Galaxy"])))
+  (delete-database "asami:local://testt"))
 
 ;; tests both the show-plan function and the options
 (deftest test-plan

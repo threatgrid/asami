@@ -3,9 +3,6 @@
 A graph database, for Clojure and ClojureScript.
 
 The latest [Alpha version](https://github.com/threatgrid/asami/wiki/Asami-2) is :
-```
-[org.clojars.quoll/asami "2.0.0-alpha3"]
-```
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 

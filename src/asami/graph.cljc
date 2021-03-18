@@ -6,10 +6,11 @@
             #?(:cljs [cljs.reader :as reader]))
   #?(:clj (:import [java.io Writer])))
 
+(def ^:dynamic *default-tx-id* 0)
 
 (defprotocol Graph
   (new-graph [this] "Creates an empty graph of the same type")
-  (graph-add [this subj pred obj tx] "Adds triples to the graph")
+  (graph-add [this subj pred obj] [this subj pred obj tx] "Adds triples to the graph")
   (graph-delete [this subj pred obj] "Removes triples from the graph")
   (graph-transact [this tx-id assertions retractions] "Bulk operation to add and remove multiple statements in a single operation")
   (graph-diff [this other] "Returns all subjects that have changed in this graph, compared to other")
@@ -81,6 +82,14 @@
   (or 
    (instance? InternalNode n)
    (and (keyword? n) (= tg-ns (namespace n)) (string/starts-with? (name n) node-prefix))))
+
+(defn broad-node-type?
+  [n]
+  (or
+   (instance? InternalNode n)
+   (keyword? n)
+   (uri? n)
+   (uuid? n)))
 
 (defn node-label
   "Returns a keyword label for a node"

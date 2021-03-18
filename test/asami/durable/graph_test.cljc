@@ -8,7 +8,11 @@
             #?(:clj [asami.durable.flat-file :as flat-file])
             [asami.durable.test-utils :as util :include-macros true]
             #?(:clj [clojure.java.io :as io])
-            [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]))
+            [clojure.test #?(:clj :refer :cljs :refer-macros) [is use-fixtures]]
+            #?(:clj  [schema.test :as st :refer [deftest]]
+               :cljs [schema.test :as st :refer-macros [deftest]])))
+
+(use-fixtures :once st/validate-schemas)
 
 (defn group-exists
   "Checks if a group of a given name exists"
@@ -31,7 +35,8 @@
         tx (latest tx-manager)
         counter (atom 0)
         node-allocator (fn [] (new-node (swap! counter inc)))]
-    (new-block-graph nm (unpack-tx tx) node-allocator)))
+    (assoc (new-block-graph nm (and tx (unpack-tx tx)) node-allocator)
+           :to-close tx-manager)))
 
 (deftest test-new-graph
   (let [n "testdata-new"]
