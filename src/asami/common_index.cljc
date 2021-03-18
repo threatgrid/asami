@@ -162,14 +162,12 @@ and multigraph implementations."
     (stream-from all-knowns initial-node)))
 
 (defn downstream-from
-  ([idx get-object-sets-fn node] (downstream-from idx get-object-sets-fn #{} node))
-  ([idx get-object-sets-fn all-knowns node]
-   (*stream-from #(apply set/union (get-object-sets-fn (vals (idx %1)))) all-knowns node)))
+  [idx get-object-sets-fn all-knowns node]
+  (*stream-from #(apply set/union (get-object-sets-fn (vals (idx %1)))) all-knowns node))
 
 (defn upstream-from
-  ([osp node] (upstream-from osp #{} node))
-  ([osp all-knowns node]
-   (*stream-from #(set (keys (osp %1))) all-knowns node)))
+  [osp all-knowns node]
+  (*stream-from #(set (keys (osp %1))) all-knowns node))
 
 ;; entire graph from a node
 ;; the predicates returned are the first step in the path
@@ -179,24 +177,22 @@ and multigraph implementations."
   (let [object-sets-fn (lowest-level-sets-fn graph)
         object-set-fn (lowest-level-set-fn graph)
         s-idx (idx s)
-        starred (= :star tag)
-        knowns (if starred #{s} #{})]
+        starred (= :star tag)]
     (for [pred (keys s-idx)
           obj (let [objs (object-set-fn (s-idx pred))
-                    down-from (reduce (partial downstream-from idx object-sets-fn) knowns objs)]
-                (concat objs down-from))]
+                    down-from (reduce (partial downstream-from idx object-sets-fn) #{} objs)]
+                (concat objs (and (seq down-from) (if starred (conj down-from s) down-from))))]
       [pred obj])))
 
 ;; entire graph that ends at a node
 (defmethod get-transitive-from-index [ ?  ? :v]
   [{idx :osp pos :pos :as graph} tag s p o]
   (let [get-subjects (lowest-level-fn graph)
-        starred (= :star tag)
-        knowns (if starred #{o} #{})]
+        starred (= :star tag)]
     (for [pred (keys pos)
           subj (let [subjs (get-subjects (get-in pos [pred o]))
-                     up-from (and (seq subjs) (reduce (partial upstream-from idx) knowns subjs))]
-                 (concat subjs up-from))]
+                     up-from (and (seq subjs) (reduce (partial upstream-from idx) #{} subjs))]
+                 (concat subjs (and (seq up-from) (if starred (conj up-from o) up-from))))]
       [subj pred])))
 
 ;; finds a path between 2 nodes

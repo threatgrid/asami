@@ -270,8 +270,8 @@
     (is (= #{[:c] [:b] [:a] [:d]} r6'))
     (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
              [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f] [:p1 :a] [:p2 :a]} r7))
-    (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p1 :e] [:p2 :e]
-             [:p1 :b] [:p2 :b] [:p1 :f] [:p1 :a]} r7'))
+    (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
+             [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f] [:p1 :a] [:p2 :a]} r7'))
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2] [:d :p1] [:d :p2]
              [:c :p1] [:c :p2] [:e :p1] [:e :p2]} r8))
     (is (= #{[:b :p1] [:b :p2] [:a :p1] [:a :p2] [:d :p1] [:d :p2]
@@ -282,6 +282,24 @@
         gm (assert-data empty-multi-graph dbl-branch-loop-data)]
     (dbl-branch-loop g)
     (dbl-branch-loop gm)))
+
+(defn loop-variants [g]
+  (let [g1 (assert-data g (remove #(= '[:b :p1 :c] %) dbl-branch-loop-data))
+        r1 (unordered-resolve g1 '[:b ?p* ?x])
+        g2 (assert-data g (remove #(= '[:d :p1 :a] %) dbl-branch-loop-data))
+        r2 (unordered-resolve g2 '[:b ?p* ?x])
+        g3 (assert-data g (remove #(= '[:b :p2 :c] %) dbl-branch-loop-data))
+        r3 (unordered-resolve g3 '[:b ?p* ?x])]
+    (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
+             [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f] [:p1 :a] [:p2 :a]} r1))
+    (is (= #{[:p1 :c] [:p2 :c] [:p1 :d] [:p2 :d] [:p1 :e] [:p2 :e]
+             [:p1 :b] [:p2 :b] [:p1 :f] [:p2 :f]} r2))
+    (is (= #{[:p1 :c] [:p1 :d] [:p1 :e]
+             [:p1 :b] [:p1 :f] [:p1 :a]} r3))))
+
+(deftest test-loop-variants
+  (loop-variants empty-graph)
+  (loop-variants empty-multi-graph))
 
 (defn dbl-branch-loop-path [g]
   (let [r1 (resolve-pattern g '[:a ?p* :c])
