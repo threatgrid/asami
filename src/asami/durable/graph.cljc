@@ -5,10 +5,10 @@
             [asami.internal :refer [now instant? long-time]]
             [asami.common-index :as common-index :refer [?]]
             [asami.durable.common :as common :refer [TxData Transaction Closeable
-                                                     find-tuple tuples-at write-new-tx-tuple!
+                                                     find-tuples tuples-at write-new-tx-tuple!
                                                      write-tuple! delete-tuple!
                                                      find-object find-id write! at latest rewind! commit!
-                                                     close delete! append! next-id]]
+                                                     close delete! append! next-id max-long]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
@@ -22,6 +22,9 @@
 (def tspo-name "teav.tdx")  ;; a flat file transaction index
 
 (declare ->BlockGraph)
+
+(defn square [x] (* x x))
+(defn cube [x] (* x x x))
 
 (defrecord BlockGraph [spot post ospt tspo pool node-allocator]
   graph/Graph
@@ -76,27 +79,57 @@
     (when-not (= (type this) (type other))
       (throw (ex-info "Unable to compare diffs between graphs of different types" {:this this :other other})))
     ;; for every subject, look at the attribute-value sequence in the other graph, and skip that subject if they match
-    (let [subjects (map first (find-tuple spot []))]
-      (remove (fn [s] (= (find-tuple spot [s]) (find-tuple (:spot other) [s]))) subjects)))
+    (let [subjects (map first (find-tuples spot []))]
+      (remove (fn [s] (= (find-tuples spot [s]) (find-tuples (:spot other) [s]))) subjects)))
 
   (resolve-triple
     [this subj pred obj]
-    (let [[plain-pred trans-tag] (common-index/check-for-transitive pred)]
-      (let [get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
-        (if-let [s (get-id subj)]
-          (if-let [o (get-id obj)]
-            (if plain-pred
-              (when-let [p (get-id plain-pred)]
-                (log/trace "transitive resolving [" s " " p " " o "]")
-                (get-transitive-from-index this trans-tag s p o))
-              (when-let [p (get-id pred)]
-                (log/trace "resolving [" s " " p " " o "]")
-                (get-from-index this s p o))))))))
+    (let [[plain-pred trans-tag] (common-index/check-for-transitive pred)
+          get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
+      (if-let [s (get-id subj)]
+        (if-let [o (get-id obj)]
+          (if plain-pred
+            (when-let [p (get-id plain-pred)]
+              (log/trace "transitive resolving [" s " " p " " o "]")
+              (get-transitive-from-index this trans-tag s p o))
+            (when-let [p (get-id pred)]
+              (log/trace "resolving [" s " " p " " o "]")
+              (get-from-index this s p o)))))))
 
   (count-triple
     [this subj pred obj]
-    ;; TODO count by node to make this faster for large numbers
-    (count (graph/resolve-triple this subj pred obj)))
+    (let [[plain-pred trans-tag] (common-index/check-for-transitive pred)
+          get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
+      (or
+       (if-let [s (get-id subj)]
+         (if-let [o (get-id obj)]
+           (if plain-pred
+             (when-let [p (get-id plain-pred)]
+               (log/trace "transitive counting [" s " " p " " o "]")
+               (let [varc (count (filter symbol? [s p o]))]
+                 ;; make some worst-case estimates rather than actual counts
+                 (case varc
+                   ;; assuming every use of the predicate is in a chain between the ends
+                   0 (resolver/count-from-index this '?s p '?o)
+                   1 (if (symbol? p)
+                       ;; maximum is a chain of the entire graph between 2 points
+                       (resolver/count-from-index this '?s '?p '?o)
+                       ;; maximum is a chain of every use of this predicate
+                       (resolver/count-from-index this '?s p '?o))
+                   2 (if (symbol? p)
+                       ;; maximum is an entire subgraph attached to the subject or object
+                       (square (resolver/count-from-index this '?s '?p '?o))
+                       ;; maximum is every possible connection of nodes that use this predicate
+                       ;; factorials are too large, so use cube
+                       (cube (resolver/count-from-index this '?s p '?o)))
+                   ;; this is every node connected to every node in the same subgraphs
+                   ;; cannot be resolved, so give an unreasonable number
+                   3 max-long))
+               (count (get-transitive-from-index this trans-tag s p o)))
+             (when-let [p (get-id pred)]
+               (log/trace "counting [" s " " p " " o "]")
+               (resolver/count-from-index this s p o)))))
+       0)))
 
   node/NodeAPI
   (data-attribute [_ _] :tg/first)

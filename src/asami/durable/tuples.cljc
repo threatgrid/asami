@@ -1,8 +1,8 @@
 (ns ^{:doc "Tuples index with blocks"
       :author "Paula Gearon"}
     asami.durable.tuples
-  (:require [asami.durable.common :refer [TupleStorage find-tuple long-size Transaction rewind! commit!
-                                          Closeable close delete!]]
+    (:require [asami.durable.common :refer [TupleStorage find-tuples long-size Transaction rewind! commit!
+                                            Closeable close delete!]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
               [asami.durable.block.block-api :refer [get-long put-long! get-id get-block put-block!
@@ -208,6 +208,49 @@
               (if (vector? pos)
                 [{:node node :pos (first pos)} {:node node :pos (second pos)}]
                 {:node node :pos pos}))))))))
+
+(defn first-coord
+  "Finds the very first tuple in the index"
+  [index]
+  (when-let [node (loop [n (tree/first-node index)]
+                    (if (and n (zero? (get-count n)))
+                      (recur (tree/next-node index n))
+                      n))]
+    [nil {:node node :pos 0}]))
+
+(defn last-coord
+  "Finds the very first tuple in the index"
+  [index]
+  (when-let [node (loop [n (tree/last-node index)]
+                    (if (and n (zero? (get-count n)))
+                      (recur (tree/prev-node index n))
+                      n))]
+    [{:node node :pos (dec (get-count node))} nil]))
+
+(defn node-data
+  [n]
+  {:count (get-count n)
+   :id (get-id n)
+   :low (get-low-tuple n)
+   :high (get-high-tuple n)})
+
+(defn count-between
+  [index start-coord end-coord]
+  ;(println "START: " start-coord)
+  ;(println "END: " end-coord)
+  (let [{start-node :node start-pos :pos} (if (map? start-coord) start-coord (second start-coord))
+        {end-node :node end-pos :pos} (if (map? end-coord)
+                                        end-coord
+                                        (update (first end-coord) :pos inc))
+        end-id (get-id end-node)]
+    ;(println "\nstart: " (node-data start-node) ", pos: " start-pos)
+    ;(println "\nend: " (node-data end-node) ", end: " end-pos)
+    (if (= (get-id start-node) end-id)
+      (- end-pos start-pos)
+      (loop [n (tree/next-node index start-node) total (- (get-count start-node) start-pos)]
+        (if (= (get-id n) end-id)
+          (+ total end-pos)
+          (recur (tree/next-node index n) (+ total (get-count n))))))))
 
 (defn tuple-at
   "Retrieves the tuple found at a particular tuple offset"
@@ -417,19 +460,39 @@
       ;; The tuple already exists
       :default nil)))
 
-(defn find-index-tuple
+(defn find-index-tuples
   "Finds a tuple seq in an index"
   [index blocks tuple]
-  ;; full length tuples do an existence search. Otherwise, build a seq
   (let [coord (find-coord index blocks tuple)]
       ;; a double position indicates that nothing matches
       (if (map? coord)
         ;; short circuit for existence test
         (if (= tuple-size (count tuple))
-          (when (map? coord) [tuple])
+          [tuple]  ;; the tuple exists, so return it
           (let [{:keys [node pos]} coord]
             (tuple-seq index blocks tuple node pos)))
-        [])))
+        [])))    ;; a pair of coordinates was found, so no tuples match
+
+(defn count-index-tuples
+  "Finds and counts a tuple seq in an index"
+  [index blocks tuple]
+  (let [ct (count tuple)]
+    (or
+     (if (zero? ct)
+       (let [start-coord (first-coord index)
+             end-coord (last-coord index)]
+         (and start-coord (count-between index start-coord end-coord)))
+       (let [start-coord (find-coord index blocks tuple)]
+         ;; a double position indicates that nothing matches
+         (when (map? start-coord)
+           ;; short circuit for existence test
+           (if (= tuple-size ct)
+             1
+             (let [{:keys [node pos]} start-coord
+                   end-coord (let [end-tuple (update tuple (dec ct) inc)]
+                               (find-coord index blocks end-tuple))]
+               (count-between index start-coord end-coord))))))
+     0)))
 
 (declare ->ReadOnlyTupleIndex)
 
@@ -447,8 +510,11 @@
   (delete-tuple! [this tuple]
     (throw (ex-info "Read only indices cannot have data removed" {:tuple tuple})))
 
-  (find-tuple [this tuple]
-    (find-index-tuple index blocks tuple)))
+  (find-tuples [this tuple]
+    (find-index-tuples index blocks tuple))
+
+  (count-tuples [this tuple]
+    (count-index-tuples index blocks tuple)))
 
 
 (defrecord TupleIndex [index blocks root-id]
@@ -474,8 +540,11 @@
                   (nth tuple dec-tuple-size))]
           [(modify-node-block! this delete-coord delete-single-tuple!) t]))))
 
-  (find-tuple [this tuple]
-    (find-index-tuple index blocks tuple))
+  (find-tuples [this tuple]
+    (find-index-tuples index blocks tuple))
+
+  (count-tuples [this tuple]
+    (count-index-tuples index blocks tuple))
 
   Transaction
   (rewind! [this]

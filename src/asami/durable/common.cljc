@@ -12,6 +12,9 @@
 (def ^:const short-size "Number of bytes in a Short value"
   #?(:clj Short/BYTES :cljs 2 #_Int16Array.BYTES_PER_ELEMENT))
 
+(def ^:const max-long "Maximum value that can be safely represented as a long"
+  #?(:clj Long/MAX_VALUE :cljs Number.MAX_SAFE_INTEGER))
+
 (defprotocol Forceable
   (force! [this] "Ensures that all written data is fully persisted"))
 
@@ -61,5 +64,6 @@
   (write-new-tx-tuple! [this tuple] "Adds a new tuple to the index in the current TX")
   (write-tuple! [this tuple] "Adds a tuple to the index")
   (delete-tuple! [this tuple] "Removes a tuple from the index. Returns both the index and the final element of the tuple")
-  (find-tuple [this tuple] "Finds a specific tuple, returning a co-ordinate"))
+  (find-tuples [this tuple] "Finds a tuples seq, returning a co-ordinate")
+  (count-tuples [this tuple] "Finds and counts the size of a tuples seq"))
 

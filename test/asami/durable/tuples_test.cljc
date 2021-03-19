@@ -3,8 +3,8 @@
     asami.durable.tuples-test
   (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
             [asami.durable.test-utils :refer [new-block]]
-            [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuple
-                                          write-tuple! write-new-tx-tuple!]]
+            [asami.durable.common :refer [Transaction long-size delete-tuple! find-tuples
+                                          count-tuples write-tuple! write-new-tx-tuple!]]
             [asami.durable.tree :as tree]
             [asami.durable.tuples :refer [search-block tuple-size tree-node-size block-max
                                           get-low-tuple get-high-tuple
@@ -284,31 +284,38 @@
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
                  (tuple-seq index blocks [] lchild 0)))
         [tuples _] (delete-tuple! tuples [2 8 8 1])
-        ;; tuple-seq works. Switch to find-tuple
+        ;; tuple-seq works. Switch to find-tuples
         _ (is (= [[2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
-                 (find-tuple tuples [])))
+                 (find-tuples tuples [])))
+        _ (is (= 6 (count-tuples tuples [])))
         [tuples _] (delete-tuple! tuples [3 1 1 1])
         _ (is (= [[2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 3 1] [3 2 1 1]]
-                 (find-tuple tuples [])))
+                 (find-tuples tuples [])))
+        _ (is (= 5 (count-tuples tuples [])))
         [tuples t] (delete-tuple! tuples [3 1 3])
         _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1] [3 2 1 1]]
-                 (find-tuple tuples [])))
+                 (find-tuples tuples [])))
+        _ (is (= 4 (count-tuples tuples [])))
         _ (is (= t 1))
         [tuples t] (delete-tuple! tuples [3 2 1])
         _ (is (= [[2 8 20 1] [2 10 4 1] [2 20 8 1]]
-                 (find-tuple tuples [])))
+                 (find-tuples tuples [])))
+        _ (is (= 3 (count-tuples tuples [])))
         _ (is (= t 1))
         [tuples t] (delete-tuple! tuples [2 20 8])
         _ (is (= [[2 8 20 1] [2 10 4 1]]
-                 (find-tuple tuples [])))
+                 (find-tuples tuples [])))
+        _ (is (= 2 (count-tuples tuples [])))
         _ (is (= t 1))
         [tuples t] (delete-tuple! tuples [2 10 4])
-        _ (is (= [[2 8 20 1]] (find-tuple tuples [])))
+        _ (is (= [[2 8 20 1]] (find-tuples tuples [])))
+        _ (is (= 1 (count-tuples tuples [])))
         _ (is (= t 1))
         [tuples t] (delete-tuple! tuples [2 8 20 1])]
-    (is (= nil (find-tuple tuples [])))
+    (is (= nil (find-tuples tuples [])))
+    (is (= 0 (count-tuples tuples [])))
     (is (= t 1))))
 
 
@@ -327,15 +334,16 @@
 (deftest test-small-insert
   (let [tuples (create-test-tuples)
         tuples (write-tuple! tuples [1 1 1 1])
-        _ (is (= [[1 1 1 1]] (find-tuple tuples [])))
+        _ (is (= [[1 1 1 1]] (find-tuples tuples [])))
         tuples (write-tuple! tuples [1 1 3 1])
-        _ (is (= [[1 1 1 1] [1 1 3 1]] (find-tuple tuples [])))
+        _ (is (= [[1 1 1 1] [1 1 3 1]] (find-tuples tuples [])))
         tuples (write-tuple! tuples [1 1 2 1])
-        _ (is (= [[1 1 1 1] [1 1 2 1] [1 1 3 1]] (find-tuple tuples [])))
+        _ (is (= [[1 1 1 1] [1 1 2 1] [1 1 3 1]] (find-tuples tuples [])))
         tuples (write-tuple! tuples [1 1 0 1])
-        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1]] (find-tuple tuples [])))
+        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1]] (find-tuples tuples [])))
         tuples (write-tuple! tuples [1 1 4 1])
-        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1]] (find-tuple tuples [])))]
+        _ (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1]] (find-tuples tuples [])))]
+    (is (= 5 (count-tuples tuples [])))
 
     (is (nil? (write-tuple! tuples [1 1 1 1])))
     (is (nil? (write-tuple! tuples [1 1 3 1])))
@@ -343,7 +351,8 @@
     (is (nil? (write-tuple! tuples [1 1 0 1])))
     (is (nil? (write-tuple! tuples [1 1 4 1])))
     (let [tuples (write-tuple! tuples [1 1 5 1])]
-      (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1]] (find-tuple tuples [])))
+      (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1]] (find-tuples tuples [])))
+      (is (= 6 (count-tuples tuples [])))
 
       (is (nil? (write-tuple! tuples [1 1 2 1])))
       (is (nil? (write-new-tx-tuple! tuples [1 1 2 2])))
@@ -354,71 +363,106 @@
       (let [tuples (write-new-tx-tuple! tuples [1 1 6 2])]
         (is (nil? (write-new-tx-tuple! tuples [1 1 6 2])))
         (is (nil? (write-new-tx-tuple! tuples [1 1 6 1])))
-        (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1] [1 1 6 2]] (find-tuple tuples [])))))))
+        (is (= [[1 1 0 1] [1 1 1 1] [1 1 2 1] [1 1 3 1] [1 1 4 1] [1 1 5 1] [1 1 6 2]] (find-tuples tuples [])))
+        (is (= 7 (count-tuples tuples [])))))))
 
 (defn tnodes
   [{:keys [index blocks] :as tuples}]
   (let [c (find-coord index blocks [])]
     (tree/node-seq index (:node c))))
 
+(defn check-counts
+  [tuples pattern]
+  (is (= (count (find-tuples tuples pattern)) (count-tuples tuples pattern))))
+
 (deftest test-split-insert
   (let [tuples (create-test-tuples)
         data (map #(vector 2 2 % 2) (range block-max))
         tuples (reduce write-tuple! tuples data)
-        _ (is (= data (find-tuple tuples [])))
+        _ (is (= data (find-tuples tuples [])))
         _ (is (= 1 (count (tnodes tuples))))
         tuples (write-tuple! tuples [1 1 1 1])
         [n1 n2 :as nodes] (tnodes tuples)]
-    (is (= (cons [1 1 1 1] data) (find-tuple tuples [])))
+    (is (= (cons [1 1 1 1] data) (find-tuples tuples [])))
     (is (= 2 (count nodes)))
     (is (= [1 1 1 1] (get-low-tuple n1)))
     (is (= [2 2 255 2] (get-high-tuple n1)))
     (is (= 257 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 2 511 2] (get-high-tuple n2)))
-    (is (= 256 (get-count n2))))
+    (is (= 256 (get-count n2)))
+    (is (= (inc block-max) (count-tuples tuples [])))
+    (is (= block-max (count-tuples tuples [2])))
+    (is (= block-max (count-tuples tuples [2 2])))
+    (is (= 1 (count-tuples tuples [2 2 2])))
+    (is (= 1 (count-tuples tuples [2 2 2 2])))
+    (check-counts tuples [])
+    (check-counts tuples [2])
+    (check-counts tuples [2 2])
+    (check-counts tuples [2 2 2])
+    (check-counts tuples [2 2 2 2]))
 
   (let [tuples (create-test-tuples)
         data (map #(vector 2 2 % 2) (range block-max))
         tuples (reduce write-tuple! tuples data)
         tuples (write-tuple! tuples [2 3 1 1])
         [n1 n2 :as nodes] (tnodes tuples)]
-    (is (= (concat data [[2 3 1 1]]) (find-tuple tuples [])))
+    (is (= (concat data [[2 3 1 1]]) (find-tuples tuples [])))
     (is (= 2 (count nodes)))
     (is (= [2 2 0 2] (get-low-tuple n1)))
     (is (= [2 2 255 2] (get-high-tuple n1)))
     (is (= 256 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 3 1 1] (get-high-tuple n2)))
-    (is (= 257 (get-count n2))))
+    (is (= 257 (get-count n2)))
+    (is (= (inc block-max) (count-tuples tuples [])))
+    (is (= (inc block-max) (count-tuples tuples [2])))
+    (is (= block-max (count-tuples tuples [2 2])))
+    (is (= 1 (count-tuples tuples [2 3])))
+    (is (= 1 (count-tuples tuples [2 3 1])))
+    (check-counts tuples [2 3 1])
+    (is (= 1 (count-tuples tuples [2 3 1 1]))))
 
   (let [tuples (create-test-tuples)
         data (map #(vector 2 2 % 2) (range block-max))
         tuples (reduce write-tuple! tuples data)
         tuples (write-tuple! tuples [2 2 255 3])
         [n1 n2 :as nodes] (tnodes tuples)]
-    (is (= (concat (take 256 data) [[2 2 255 3]] (drop 256 data)) (find-tuple tuples [])))
+    (is (= (concat (take 256 data) [[2 2 255 3]] (drop 256 data)) (find-tuples tuples [])))
     (is (= 2 (count nodes)))
     (is (= [2 2 0 2] (get-low-tuple n1)))
     (is (= [2 2 255 3] (get-high-tuple n1)))
     (is (= 257 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 2 511 2] (get-high-tuple n2)))
-    (is (= 256 (get-count n2))))
+    (is (= 256 (get-count n2)))
+    (is (= (inc block-max) (count-tuples tuples [])))
+    (is (= (inc block-max) (count-tuples tuples [2])))
+    (is (= (inc block-max) (count-tuples tuples [2 2])))
+    (is (= 2 (count-tuples tuples [2 2 255])))
+    (is (= 1 (count-tuples tuples [2 2 255 2])))
+    (is (= 0 (count-tuples tuples [2 3 255 2]))))
 
   (let [tuples (create-test-tuples)
         data (map #(vector 2 2 % 2) (range block-max))
         tuples (reduce write-tuple! tuples data)
         tuples (write-tuple! tuples [2 2 256 3])
         [n1 n2 :as nodes] (tnodes tuples)]
-    (is (= (concat (take 257 data) [[2 2 256 3]] (drop 257 data)) (find-tuple tuples [])))
+    (is (= (concat (take 257 data) [[2 2 256 3]] (drop 257 data)) (find-tuples tuples [])))
     (is (= 2 (count nodes)))
     (is (= [2 2 0 2] (get-low-tuple n1)))
     (is (= [2 2 255 2] (get-high-tuple n1)))
     (is (= 256 (get-count n1)))
     (is (= [2 2 256 2] (get-low-tuple n2)))
     (is (= [2 2 511 2] (get-high-tuple n2)))
-    (is (= 257 (get-count n2)))))
+    (is (= 257 (get-count n2)))
+    (is (= (inc block-max) (count-tuples tuples [])))
+    (is (= (inc block-max) (count-tuples tuples [2])))
+    (is (= (inc block-max) (count-tuples tuples [2 2])))
+    (is (= 2 (count-tuples tuples [2 2 256])))
+    (is (= 0 (count-tuples tuples [2 3 256])))
+    (is (= 1 (count-tuples tuples [2 2 256 2])))))
+
 
 ;; forces 2 splits and a rebalance
 (deftest test-rebalance-split
@@ -429,7 +473,7 @@
         d2 (interleave (take 256 d) (reverse (drop 256 d)))
         tuples (reduce write-tuple! tuples d2)
         [n1 n2 :as nodes] (tnodes tuples)]
-    (is (= (concat (take 256 data) d (drop 256 data)) (find-tuple tuples [])))
+    (is (= (concat (take 256 data) d (drop 256 data)) (find-tuples tuples [])))
     (is (= 2 (count (tnodes tuples))))
     (is (= [2 0 2 2] (get-low-tuple n1)))
     (is (= [2 256 -256 2] (get-high-tuple n1)))
@@ -437,12 +481,24 @@
     (is (= [2 256 -255 2] (get-low-tuple n2)))
     (is (= [2 511 2 2] (get-high-tuple n2)))
     (is (= 512 (get-count n2)))
+    (check-counts tuples [])
+    (check-counts tuples [2])
+    (check-counts tuples [2 256])
+    (check-counts tuples [2 256 2])
+    (check-counts tuples [2 256 2 2])
+    (check-counts tuples [2 256 4 2])
+    (is (= (* 2 block-max) (count-tuples tuples [])))
+    (is (= (* 2 block-max) (count-tuples tuples [2])))
+    (is (= (inc block-max) (count-tuples tuples [2 256])))
+    (is (= 1 (count-tuples tuples [2 256 2])))
+    (is (= 1 (count-tuples tuples [2 256 2 2])))
+    (is (= 0 (count-tuples tuples [2 256 4 2])))
     (let [tuples (write-tuple! tuples [2 256 -256 3])
           [n1 n2 n3 :as nodes] (tnodes tuples)]
       (is (= (concat (take 256 data) (take 256 d)
                      [[2 256 -256 3]]
                      (drop 256 d) (drop 256 data))
-             (find-tuple tuples [])))
+             (find-tuples tuples [])))
       (is (= 3 (count nodes)))
       (is (= [2 0 2 2] (get-low-tuple n1)))
       (is (= [2 255 2 2] (get-high-tuple n1)))
@@ -453,5 +509,17 @@
       (is (= [2 256 -255 2] (get-low-tuple n3)))
       (is (= [2 511 2 2] (get-high-tuple n3)))
       (is (= 512 (get-count n3)))
-      )
-    ))
+      (is (= (inc (* 2 block-max)) (count-tuples tuples [])))
+      (is (= (inc (* 2 block-max)) (count-tuples tuples [2])))
+      (is (= (+ 2 block-max) (count-tuples tuples [2 256])))
+      (is (= 2 (count-tuples tuples [2 256 -256])))
+      (is (= 1 (count-tuples tuples [2 256 -256 2])))
+      (is (= 0 (count-tuples tuples [2 256 -256 1])))
+      (is (= 0 (count-tuples tuples [2 512 2 2])))
+      (check-counts tuples [])
+      (check-counts tuples [2])
+      (check-counts tuples [2 256])
+      (check-counts tuples [2 256 -256])
+      (check-counts tuples [2 256 -265 2])
+      (check-counts tuples [2 256 -265 1])
+      (check-counts tuples [2 512 2 2]))))

@@ -296,8 +296,18 @@
                       [n (next-node tree n)]))))))]
     (and root (find-node root))))
 
+(defn find-end-node
+  "Finds the first or the last node in the tree"
+  [{:keys [root] :as tree} side]
+  (and root (loop [n root]
+              (if-let [c (get-child n tree side)]
+                (recur c)
+                n))))
+
 (defprotocol Tree
   (find-node [this key] "Finds a node in the tree using a key.")
+  (first-node [this] "Finds the first node in iteration order")
+  (last-node [this] "Finds the last node in iteration order")
   (add [this data writer] [this data writer location] "Adds data to the tree")
   (at [this new-root] "Returns a tree for a given transaction root")
   (modify-node! [this node]
@@ -314,6 +324,10 @@
 (defrecord TxTree [root rewind-root node-comparator block-manager node-cache]
   Tree
   (find-node [this key] (find-node* this key))
+
+  (first-node [this] (find-end-node this left))
+
+  (last-node [this] (find-end-node this right))
 
   (add [this data writer]
     (add this data writer (find-node this data)))

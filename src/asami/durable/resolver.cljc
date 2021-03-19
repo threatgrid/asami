@@ -4,7 +4,7 @@
   (:require [asami.graph :refer [broad-node-type?]]
             [asami.common-index :as common-index :refer [?]]
             [asami.durable.decoder :as decoder]
-            [asami.durable.common :as common :refer [find-tuple find-object]]
+            [asami.durable.common :as common :refer [find-tuples count-tuples find-object]]
             [clojure.set :as set]))
 
 (defmulti get-from-index
@@ -24,36 +24,36 @@
 ;; If an embedded index is pulled out, then this is referred to as edx.
 (defmethod get-from-index [:v :v :v]
   [{idx :spot dp :pool} s p o]
-  (if (seq (find-tuple idx [s p o])) [[]] []))
+  (if (seq (find-tuples idx [s p o])) [[]] []))
 
 (defmethod get-from-index [:v :v  ?]
   [{idx :spot dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [s p])))
+  (map (partial v2 dp) (find-tuples idx [s p])))
 
 (defmethod get-from-index [:v  ? :v]
   [{idx :ospt dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [o s])))
+  (map (partial v2 dp) (find-tuples idx [o s])))
 
 (defmethod get-from-index [:v  ?  ?]
   [{idx :spot dp :pool} s p o]
-  (map (partial v12 dp) (find-tuple idx [s])))
+  (map (partial v12 dp) (find-tuples idx [s])))
 
 (defmethod get-from-index [ ? :v :v]
   [{idx :post dp :pool} s p o]
-  (map (partial v2 dp) (find-tuple idx [p o])))
+  (map (partial v2 dp) (find-tuples idx [p o])))
 
 (defmethod get-from-index [ ? :v  ?]
   [{idx :post dp :pool} s p o]
-  (map (partial v21 dp) (find-tuple idx [p])))
+  (map (partial v21 dp) (find-tuples idx [p])))
 
 (defmethod get-from-index [ ?  ? :v]
   [{idx :ospt dp :pool} s p o]
-  (map (partial v12 dp) (find-tuple idx [o])))
+  (map (partial v12 dp) (find-tuples idx [o])))
 
 (defmethod get-from-index [ ?  ?  ?]
   [{idx :spot dp :pool} s p o]
   (map #(mapv (partial find-object dp) (take 3 %))
-       (find-tuple idx [])))
+       (find-tuples idx [])))
 
 (defn zero-step
   "Prepend a zero step value if the tag requests it"
@@ -74,7 +74,7 @@
 (defn get-single-from-index
   [idx data-pool tag st p srch]
   (loop [seen? #{} starts [st] result []]
-    (let [step (for [st' starts n (map #(nth % 2) (find-tuple idx (srch st'))) :when (not (seen? n))] n)]
+    (let [step (for [st' starts n (map #(nth % 2) (find-tuples idx (srch st'))) :when (not (seen? n))] n)]
       (if (empty? step)
         (->> result
              (map (fn [x] [(find-object data-pool x)]))
@@ -117,7 +117,7 @@
   (let [f-obj (partial find-object pool)
         x-val (f-obj x)
         starred (= :star tag) ;; was the transitive operation * or +
-        tuples (map tproject (find-tuple idx [x]))
+        tuples (map tproject (find-tuples idx [x]))
         ;; the following includes state, but this is in order to stay relatively lazy
         all-pred (volatile! {})
         knowns (volatile! #{})]
@@ -127,7 +127,7 @@
                  (vreset! knowns #{y}) ;; start with a fresh set of known nodes
                  (vswap! all-pred assoc pred (f-obj pred))) ;; remember the new predicate & its global form
                ;; accumulate all nodes up/down-stream from the object node
-               (*stream-from (fn [x] (into #{} (map #(nth % ypos) (find-tuple idx [x]))))
+               (*stream-from (fn [x] (into #{} (map #(nth % ypos) (find-tuples idx [x]))))
                              knowns y)
                ;; extract the accumulated nodes. Add the zero-step node if needed
                (conj (if starred (conj @knowns x) @knowns) y))]
@@ -162,7 +162,7 @@
 ;; Revist this is scalability becomes an issue
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :post pool :pool :as graph} tag s p o]
-  (let [os-pairs (map project-after-first (find-tuple idx [p]))
+  (let [os-pairs (map project-after-first (find-tuples idx [p]))
         result-index (loop [result (ordered-collect os-pairs)]
                        (let [next-result (common-index/step-by-predicate result)]
                          ;; note: consider a faster comparison
@@ -176,7 +176,7 @@
 (defmethod get-transitive-from-index [:v  ? :v]
   [{idx :spot pool :pool :as graph} tag s p o]
   (let [edges-from (fn [n] ;; finds all property/value pairs from an entity
-                     (map project-after-first (find-tuple idx [n])))
+                     (map project-after-first (find-tuples idx [n])))
         node-type? (fn [n] (or (decoder/encapsulated-node? n)
                                (broad-node-type? (find-object pool n))))
         [path] (common-index/get-path-between idx edges-from node-type? tag s o)]
@@ -190,6 +190,40 @@
   [graph tag s p o]
   (throw (ex-info "Unable to do transitive closure with nothing bound" {:args [s p o]})))
 
-(defmethod get-transitive-from-index :default
-  [graph tag s p o]
-  (throw (ex-info (str "Transitive predicates not yet implemented for: " [s p o]) {:s s :p p :o o})))
+
+(defmulti count-from-index
+  "This optimizes counting by traversing index nodes, and not iterating over tuples blocks."
+  common-index/simplify)
+
+(defmethod count-from-index [:v :v :v]
+  [{idx :spot pool :pool :as graph} s p o]
+  (count-tuples idx [s p o]))
+
+(defmethod count-from-index [:v :v  ?]
+  [{idx :spot pool :pool :as graph} s p o]
+  (count-tuples idx [s p]))
+
+(defmethod count-from-index [:v  ? :v]
+  [{idx :ospt pool :pool :as graph} s p o]
+  (count-tuples idx [o s]))
+
+(defmethod count-from-index [:v  ?  ?]
+  [{idx :spot pool :pool :as graph} s p o]
+  (count-tuples idx [s]))
+
+(defmethod count-from-index [ ? :v :v]
+  [{idx :post pool :pool :as graph} s p o]
+  (count-tuples idx [p o]))
+
+(defmethod count-from-index [ ? :v  ?]
+  [{idx :post pool :pool :as graph} s p o]
+  (count-tuples idx [p]))
+
+(defmethod count-from-index [ ?  ? :v]
+  [{idx :ospt pool :pool :as graph} s p o]
+  (count-tuples idx [o]))
+
+(defmethod count-from-index [ ?  ?  ?]
+  [{idx :spot pool :pool :as graph} s p o]
+  (count-tuples idx []))
+

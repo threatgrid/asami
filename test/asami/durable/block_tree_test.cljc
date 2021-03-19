@@ -3,6 +3,7 @@
     asami.durable.block-tree-test
   (:require [asami.durable.tree :refer [header-size left-offset right-offset left-mask null left right
                                         new-block-tree find-node add get-child node-seq get-node
+                                        first-node last-node
                                         get-balance get-child-id at]]
             [asami.durable.test-utils :refer [get-filename]]
             [asami.durable.common :refer [close rewind! commit! long-size]]
@@ -439,7 +440,9 @@
            root-id (get-id (:root tree))
            ;; extract the file to check that it was truncated
            block-file (:file (:block-file @(:state (:block-manager tree))))]
+       (is (= node0 (first-node tree)))
        (is (= (range 1024) (map get-data (node-seq tree node0))))
+       (is (= (find-node tree 1023) (last-node tree)))
 
        (close tree)
        ;; check the truncated file length. Include the null node.
