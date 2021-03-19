@@ -1,4 +1,4 @@
-(defproject org.clojars.quoll/asami "2.0.0-alpha5"
+(defproject org.clojars.quoll/asami "2.0.0-alpha6-SNAPSHOT"
   :description "An in memory graph store for Clojure and ClojureScript"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
