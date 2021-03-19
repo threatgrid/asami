@@ -1,6 +1,13 @@
 # Change Log
 
 ## [Unreleased]
+Nothing yet.
+
+## [2.0.0-alpha5]
+### Added
+- `count-triple` implemented to scan index tree with reduced block access.
+
+## [2.0.0-alpha4]
 ### Added
 - Supporting lookup refs in transactions (thanks to @mk)
 - Supporting transitive attributes for durable graphs.
