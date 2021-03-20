@@ -9,9 +9,11 @@
                                           FlatRecords]]
             [asami.durable.encoder :as encoder]
             [asami.durable.decoder :as decoder])
-  (:import [java.io RandomAccessFile]
+  (:import [java.io RandomAccessFile File]
            [java.nio ByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]))
+
+;; (set! *warn-on-reflection* true)
 
 (def read-only FileChannel$MapMode/READ_ONLY)
 
@@ -31,7 +33,7 @@
       (throw (ex-info "Accessing data beyond the end of file"
                       {:max (count @regions) :region region-nr :offset offset})))
     (let [region (nth @regions region-nr)
-          region-size (.capacity region)
+          region-size (.capacity ^ByteBuffer region)
           end (+ byte-count region-offset)
           [region region-size] (if (and (= (inc region-nr) (count @regions))
                                         (>= end region-size))
@@ -54,7 +56,7 @@
   (refresh! [this]
     (letfn [(remap [mappings]
               (let [existing (if-let [tail (last mappings)]
-                               (if (< (.capacity tail) region-size)
+                               (if (< (.capacity ^ByteBuffer tail) region-size)
                                  (butlast mappings)
                                  mappings))
                     unmapped-offset (* region-size (count existing))
@@ -71,14 +73,14 @@
   (read-byte [this offset]
     ;; finds a byte in a region
     (let [[region region-offset] (read-setup this offset 1)]
-      (.get ^ByteBuffer region region-offset)))
+      (.get ^ByteBuffer region (int region-offset))))
 
   (read-short [this offset]
     ;; when the 2 bytes occur in the same region, read a short
     ;; if the bytes straddle regions, then read both bytes and combine into a short
     (let [[region region-offset] (read-setup this offset 2)]
       (if (= region-offset (dec region-size))
-        (short (bit-or (bit-shift-left (.get ^ByteBuffer region region-offset) 8)
+        (short (bit-or (bit-shift-left (.get ^ByteBuffer region (int region-offset)) 8)
                        (bit-and 0xFF (read-byte this (inc offset)))))
         (.getShort ^ByteBuffer region region-offset))))
 
@@ -107,7 +109,7 @@
                         {:max (count @regions) :region region-nr :offset offset})))
       (letfn [(read-bytes [attempt]
                 (let [region (nth @regions region-nr)
-                      region-size (.capacity region)]
+                      region-size (.capacity ^ByteBuffer region)]
                   (if (>= region-offset region-size)
                     (if (< attempt 1)
                       (do
@@ -125,24 +127,24 @@
                         (let [nregion (nth @regions (inc region-nr))
                               fslice-size (- region-size region-offset)
                               nslice-size (- array-len fslice-size)]
-                          (if (> nslice-size (.capacity nregion))
+                          (if (> nslice-size (.capacity ^ByteBuffer nregion))
                             (if (< attempt 1)
                               (do
                                 (refresh! this)
                                 (recur 1))
                               (throw (ex-info "Accessing data beyond the end of file"
-                                              {:size nslice-size :limit (.capacity nregion)})))
+                                              {:size nslice-size :limit (.capacity ^ByteBuffer nregion)})))
                             (do
-                              (doto (.asReadOnlyBuffer region)
-                                (.position region-offset)
-                                (.get bytes 0 fslice-size))
-                              (doto (.asReadOnlyBuffer nregion)
-                                (.get bytes fslice-size nslice-size))
+                              (doto (.asReadOnlyBuffer ^ByteBuffer region)
+                                (.position (int region-offset))
+                                (.get ^bytes bytes 0 (int fslice-size)))
+                              (doto (.asReadOnlyBuffer ^ByteBuffer nregion)
+                                (.get ^bytes bytes (int fslice-size) (int nslice-size)))
                               bytes))))
                       (do
-                        (doto (.asReadOnlyBuffer region)
-                          (.position region-offset)
-                          (.get bytes))
+                        (doto (.asReadOnlyBuffer ^ByteBuffer region)
+                          (.position (int region-offset))
+                          (.get ^bytes bytes))
                         bytes)))))]
         (read-bytes 0))))
   Clearable
@@ -164,8 +166,8 @@
     [this obj]
     (let [id (.getFilePointer rfile)
           [hdr data] (encoder/to-bytes obj)]
-      (.write rfile hdr)
-      (.write rfile data)
+      (.write rfile ^bytes hdr)
+      (.write rfile ^bytes data)
       id))
   (get-object
     [this id]
@@ -182,11 +184,11 @@
     (.close rfile))
 
   (delete! [this]
-    (.delete f)))
+    (.delete ^File f)))
 
 
 (defn tx-file-size
-  [rfile tx-size]
+  [^RandomAccessFile rfile tx-size]
   (let [fsize (.getFilePointer rfile)]
     (when-not (zero? (mod fsize tx-size))
       (throw (ex-info "Corrupted transaction file" {:file-size fsize :tx-size tx-size})))
@@ -245,7 +247,7 @@
     (.close rfile))
 
   (delete! [this]
-    (.delete f)))
+    (.delete ^File f)))
 
 (defrecord RecordsFile [^RandomAccessFile rfile f paged record-size]
   FlatRecords
@@ -278,7 +280,7 @@
     (.close rfile))
 
   (delete! [this]
-    (.delete f)))
+    (.delete ^File f)))
 
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."

@@ -19,6 +19,8 @@
      #?(:clj [clojure.data.priority-map :as priority-map]
         :cljs [tailrecursion.priority-map :as priority-map])))
 
+;; (set! *warn-on-reflection* true)
+
 (defprotocol CacheProtocol
   "This is the protocol describing the basic cache capability."
   (lookup [cache e]

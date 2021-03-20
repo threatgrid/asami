@@ -9,6 +9,7 @@
                                                      write-block allocate-block! copy-to-tx]]
               #?(:clj [asami.durable.block.file.block-file :as block-file])))
 
+;; (set! *warn-on-reflection* true)
 
 (def ^:const index-name "Name of the index file" "_stmtidx.bin")
 
@@ -157,7 +158,7 @@
     (loop [low 0 high len]
       (if (>= (inc low) high) ;; the >= catches an empty block, though these should not be searched
         ;; finished the search. Return the offset when found or a pair when not found
-        (case (tuple-compare low false)
+        (case (long (tuple-compare low false))
           0 low
           -1 (if (zero? (tuple-compare low true))
                low
@@ -167,7 +168,7 @@
               [low high]))
         (let [mid (int (/ (+ low high) 2))
               c (tuple-compare mid false)]
-          (case c
+          (case (long c)
             0 mid
             -1 (recur low mid)
             1 (recur mid high)))))))

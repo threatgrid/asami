@@ -207,4 +207,6 @@
 
 (defn unencapsulate-id [x])
 
+(defn encapsulated-node? [id])
+
 (defn decode-length-node [b])

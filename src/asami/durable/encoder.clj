@@ -12,7 +12,10 @@
              [java.net URI]
              [java.time Instant]
              [java.util Date UUID]
-             [java.nio ByteBuffer]))
+             [java.nio ByteBuffer]
+             [java.nio.charset Charset]))
+
+;; (set! *warn-on-reflection* true)
 
 (def type->code
   {Long (byte 0)
@@ -40,7 +43,7 @@
   "Tests if a class has a constructor that takes a string"
   [c]
   (try
-    (boolean (.getConstructor c (into-array Class [String])))
+    (boolean (.getConstructor ^Class c (into-array Class [String])))
     (catch Throwable _ false)))
 
 (defn type-code
@@ -51,7 +54,7 @@
     (if-let [encoder (get @registered-xsd-types (type o))]
       [(type->code :xsd) encoder]
       (if (str-constructor? (type o))
-        [(type->code :pojo) (fn [obj] (.getBytes (str (.getName (type o)) " " obj) utf8))]
+        [(type->code :pojo) (fn [obj] (.getBytes (str (.getName ^Class (type o)) " " obj) ^Charset utf8))]
         (throw (ex-info (str "Don't know how to encode a: " (type o)) {:object o}))))))
 
 (defn general-header
@@ -88,7 +91,7 @@
   "Encapsulates a short string. If the string cannot be encapsulated, then return nil."
   [^String s type-mask]
   (when (<= (.length s) max-short-len)
-    (let [abytes (.getBytes s utf8)
+    (let [abytes (.getBytes s ^Charset utf8)
           len (alength abytes)]
       (when (<= len max-short-len)
         (reduce (fn [v n]
@@ -113,7 +116,7 @@
       (byte-array [len])
       (general-header (type->code String) len)))
   (body [^String this]
-    (.getBytes this utf8))
+    (.getBytes this ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr this sstr-type-mask))
 
@@ -123,7 +126,7 @@
       (byte-array [(bit-or 0x80 len)])
       (general-header (type->code URI) len)))
   (body [this]
-    (.getBytes (str this) utf8))
+    (.getBytes (str this) ^Charset utf8))
   (encapsulate-id [this] nil)
   
   Keyword
@@ -134,7 +137,7 @@
   (body [this]
     (let [nms (namespace this)
           n (name this)]
-      (.getBytes (subs (str this) 1) utf8)))
+      (.getBytes (subs (str this) 1) ^Charset utf8)))
   (encapsulate-id [this]
     (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
@@ -173,7 +176,7 @@
   (header [this len]
     (general-header (type->code BigDecimal) len))
   (body [^BigDecimal this]
-    (.getBytes (str this) utf8))
+    (.getBytes (str this) ^Charset utf8))
   (encapsulate-id [this] nil)
 
   Date
@@ -220,7 +223,7 @@
       (general-header tc len)))
   (body [this]
     (if-let [tc (type->code (type this))]
-      (.getBytes (str this) utf8)
+      (.getBytes (str this) ^Charset utf8)
       (if-let [[_ encoder] (type-code this)]
         (encoder this))))
   (encapsulate-id [this] nil)
@@ -236,5 +239,5 @@
 (defn to-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
-  (let [b (body o)]
+  (let [^bytes b (body o)]
     [(header o (alength b)) b]))

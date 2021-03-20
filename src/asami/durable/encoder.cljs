@@ -5,6 +5,8 @@
   (:import [goog.math Long Integer]
            [goog Uri]))
 
+;; (set! *warn-on-reflection* true)
+
 (def ^{:private true} LONG_BYTES 8)
 
 (defn byte-array [size-or-seq]

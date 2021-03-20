@@ -15,6 +15,8 @@
             #?(:clj [asami.durable.flat-file :as flat-file])
             #?(:clj [clojure.java.io :as io])))
 
+;; (set! *warn-on-reflection* true)
+
 (def tx-name "tx.dat")
 
 ;; transactions contain tree roots for the 3 tree indices,

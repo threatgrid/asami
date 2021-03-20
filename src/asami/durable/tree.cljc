@@ -12,6 +12,8 @@
             [asami.durable.common :refer [Transaction Closeable Forceable close delete! rewind! commit! force! long-size]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
+;; (set! *warn-on-reflection* true)
+
 (def ^:const left -1)
 (def ^:const right 1)
 (def ^:const null "Indicate an invalid node ID" 0)

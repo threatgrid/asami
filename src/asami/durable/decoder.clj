@@ -12,8 +12,10 @@
              [java.net URI]
              [java.time Instant]
              [java.util Date UUID]
-             [java.nio ByteBuffer]))
+             [java.nio ByteBuffer]
+             [java.nio.charset Charset]))
 
+;; (set! *warn-on-reflection* true)
 
 (defn decode-length
   "Reads the header to determine length.
@@ -48,7 +50,7 @@
 
 (defn read-str
   [paged-rdr ^long pos ^long len]
-  (String. (read-bytes paged-rdr pos len) utf8))
+  (String. ^bytes (read-bytes paged-rdr pos len) ^Charset utf8))
 
 (defn read-uri
   [paged-rdr ^long pos ^long len]
@@ -85,7 +87,7 @@
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)
         b (read-bytes paged-rdr (+ i pos) len)]
-    (bigint (BigInteger. b))))
+    (bigint (BigInteger. ^bytes b))))
 
 (defn bigdec-decoder
   [ext paged-rdr ^long pos]
@@ -93,7 +95,7 @@
 
 (defn date-decoder
   [ext paged-rdr ^long pos]
-  (Date. (long-decoder ext paged-rdr pos)))
+  (Date. ^long (long-decoder ext paged-rdr pos)))
 
 (def ^:const instant-length (+ Long/BYTES Integer/BYTES))
 
@@ -165,7 +167,7 @@
 
 (defn extract-long
   "Extract a long number from an encapsulating ID"
-  [^long id]
+  ^long [^long id]
   (let [l (bit-and data-mask id)]
     (if (zero? (bit-and long-nbit l))
       l
@@ -188,8 +190,9 @@
                  (- sbytes-shift)
                  (bit-shift-right id)
                  (bit-and byte-mask)
-                 as-byte)))
-    (String. abytes 0 len utf8)))
+                 as-byte
+                 byte)))
+    (String. ^bytes abytes 0 len ^Charset utf8)))
 
 (defn extract-node
   [id]
@@ -227,8 +230,8 @@
 (defn partials-len
   "Determine the number of bytes that form a partial character at the end of a UTF-8 byte array.
   The len argument is the defined length of the full string, but that may be greater than the bytes provided."
-  ([bs] (partials-len bs (alength bs)))
-  ([bs len]
+  ([^bytes bs] (partials-len bs (alength bs)))
+  ([^bytes bs len]
    (let [end (dec (min len (alength bs)))]
      (when (>= end 0)
        (loop [t 0]
@@ -247,7 +250,7 @@
 
 (defn string-style-compare
   "Compare the string form of an object with bytes that store the string form of an object"
-  [left-s right-bytes]
+  [left-s ^bytes right-bytes]
   (let [rbc (alength right-bytes) ;; length of all bytes
         full-length (decode-length-node right-bytes)
         ;; get the length of the bytes used in the string
@@ -255,7 +258,7 @@
         ;; look for partial chars to be truncated, starting at the end.
         ;; string starts 1 byte in, after the header, so start at inc of the string byte length
         trunc-len (partials-len right-bytes (inc rlen))
-        right-s (String. right-bytes 1 (- rlen trunc-len) utf8)
+        right-s (String. right-bytes 1 (int (- rlen trunc-len)) ^Charset utf8)
         ;; only truncate the LHS if the node does not contain all of the string data
         left-side (if (<= full-length (dec rbc))
                     left-s
@@ -266,7 +269,7 @@
   "Compare data from 2 values that are the same type. If the data cannot give a result
    then return 0. Operates on an array, expected to be in an index node."
   [type-left left-header left-body left-object right-bytes]
-  (case type-left
+  (case (byte type-left)
     2 (string-style-compare left-object right-bytes)   ;; String
     3 (string-style-compare (str left-object) right-bytes)  ;; URI
     10 (string-style-compare (subs (str left-object) 1) right-bytes)  ;; Keyword

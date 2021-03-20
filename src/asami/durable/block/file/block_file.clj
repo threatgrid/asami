@@ -7,10 +7,12 @@
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]])
-  (:import [java.io RandomAccessFile]
+  (:import [java.io RandomAccessFile File]
            [java.nio ByteBuffer IntBuffer LongBuffer MappedByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]
            [java.lang.ref SoftReference]))
+
+;; (set! *warn-on-reflection* true)
 
 (def region-size (* 8 1024 1024))
 
@@ -88,8 +90,8 @@
 (defn- set-length!
   "Sets the length of a block-file.
    Returns the open block-file."
-  [{raf :raf :as block-file} len]
-  (.setLength raf len)
+  [{raf :raf :as block-file} ^long len]
+  (.setLength ^RandomAccessFile raf len)
   block-file)
 
 (defn- map-buffer
@@ -163,11 +165,11 @@
   (let [new-file-offset (* new-block-id block-size)
         new-region-nr (int (/ new-file-offset stride))
         new-byte-offset (mod new-file-offset stride)
-        new-buffer (nth mapped-byte-buffers new-region-nr)]
-    (.limit ro (+ byte-offset block-size))
-    (.position ro byte-offset)
-    (.position new-buffer new-byte-offset)
-    (.put new-buffer ro)
+        ^ByteBuffer new-buffer (nth mapped-byte-buffers new-region-nr)]
+    (.limit ^ByteBuffer ro (int (+ byte-offset block-size)))
+    (.position ^ByteBuffer ro (int byte-offset))
+    (.position new-buffer (int new-byte-offset))
+    (.put new-buffer ^ByteBuffer ro)
     (create-block block-size new-byte-offset new-buffer)))
 
 (defn unmap
@@ -176,7 +178,7 @@
   [{:keys [mapped-byte-buffers block-size nr-blocks raf] :as block-file}]
   (set-length! block-file (* block-size nr-blocks))
   (voodoo/release mapped-byte-buffers)
-  (.close raf))
+  (.close ^RandomAccessFile raf))
 
 (defn clear!
   [{:keys [block-size stride mapped-byte-buffers file raf fc] :as block-file}]
@@ -269,7 +271,7 @@
 
   (delete! [this]
     (let [{{file :file} :block-file} @state]
-      (.delete file))))
+      (.delete ^File file))))
 
 (defn create-managed-block-file
   [filename block-size]

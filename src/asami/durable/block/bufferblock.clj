@@ -4,6 +4,8 @@
   (:require [asami.durable.block.block-api :refer [Block put-block!]])
   (:import [java.nio ByteBuffer IntBuffer LongBuffer]))
 
+;; (set! *warn-on-reflection* true)
+
 ;; An implementation of Block that can have multiple readers,
 ;; but only a single writing thread
 (defrecord BufferBlock
@@ -17,21 +19,21 @@
     (get-id [this] id)
 
     (get-byte [this offset]
-      (.get ^ByteBuffer bb (+ byte-offset offset)))
+      (.get ^ByteBuffer bb (int (+ byte-offset offset))))
 
     (get-int [this offset]
-      (.get ^IntBuffer ib (+ int-offset offset)))
+      (.get ^IntBuffer ib (int (+ int-offset offset))))
 
     (get-long [this offset]
-      (.get ^LongBuffer lb (+ long-offset offset)))
+      (.get ^LongBuffer lb (int (+ long-offset offset))))
 
     (get-bytes [this offset len]
       (let [^ByteBuffer tbb (.duplicate bb)
             start (+ byte-offset offset)
             arr (byte-array len)]
         (doto tbb
-          (.position start)
-          (.limit (+ start len))
+          (.position (int start))
+          (.limit (int (+ start len)))
           (.get arr))
         arr))
 
@@ -40,8 +42,8 @@
             start (+ int-offset offset)
             arr (int-array len)]
         (doto tib
-          (.position start)
-          (.limit (+ start len))
+          (.position (int start))
+          (.limit (int (+ start len)))
           (.get arr))
         arr))
 
@@ -50,8 +52,8 @@
             start (+ long-offset offset)
             arr (long-array len)]
         (doto tlb
-          (.position start)
-          (.limit (+ start len))
+          (.position (int start))
+          (.limit (int (+ start len)))
           (.get arr))
         arr))
 
@@ -70,15 +72,15 @@
     ;; a single writer allows for position/put
 
     (put-bytes! [this offset len the-bytes]
-      (doto ^ByteBuffer bb (.position (+ byte-offset offset)) (.put the-bytes 0 len))
+      (doto ^ByteBuffer bb (.position (int (+ byte-offset offset))) (.put the-bytes 0 len))
       this)
 
     (put-ints! [this offset len the-ints]
-      (doto ^IntBuffer ib (.position (+ int-offset offset)) (.put the-ints 0 len))
+      (doto ^IntBuffer ib (.position (int (+ int-offset offset))) (.put the-ints 0 len))
       this)
 
     (put-longs! [this offset len the-longs]
-      (doto ^LongBuffer lb (.position (+ long-offset offset)) (.put the-longs 0 len))
+      (doto ^LongBuffer lb (.position (int (+ long-offset offset))) (.put the-longs 0 len))
       this)
 
     (put-block!
@@ -86,10 +88,10 @@
       (let [p (+ sbyte-offset src-offset)
             rsbb (.asReadOnlyBuffer ^ByteBuffer sbb)]
         (doto rsbb
-          (.position p)
-          (.limit (+ p length)))
+          (.position (int p))
+          (.limit (int (+ p length))))
         (doto ^ByteBuffer (.duplicate ^ByteBuffer bb)
-          (.position (+ byte-offset offset))
+          (.position (int (+ byte-offset offset)))
           (.put rsbb)))
       this)
 
@@ -105,7 +107,7 @@
 (defn- new-block
   "Internal implementation for creating a BufferBlock using a set of buffers.
    If lb is nil, then ib must also be nil"
-  [id bb ib lb ro size byte-offset]
+  [id ^ByteBuffer bb ib lb ro size byte-offset]
   (assert (or (and ib lb) (not (or ib lb))) "int and long buffers must be provided or excluded together")
   (let [ib (or ib (-> bb .rewind .asIntBuffer))
         lb (or lb (-> bb .asLongBuffer))
@@ -127,29 +129,29 @@
 
 (defn ^ByteBuffer get-source-buffer
   "Returns a read-only ByteBuffer for the block"
-  ([^BufferBlock {:keys [ro bb]}] (or ro (.asReadOnlyBuffer bb)))
+  ([^BufferBlock {:keys [ro bb]}] (or ro (.asReadOnlyBuffer ^ByteBuffer bb)))
   ([^BufferBlock b offset length]
    (let [start (+ (:byte-offset b) offset)]
-     (doto (get-source-buffer b)
-           (.limit (+ start length))
-           (.position start)))))
+     (doto ^ByteBuffer (get-source-buffer b)
+       (.limit (int (+ start length)))
+       (.position (int start))))))
 
 
 (defn ^ByteBuffer copy-to-buffer! [^BufferBlock b ^ByteBuffer buffer offset]
   "Copies the contents of a ByteBuffer into the block."
   (let [pos (+ (:byte-offset b) offset)]
-    (.put buffer (doto (.asReadOnlyBuffer (:bb b))
-                       (.position pos)
-                       (.limit (+ pos (.remaining buffer)))))
+    (.put buffer ^ByteBuffer (doto (.asReadOnlyBuffer ^ByteBuffer (:bb b))
+                               (.position (int pos))
+                               (.limit (int (+ pos (.remaining buffer))))))
     buffer))
 
 (defn ^ByteBuffer slice [^BufferBlock b offset size]
   "Returns a portion of a block as a ByteBuffer"
   (let [pos (+ (:byte-offset b) offset)]
-    (.slice (doto (.asReadOnlyBuffer (:bb b))
-                  (.position pos)
-                  (.limit (+ pos size))))))
+    (.slice (doto (.asReadOnlyBuffer ^ByteBuffer (:bb b))
+              (.position (int pos))
+              (.limit (int (+ pos size)))))))
 
 (defn ^BufferBlock put-buffer! [^BufferBlock b offset ^ByteBuffer buffer]
-  (doto (:bb b) (.position (+ (:byte-offset b) offset)) (.put buffer))
+  (doto ^ByteBuffer (:bb b) (.position (int (+ (:byte-offset b) offset))) (.put buffer))
   b)

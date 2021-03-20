@@ -12,6 +12,8 @@
               [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
               #?(:clj [asami.durable.flat-file :as flat-file])))
 
+;; (set! *warn-on-reflection* true)
+
 (def ^:const index-name "Name of the index file" "idx.bin")
 
 (def ^:const data-name "Name of the data file" "data.bin")
@@ -33,19 +35,19 @@
 (defn index-writer
   [node [[header body] id]]
   (let [remaining (dec payload-len)]
-    (put-byte! node data-offset (aget header 0))
+    (put-byte! node data-offset (aget ^bytes header 0))
     (when (> remaining 0)
-      (put-bytes! node 1 (min remaining (alength body)) body))
+      (put-bytes! node 1 (min remaining (alength ^bytes body)) body))
     (put-long! node id-offset-long id)))
 
 (defn pool-comparator-fn
   "Returns a function that can compare data to what is found in a node"
   [data-store]
   (fn [[type-byte header body object] node]
-    (let [^byte node-type (type-info (get-byte node data-offset))
+    (let [node-type (type-info (get-byte node data-offset))
           c (compare type-byte node-type)]
       (if (zero? c)
-        (let [nc (long-bytes-compare type-byte header body object (get-bytes node data-offset payload-len))]
+        (let [nc (long-bytes-compare (byte type-byte) header body object (get-bytes node data-offset payload-len))]
           (if (zero? nc)
             ;; There is an optimization option here if one of the strings is shorter than the
             ;; node payload length and matches the header of the other string, then they match
@@ -60,7 +62,7 @@
 (defn find*
   [{:keys [data index]} object]
   (let [[header body] (to-bytes object)
-        node (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+        node (tree/find-node index [^byte (type-info (aget ^bytes header 0)) header body object])]
     (when (and node (not (vector? node)))
       (get-object-ref node))))
 
@@ -106,7 +108,7 @@
           (swap! cache hit object)
           [id this])
         (let [[header body :as object-data] (to-bytes object)
-              location (tree/find-node index [^byte (type-info (aget header 0)) header body object])]
+              location (tree/find-node index [^byte (type-info (aget ^bytes header 0)) header body object])]
           (if (or (nil? location) (vector? location))
             (let [id (write-object! data object)
                   ;; Note that this writer takes a different format to the comparator!

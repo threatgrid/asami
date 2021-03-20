@@ -7,6 +7,8 @@
             [asami.durable.common :as common :refer [find-tuples count-tuples find-object]]
             [clojure.set :as set]))
 
+;; (set! *warn-on-reflection* true)
+
 (defmulti get-from-index
   "Lookup an index in the graph for the requested data.
    Returns a sequence of unlabelled bindings. Each binding is a vector of binding values."

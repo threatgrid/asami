@@ -16,6 +16,8 @@
             [zuko.node :as node]
             [zuko.logging :as log :include-macros true]))
 
+;; (set! *warn-on-reflection* true)
+
 (def spot-name "eavt.idx")
 (def post-name "avet.idx")
 (def ospt-name "veat.idx")

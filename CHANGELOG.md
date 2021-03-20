@@ -3,6 +3,12 @@
 ## [Unreleased]
 Nothing yet.
 
+## [2.0.0-alpha6]
+### Changed
+- Updated to Zuko 0.5.0. This means that entities without a temporary ID do not map their new IDs back to themselves in the `:tempids` of transactions.
+- Zuko no longer brings in the unneeded Cheshire and JacksonXML dependencies.
+- Cleaned up reflection in the durable layer, with a 35% speed improvement.
+
 ## [2.0.0-alpha5]
 ### Added
 - `count-triple` implemented to scan index tree with reduced block access.
