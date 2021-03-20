@@ -120,7 +120,7 @@
   [{bgraph :bgraph :as database}
    id
    nested? :- s/Bool]
-  (if-let [ref (or (and (seq (graph/resolve-triple bgraph id '?a '?v)) id)
+  (when-let [ref (or (and (seq (graph/resolve-triple bgraph id '?a '?v)) id)
                    (ffirst (graph/resolve-triple bgraph '?e :db/ident id)))]
     (reader/ref->entity bgraph ref nested?)))
 

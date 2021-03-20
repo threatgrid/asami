@@ -3,6 +3,10 @@
 ## [Unreleased]
 Nothing yet.
 
+## [2.0.0-alpha7]
+### Changed
+- Updated to Zuko 0.5.1. This allows arbitrary keytypes for entities.
+
 ## [2.0.0-alpha6]
 ### Changed
 - Updated to Zuko 0.5.0. This means that entities without a temporary ID do not map their new IDs back to themselves in the `:tempids` of transactions.
