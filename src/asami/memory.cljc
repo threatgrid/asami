@@ -149,16 +149,16 @@
   Returns a pair containing the old database and the new one."
   [conn :- ConnectionType
    update-fn :- (s/pred fn?)]
-  (let [next-state
-        (swap! (:state conn)
-               (fn [state]
-                 (let [{:keys [graph db history t] :as db-before} (:db state)
-                       next-tx (count (:history state))
-                       next-graph (update-fn graph next-tx)
-                       db-after (->MemoryDatabase next-graph (conj history db-before) (now) (inc t))]
-                   (with-meta {:db db-after :history (conj (:history db-after) db-after)}
-                     {:db-before db-before}))))]
-    [(:db-before (meta next-state)) (:db next-state)]))
+  (let [[{db-before :db} {db-after :db}]
+        (swap-vals! (:state conn)
+                    (fn [state]
+                      (let [{:keys [graph db history t] :as db-before} (:db state)
+                            next-tx (count (:history state))
+                            next-graph (update-fn graph next-tx)
+                            db-after (->MemoryDatabase next-graph (conj history db-before) (now) (inc t))]
+                        {:db db-after
+                         :history (conj (:history db-after) db-after)})))]
+    [db-before db-after]))
 
 (s/defn transact-data* :- [(s/one DatabaseType "The database before the operation")
                            (s/one DatabaseType "The database after the operation")]
