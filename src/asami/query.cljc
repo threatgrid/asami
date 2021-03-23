@@ -823,13 +823,31 @@
              (into epv (repeatedly (- 3 (count epv)) fresh)))
            query))
 
+(s/defn expand-set-predicates
+  "In the :where sequence of query expand EPV of the form
+
+    [E #{X₀ ... Xₙ} V]
+
+  to
+
+    (or [E X₀ V] ... [E Xₙ V])"
+  [query]
+  (map-epv (fn [[e p v :as epv]]
+             (if (set? p)
+               (if (empty? p)
+                 (throw (ex-info "Set predicate pattern may not be empty" {:query query, :triple epv}))
+                 `(~'or ~@(map (fn [p*] [e p* v]) p)))
+               epv))
+           query))
+
 (s/defn parse
   [x]
   (-> x
       query-map
       query-validator
       rewrite-wildcards
-      expand-shortened-pattern-constraints))
+      expand-shortened-pattern-constraints
+      expand-set-predicates))
 
 (s/defn query-entry
   "Main entry point of user queries"
