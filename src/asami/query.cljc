@@ -826,11 +826,11 @@
 (s/defn expand-set-predicates
   "In the :where sequence of query expand EPV of the form
 
-    [E #{X₀ ... Xₙ} V]
+    [E #{X_0 ... X_N} V]
 
   to
 
-    (or [E X₀ V] ... [E Xₙ V])"
+    (or [E X_0 V] ... [E X_N V])"
   [query]
   (map-epv (fn [[e p v :as epv]]
              (if (set? p)
