@@ -170,8 +170,10 @@
       (is (= '[?a ?b ?c ?d] (:cols (meta bds2))))))
   (testing "mix"
     (let [[bds] (create-bindings '[?x [?a ...] [?b ?c] [[?d ?e]]] [5 [11 12] [2 3] [[:a :b] [:c :d]]])]
-      (is (= [[5 11 2 3 :a :b] [5 11 2 3 :c :d] [5 12 2 3 :a :b] [5 12 2 3 :c :d]]))
-      (is (= '[?x ?a ?b ?c ?d ?e])))))
+      (is (= [[5 11 2 3 :a :b] [5 11 2 3 :c :d] [5 12 2 3 :a :b] [5 12 2 3 :c :d]]
+             bds))
+      (is (= '[?x ?a ?b ?c ?d ?e]
+             (:cols (meta bds)))))))
 
 (def minus-data
   [[:b :px :c]
