@@ -823,6 +823,10 @@
              (into epv (repeatedly (- 3 (count epv)) fresh)))
            query))
 
+(defn ^:private flatten-set
+  [p]
+  (into #{} (remove set?) (tree-seq set? seq p)))
+
 (s/defn expand-set-predicates
   "In the :where sequence of query expand EPV of the form
 
@@ -834,9 +838,10 @@
   [query]
   (map-epv (fn [[e p v :as epv]]
              (if (set? p)
-               (if (empty? p)
-                 (throw (ex-info "Set predicate pattern may not be empty" {:query query, :triple epv}))
-                 `(~'or ~@(map (fn [p*] [e p* v]) p)))
+               (let [p* (flatten-set p)]
+                 (if (empty? p*)
+                   (throw (ex-info "Set predicate pattern may not be empty" {:query query, :pattern epv}))
+                   `(~'or ~@(map (fn [p**] [e p** v]) p*))))
                epv))
            query))
 

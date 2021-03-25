@@ -367,14 +367,28 @@
 
   (testing "Set predicate pattern"
     (testing "When the set predicate pattern is empty"
-      (is (thrown? ExceptionInfo (q/expand-set-predicates '{:find [?e] :where [[?e #{} ?v]]}))))
+      (is (thrown? ExceptionInfo (q/expand-set-predicates '{:find [?e] :where [[?e #{} ?v]]})))
+      (is (thrown? ExceptionInfo (q/expand-set-predicates '{:find [?e] :where [[?e #{#{}} ?v]]}))))
 
     (testing "When the set predicate pattern is not empty"
       (let [query (q/parse '{:find [?e]
                              :where [[?e #{:p1 :p2} ?v]]})
             [[op & [epv1 epv2]]] (get query :where)
             expected-epvs '#{[?e :p1 ?v] [?e :p2 ?v]}]
-        (is (= op 'or))
+        (is (= 'or op))
+        (is (contains? expected-epvs epv1))
+        (is (contains? expected-epvs epv2))))
+
+    (testing "Set absorption"
+      (let [query (q/parse '{:find [?e]
+                             :where [[?e #{:p1 #{}} ?v]]})]
+        (is (= '[(or [?e :p1 ?v])] (get query :where))))
+
+      (let [query (q/parse '{:find [?e]
+                             :where [[?e #{:p1 #{:p2}} ?v]]})
+            [[op & [epv1 epv2]]] (get query :where)
+            expected-epvs '#{[?e :p1 ?v] [?e :p2 ?v]}]
+        (is (= 'or op))
         (is (contains? expected-epvs epv1))
         (is (contains? expected-epvs epv2))))))
 
