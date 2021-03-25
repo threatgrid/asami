@@ -737,9 +737,8 @@
   (log/debug "aggregate query:" query-plan)
   (binding [*select-distinct* distinct]
     ;; flatten the query
-    (let [simplified (planner/simplify-algebra where)
-          ;; ensure that it is an (or ...) expression
-          normalized (planner/normalize-sum-of-products simplified)
+    (let [;; ensure that it is an (or ...) expression
+          normalized (planner/normalize-sum-of-products where)
           ;; extract every element of the or into an outer/inner pair of queries.
           ;; The inner/outer -wheres zip
           [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
@@ -823,13 +822,18 @@
              (into epv (repeatedly (- 3 (count epv)) fresh)))
            query))
 
+(s/defn simplify-where
+  [query]
+  (update query :where planner/simplify-algebra))
+
 (s/defn parse
   [x]
   (-> x
       query-map
       query-validator
       rewrite-wildcards
-      expand-shortened-pattern-constraints))
+      expand-shortened-pattern-constraints
+      simplify-where))
 
 (s/defn query-entry
   "Main entry point of user queries"
