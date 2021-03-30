@@ -3,7 +3,7 @@
     asami.durable.store
   (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
             [asami.graph :as graph]
-            [asami.internal :refer [now instant? long-time]]
+            [asami.internal :as i :refer [now instant? long-time] :include-macros true]
             [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!]]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
@@ -176,11 +176,10 @@
   "Updates a graph according to a provided function. This will be done in a new, single transaction."
   [{:keys [tx-manager grapha nodea lock] :as connection} :- ConnectionType
    update-fn :- UpdateFunction]
-  (try
-    ;; multithreaded environments require exclusive writing for the graph
-    ;; this also ensures no writing between the read/write operations of the update-fn
-    ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
-    #?(:clj (.lock lock))
+  ;; multithreaded environments require exclusive writing for the graph
+  ;; this also ensures no writing between the read/write operations of the update-fn
+  ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
+  (i/with-lock lock
     ;; keep a reference of what the data looks like now
     (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
           ;; figure out the next transaction number to use
@@ -199,9 +198,7 @@
       ;; update the connection to refer to the latest graph
       (reset! grapha graph-after)
       ;; return the required database values
-      [db-before (->DurableDatabase connection graph-after tx-id new-timestamp)])
-    (finally
-      #?(:clj (.unlock lock)))))
+      [db-before (->DurableDatabase connection graph-after tx-id new-timestamp)])))
 
 (s/defn transact-data* :- DBsBeforeAfter
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
