@@ -3,6 +3,13 @@
 ## [Unreleased]
 Nothing yet.
 
+## [2.0.0-alpha8]
+### Fixed
+- Addressed concurrency bugs found in the JVM, for both memory-based and durable storage.
+
+### Changed
+- Updated to Zuko 0.6.0. This introduces new portable i/o operations.
+
 ## [2.0.0-alpha7]
 ### Changed
 - Updated to Zuko 0.5.1. This allows arbitrary keytypes for entities.
@@ -178,7 +185,12 @@ Nothing yet.
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha3...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha8...HEAD
+[2.0.0-alpha8]: https://github.com/threatgrid/asami/compare/2.0.0-alpha7...2.0.0-alpha8
+[2.0.0-alpha7]: https://github.com/threatgrid/asami/compare/2.0.0-alpha6...2.0.0-alpha7
+[2.0.0-alpha6]: https://github.com/threatgrid/asami/compare/2.0.0-alpha5...2.0.0-alpha6
+[2.0.0-alpha5]: https://github.com/threatgrid/asami/compare/2.0.0-alpha4...2.0.0-alpha5
+[2.0.0-alpha4]: https://github.com/threatgrid/asami/compare/2.0.0-alpha3...2.0.0-alpha4
 [2.0.0-alpha3]: https://github.com/threatgrid/asami/compare/2.0.0-alpha2...2.0.0-alpha3
 [2.0.0-alpha2]: https://github.com/threatgrid/asami/compare/2.0.0-alpha...2.0.0-alpha2
 [2.0.0-alpha]: https://github.com/threatgrid/asami/compare/1.2.14...2.0.0-alpha
