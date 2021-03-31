@@ -145,6 +145,7 @@
             - map: an entity to be inserted/updated.
             Alternatively, a map may have a :tx-triples key. If so, then this is a seq of 3 element vectors.
             Each vector in a :tx-triples seq will contain the raw values for [entity attribute value]
+            :executor An optional value in the tx-info containing an executor to be used to run the CompletableFuture
   Entities and assertions may have attributes that are keywords with a trailing ' character.
   When these appear an existing attribute without that character will be replaced. This only occurs for the top level
   entity, and is not applied to attributes appearing in nested structures.
@@ -157,8 +158,7 @@
   :db-before    database value before the transaction
   :db-after     database value after the transaction
   :tx-data      sequence of datoms produced by the transaction
-  :tempids      mapping of the temporary IDs in entities to the allocated nodes
-  :executor     Executor to be used to run the CompletableFuture"
+  :tempids      mapping of the temporary IDs in entities to the allocated nodes"
   [{:keys [name state] :as connection} :- ConnectionType
    {:keys [tx-data tx-triples executor update-fn] :as tx-info} :- TransactData]
   (let [op (if update-fn
@@ -170,15 +170,25 @@
                (let [tx-id (storage/next-tx connection)
                      as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
                      current-db (storage/db connection)
-                     [triples removals tempids] (if tx-triples ;; is this inserting raw triples?
-                                                  [tx-triples nil {}]
-                                                  ;; capture the old usage which didn't have an arg map
-                                                  (entities/build-triples current-db (or tx-data tx-info)))
-                     [db-before db-after] (storage/transact-data connection triples removals)]
+                     ;; a volatile to capture data for the user
+                     generated-data (volatile! [tx-triples nil {}])
+                     [db-before db-after] (if tx-triples
+                                            ;; simple assertion of triples
+                                            (storage/transact-data connection tx-triples nil)
+                                            ;; a seq of statements and/or entities
+                                            ;; this generates triples and retractions inside a transaction
+                                            ;; capture this data to return to the user
+                                            (storage/transact-data connection
+                                                                   (fn [graph]
+                                                                     ;; building triples returns a tuple of assertions, retractions, tempids
+                                                                     (vreset! generated-data
+                                                                              (entities/build-triples graph (or tx-data tx-info))))))
+                     ;; pull out the info captured during the transaction
+                     [triples retracts tempids] (deref generated-data)]
                  {:db-before db-before
                   :db-after db-after
                   :tx-data (concat
-                            (map (partial as-datom false) removals)
+                            (map (partial as-datom false) retracts)
                             (map (partial as-datom true) triples))
                   :tempids tempids})))]
     #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))

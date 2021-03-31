@@ -7,12 +7,15 @@
 (defprotocol Connection
   (get-name [this] "Retrieves the name of the database")
   (next-tx [this] "Returns the next transaction ID that this connection will use")
+  (get-lock [this] "Returns a lock that ensures that this Connection can only be updated by a single thread at a time")
   (db [this] "Retrieves the latest database from this connection")
   (delete-database [this] "Removes all resources for a given connection")
   (release [this] "Releases the resources associated with this connection")
   (transact-update [this update-fn] "Updates a graph in the database with the provided function.
                                      Function args are connection and transaction-id")
-  (transact-data [this asserts retracts] "Updates the database with provided data"))
+  (transact-data
+    [this asserts retracts]
+    [this generator-fn] "Updates the database with provided data"))
 
 (defprotocol Database
   (as-of [this t] "Retrieves a database as of a given moment, inclusive")

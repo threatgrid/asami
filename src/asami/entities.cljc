@@ -131,10 +131,9 @@
                           (s/one {s/Any s/Any} "ID map of created objects")]
   "Converts a set of transaction data into triples.
   Returns a tuple containing [triples removal-triples tempids]"
-  [db :- DatabaseType
+  [graph :- gr/GraphType
    data :- [s/Any]]
-  (let [graph (storage/graph db)
-        [retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
+  (let [[retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
         ref->id (partial resolve-lookup-refs graph)
         retractions (mapv (comp (partial mapv ref->id) rest) retract-stmts)
         add-triples (fn [[acc racc ids] obj]

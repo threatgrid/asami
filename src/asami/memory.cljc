@@ -7,6 +7,7 @@
               [asami.multi-graph :as multi]
               [asami.graph :as gr]
               [asami.query :as query]
+              [zuko.schema :refer [Triple]]
               [zuko.entity.general :as entity :refer [GraphType]]
               [zuko.entity.reader :as reader]
               [schema.core :as s :include-macros true]))
@@ -64,7 +65,8 @@
   (delete-database [this] true) ;; no-op for memory databases
   (release [this]) ;; no-op for memory databases
   (transact-update [this update-fn] (transact-update* this update-fn))
-  (transact-data [this asserts retracts] (transact-data* this asserts retracts)))
+  (transact-data [this asserts retracts] (transact-data* this asserts retracts))
+  (transact-data [this generator-fn] (transact-data* this generator-fn)))
 
 
 (def empty-graph mem/empty-graph)
@@ -142,14 +144,16 @@
   [database :- DatabaseType]
   (:graph database))
 
-(s/defn transact-update* :- [(s/one DatabaseType "The database before the operation")
-                             (s/one DatabaseType "The database after the operation")]
+(def DBsBeforeAfter [(s/one DatabaseType "The database before an operation")
+                     (s/one DatabaseType "The database after an operation")])
+
+(s/defn transact-update* :- DBsBeforeAfter
   "Updates a graph with a function, updating the connection to the new graph.
   The function accepts a graph and a transaction ID.
-  Returns a pair containing the old database and the new one."
+  Returns a triple containing the old database, the new one, and any adjunect data the statement generator may have created."
   [conn :- ConnectionType
    update-fn :- (s/pred fn?)]
-  (let [[{db-before :db} {db-after :db}]
+  (let [[{db-before :db} {db-after :db tempids :adjunct}]
         (swap-vals! (:state conn)
                     (fn [state]
                       (let [{:keys [graph db history t] :as db-before} (:db state)
@@ -160,14 +164,20 @@
                          :history (conj (:history db-after) db-after)})))]
     [db-before db-after]))
 
-(s/defn transact-data* :- [(s/one DatabaseType "The database before the operation")
-                           (s/one DatabaseType "The database after the operation")]
+(s/defn transact-data* :- DBsBeforeAfter
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
    Updates the connection to the new graph."
-  [conn :- ConnectionType
-   asserts :- [s/Any]    ;; triples to insert
-   retracts :- [s/Any]]  ;; triples to remove
-  (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts))))
+  ([conn :- ConnectionType
+    asserts :- [Triple]   ;; triples to insert
+    retracts :- [Triple]] ;; triples to remove
+   (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts))))
+  ([conn :- ConnectionType
+    generator-fn]
+   (transact-update* conn
+                     (fn [graph tx-id]
+                       (let [[asserts retracts] (generator-fn graph)]
+                         (gr/graph-transact graph tx-id asserts retracts))))))
+
 
 (s/defn entity* :- {s/Any s/Any}
   "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
