@@ -13,7 +13,7 @@
   #?(:clj Short/BYTES :cljs 2 #_Int16Array.BYTES_PER_ELEMENT))
 
 (def ^:const max-long "Maximum value that can be safely represented as a long"
-  #?(:clj Long/MAX_VALUE :cljs Number.MAX_SAFE_INTEGER))
+  #?(:clj Long/MAX_VALUE :cljs (.-MAX_SAFE_INTEGER js/Number)))
 
 (defprotocol Forceable
   (force! [this] "Ensures that all written data is fully persisted"))
