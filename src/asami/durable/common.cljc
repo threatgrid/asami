@@ -71,17 +71,3 @@
   (delete-tuple! [this tuple] "Removes a tuple from the index. Returns both the index and the final element of the tuple")
   (find-tuples [this tuple] "Finds a tuples seq, returning a co-ordinate")
   (count-tuples [this tuple] "Finds and counts the size of a tuples seq"))
-
-#?(:clj
-   (defmacro with-lock
-     "Uses a lock for a block of code"
-     [lock & body]
-     `(try
-        (lock! ~lock)
-        ~@body
-        (finally (unlock! ~lock))))
-
-   :cljs
-   (defmacro with-lock
-     [lock & body]
-     `(do ~@body)))

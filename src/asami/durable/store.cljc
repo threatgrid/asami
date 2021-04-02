@@ -4,7 +4,9 @@
   (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
             [asami.graph :as graph]
             [asami.internal :as i :refer [now instant? long-time]]
-            [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!] :include-macros true]
+            [asami.durable.common :as common
+             :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!]]
+            [asami.durable.macros :as m :include-macros true]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             [asami.durable.graph :as dgraph]
@@ -181,8 +183,8 @@
   ;; this also ensures no writing between the read/write operations of the update-fn
   ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
   (let [file-lock (volatile! nil)]
-    (common/with-lock connection
-      (with-open [file-lock (common/acquire-lock! tx-manager)]
+    (m/with-lock connection
+      (m/with-open* [file-lock (common/acquire-lock! tx-manager)]
         ;; keep a reference of what the data looks like now
         (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
               ;; figure out the next transaction number to use
@@ -229,8 +231,8 @@
   (transact-data [this asserts retracts] (transact-data* this asserts retracts))
   (transact-data [this generator-fn] (transact-data* this generator-fn))
   common/Lockable
-  (lock! [this] (.lock ^Lock lock))
-  (unlock! [this] (.unlock ^Lock lock)))
+  (lock! [this] #?(:clj (.lock ^Lock lock)))
+  (unlock! [this] #?(:clj (.unlock ^Lock lock))))
 
 (s/defn db-exists? :- s/Bool
   "Tests if this database exists by looking for the transaction file"

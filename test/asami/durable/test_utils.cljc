@@ -2,11 +2,12 @@
       :author "Paula Gearon"}
     asami.durable.test-utils
     (:require [asami.durable.block.block-api :refer [Block put-block!]]
-              [asami.durable.common :refer [long-size int-size]]
+              [asami.durable.common :as common :refer [long-size int-size]]
               #?(:clj
                  [asami.durable.block.file.util :as util])
               #?(:clj
-                 [asami.durable.block.bufferblock :refer [create-block]]))
+                 [asami.durable.block.bufferblock :refer [create-block]])
+              [asami.durable.macros :as m :include-macros true])
     #?(:clj (:import [java.io File]
                      [java.nio ByteBuffer])))
 
@@ -109,15 +110,6 @@
       :cljs
       (->BufferBlock id (js/DataView. (js/ArrayBuffer. len)) 0 len))))
 
-(defmacro assert-args
-  [& pairs]
-  `(do (when-not ~(first pairs)
-         (throw (IllegalArgumentException.
-                  (str (first ~'&form) " requires " ~(second pairs) " in " ~'*ns* ":" (:line (meta ~'&form))))))
-     ~(let [more (nnext pairs)]
-        (when more
-          (list* `assert-args more)))))
-
 (defmacro with-cleanup
   "bindings => [name init ...]
 
@@ -126,7 +118,7 @@
   name in reverse order, followed by delete!."
   {:added "1.0"}
   [bindings & body]
-  (assert-args
+  (m/assert-args
      (vector? bindings) "a vector for its binding"
      (even? (count bindings)) "an even number of forms in binding vector")
   (cond
