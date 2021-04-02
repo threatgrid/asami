@@ -13,7 +13,7 @@
   #?(:clj Short/BYTES :cljs 2 #_Int16Array.BYTES_PER_ELEMENT))
 
 (def ^:const max-long "Maximum value that can be safely represented as a long"
-  #?(:clj Long/MAX_VALUE :cljs Number.MAX_SAFE_INTEGER))
+  #?(:clj Long/MAX_VALUE :cljs js/Number.MAX_SAFE_INTEGER))
 
 (defprotocol Forceable
   (force! [this] "Ensures that all written data is fully persisted"))
@@ -66,4 +66,3 @@
   (delete-tuple! [this tuple] "Removes a tuple from the index. Returns both the index and the final element of the tuple")
   (find-tuples [this tuple] "Finds a tuples seq, returning a co-ordinate")
   (count-tuples [this tuple] "Finds and counts the size of a tuples seq"))
-
