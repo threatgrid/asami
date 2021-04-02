@@ -3,6 +3,13 @@
 ## [Unreleased]
 Nothing yet.
 
+## [2.0.0-alpha9]
+### Added
+- Locking the transaction file during writes to prevent multiple processes from trying to modify it concurrently.
+
+### Changed
+- Opening files no longer allows variations on paths using . and ..
+
 ## [2.0.0-alpha8]
 ### Fixed
 - Addressed concurrency bugs found in the JVM, for both memory-based and durable storage.
@@ -185,7 +192,8 @@ Nothing yet.
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha8...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha9...HEAD
+[2.0.0-alpha9]: https://github.com/threatgrid/asami/compare/2.0.0-alpha8...2.0.0-alpha9
 [2.0.0-alpha8]: https://github.com/threatgrid/asami/compare/2.0.0-alpha7...2.0.0-alpha8
 [2.0.0-alpha7]: https://github.com/threatgrid/asami/compare/2.0.0-alpha6...2.0.0-alpha7
 [2.0.0-alpha6]: https://github.com/threatgrid/asami/compare/2.0.0-alpha5...2.0.0-alpha6
