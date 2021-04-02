@@ -3,8 +3,8 @@
     asami.durable.store
   (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
             [asami.graph :as graph]
-            [asami.internal :as i :refer [now instant? long-time] :include-macros true]
-            [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!]]
+            [asami.internal :as i :refer [now instant? long-time]]
+            [asami.durable.common :as common :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!] :include-macros true]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
             [asami.durable.graph :as dgraph]
@@ -14,7 +14,8 @@
             [schema.core :as s :include-macros true]
             #?(:clj [asami.durable.flat-file :as flat-file])
             #?(:clj [clojure.java.io :as io]))
-  #?(:clj (:import [java.util.concurrent.locks ReentrantLock])))
+  #?(:clj (:import [java.util.concurrent.locks Lock ReentrantLock]
+                   [java.nio.channels FileLock])))
 
 ;; (set! *warn-on-reflection* true)
 
@@ -174,31 +175,33 @@
 
 (s/defn transact-update* :- DBsBeforeAfter
   "Updates a graph according to a provided function. This will be done in a new, single transaction."
-  [{:keys [tx-manager grapha nodea lock] :as connection} :- ConnectionType
+  [{:keys [tx-manager grapha nodea] :as connection} :- ConnectionType
    update-fn :- UpdateFunction]
   ;; multithreaded environments require exclusive writing for the graph
   ;; this also ensures no writing between the read/write operations of the update-fn
   ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
-  (i/with-lock lock
-    ;; keep a reference of what the data looks like now
-    (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
-          ;; figure out the next transaction number to use
-          tx-id (common/tx-count tx-manager)
-          ;; do the modification on the graph
-          next-graph (update-fn @grapha tx-id)
-          ;; step each underlying index to its new transaction point
-          graph-after (commit! next-graph)
-          ;; get the metadata (tree roots) for all the transactions
-          new-timestamp (long-time (now))
-          tx (assoc (common/get-tx-data graph-after)
-                    :nodes @nodea
-                    :timestamp new-timestamp)]
-      ;; save the transaction metadata
-      (common/append-tx! tx-manager (pack-tx tx))
-      ;; update the connection to refer to the latest graph
-      (reset! grapha graph-after)
-      ;; return the required database values
-      [db-before (->DurableDatabase connection graph-after tx-id new-timestamp)])))
+  (let [file-lock (volatile! nil)]
+    (common/with-lock connection
+      (with-open [file-lock (common/acquire-lock! tx-manager)]
+        ;; keep a reference of what the data looks like now
+        (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
+              ;; figure out the next transaction number to use
+              tx-id (common/tx-count tx-manager)
+              ;; do the modification on the graph
+              next-graph (update-fn @grapha tx-id)
+              ;; step each underlying index to its new transaction point
+              graph-after (commit! next-graph)
+              ;; get the metadata (tree roots) for all the transactions
+              new-timestamp (long-time (now))
+              tx (assoc (common/get-tx-data graph-after)
+                        :nodes @nodea
+                        :timestamp new-timestamp)]
+          ;; save the transaction metadata
+          (common/append-tx! tx-manager (pack-tx tx))
+          ;; update the connection to refer to the latest graph
+          (reset! grapha graph-after)
+          ;; return the required database values
+          [db-before (->DurableDatabase connection graph-after tx-id new-timestamp)])))))
 
 (s/defn transact-data* :- DBsBeforeAfter
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
@@ -224,7 +227,10 @@
   (release [this] (release* this))
   (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this asserts retracts] (transact-data* this asserts retracts))
-  (transact-data [this generator-fn] (transact-data* this generator-fn)))
+  (transact-data [this generator-fn] (transact-data* this generator-fn))
+  common/Lockable
+  (lock! [this] (.lock ^Lock lock))
+  (unlock! [this] (.unlock ^Lock lock)))
 
 (s/defn db-exists? :- s/Bool
   "Tests if this database exists by looking for the transaction file"

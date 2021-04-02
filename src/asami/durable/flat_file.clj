@@ -236,6 +236,8 @@
             (> 0 c) (recur mid high)
             (< 0 c) (recur low mid))))))
 
+  (acquire-lock! [this] (.lock (.getChannel rfile)))
+
   Forceable
   (force! [this]
     (.force (.getChannel rfile) true))
@@ -282,19 +284,25 @@
   (delete! [this]
     (.delete ^File f)))
 
+(def ^:const current-dir ".")
+(def ^:const parent-dir "..")
+
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."
   [name fname size]
-  (when (string/includes? name "..")
-    (throw (ex-info "Illegal path present in database name" {:database name})))
-  (let [d (io/file name)
-        _ (.mkdirs d)
-        f (io/file name fname)
-        raf (RandomAccessFile. f "rw")
-        file-length (.length raf)]
-    (when-not (zero? file-length)
-      (.seek raf file-length))
-    [raf f (paged-file raf size)]))
+  (let [[root & path-elements] (string/split name (re-pattern File/separator))]
+    (when (or (= parent-dir root) (some #{current-dir parent-dir} path-elements))
+      (throw (ex-info "Illegal path present in database name" {:database name})))
+    (let [clean-path (cons root (remove empty? path-elements))
+          clean-name (string/join File/separatorChar clean-path)
+          d (io/file clean-name)
+          _ (.mkdirs d)
+          f (io/file clean-name fname)
+          raf (RandomAccessFile. f "rw")
+          file-length (.length raf)]
+      (when-not (zero? file-length)
+        (.seek raf file-length))
+      [raf f (paged-file raf size)])))
 
 (defn flat-store
   "Creates a flat file store. This wraps an append-only file and a paged reader."

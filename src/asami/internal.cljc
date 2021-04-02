@@ -2,8 +2,7 @@
       :author "Paula Gearon"}
     asami.internal
   (:require [asami.graph :as graph])
-  #?(:clj (:import [java.util Date]
-                   [java.util.concurrent.locks Lock])))
+  #?(:clj (:import [java.util Date])))
 
 (defn now
   "Creates an object to represent the current time"
@@ -33,17 +32,3 @@
   [graph]
   (assoc project-args
          :resolve-pattern (partial graph/resolve-pattern graph)))
-
-#?(:clj
-   (defmacro with-lock
-     "Uses a lock for a block of code"
-     [lock & body]
-     `(try
-        (.lock ^Lock ~lock)
-        ~@body
-        (finally (.unlock ^Lock ~lock))))
-
-   :cljs
-   (defmacro with-lock
-     [lock & body]
-     `(do ~@body)))

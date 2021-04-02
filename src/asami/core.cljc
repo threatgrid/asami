@@ -3,7 +3,7 @@
     asami.core
     (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
               [asami.memory :as memory]
-              [asami.durable.store :as durable]
+              #?(:clj [asami.durable.store :as durable])  ;; TODO: make this available to CLJS when ready
               [asami.query :as query]
               [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]

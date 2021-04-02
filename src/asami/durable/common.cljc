@@ -18,6 +18,10 @@
 (defprotocol Forceable
   (force! [this] "Ensures that all written data is fully persisted"))
 
+(defprotocol Lockable
+  (lock! [this] "Locks this resource. This may be a process lock or a thread lock, depending on the resource")
+  (unlock! [this] "Unlocks this resource."))
+
 (defprotocol Closeable
   (close [this] "Closes and invalidates all associated resources")
   (delete! [this] "Remove any persistent resources"))
@@ -30,6 +34,7 @@
   (get-tx-data [this] "Returns the data for a transaction in a vector of long values"))
 
 (defprotocol TxStore
+  (acquire-lock! [this] "Acquires a lock object for the transaction. Once acquired, this resouce MUST be freed!")
   (append-tx! [this tx] "Writes a transaction record. The record is a seq of longs")
   (get-tx [this id] "Retrieves a transaction record by ID")
   (latest [this] "Retrieves the last transaction record")
@@ -67,3 +72,16 @@
   (find-tuples [this tuple] "Finds a tuples seq, returning a co-ordinate")
   (count-tuples [this tuple] "Finds and counts the size of a tuples seq"))
 
+#?(:clj
+   (defmacro with-lock
+     "Uses a lock for a block of code"
+     [lock & body]
+     `(try
+        (lock! ~lock)
+        ~@body
+        (finally (unlock! ~lock))))
+
+   :cljs
+   (defmacro with-lock
+     [lock & body]
+     `(do ~@body)))
