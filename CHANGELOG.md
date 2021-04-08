@@ -3,35 +3,39 @@
 ## [Unreleased]
 Nothing yet.
 
-## [2.0.0-alpha9]
+## [2.0.0] - 2021-04-08
+### Changed
+- Updated to Zuko 0.6.2, core.cache 1.0.207, and ClojureScript 1.10.844.
+
+## [2.0.0-alpha9] - 2021-04-02
 ### Added
 - Locking the transaction file during writes to prevent multiple processes from trying to modify it concurrently.
 
 ### Changed
 - Opening files no longer allows variations on paths using . and ..
 
-## [2.0.0-alpha8]
+## [2.0.0-alpha8] - 2021-03-30
 ### Fixed
 - Addressed concurrency bugs found in the JVM, for both memory-based and durable storage.
 
 ### Changed
 - Updated to Zuko 0.6.0. This introduces new portable i/o operations.
 
-## [2.0.0-alpha7]
+## [2.0.0-alpha7] - 2021-03-20
 ### Changed
 - Updated to Zuko 0.5.1. This allows arbitrary keytypes for entities.
 
-## [2.0.0-alpha6]
+## [2.0.0-alpha6] - 2021-03-19
 ### Changed
 - Updated to Zuko 0.5.0. This means that entities without a temporary ID do not map their new IDs back to themselves in the `:tempids` of transactions.
 - Zuko no longer brings in the unneeded Cheshire and JacksonXML dependencies.
 - Cleaned up reflection in the durable layer, with a 35% speed improvement.
 
-## [2.0.0-alpha5]
+## [2.0.0-alpha5] - 2021-03-18
 ### Added
 - `count-triple` implemented to scan index tree with reduced block access.
 
-## [2.0.0-alpha4]
+## [2.0.0-alpha4] - 2021-03-17
 ### Added
 - Supporting lookup refs in transactions (thanks to @mk)
 - Supporting transitive attributes for durable graphs.
@@ -42,15 +46,11 @@ Nothing yet.
 ### Changed
 - Updated to Zuko 0.4.6. This adds lookup refs to entities in transactions.
 
-## [2.0.0-alpha3]
+## [2.0.0-alpha3] - 2021-03-10
 ### Fixed
 - Fixed bug that ignored :db/retract statements.
 
-## [2.0.0-alpha3]
-### Fixed
-- Fixed bug that ignored :db/retract statements.
-
-## [2.0.0-alpha2]
+## [2.0.0-alpha2] - 2021-03-09
 ### Added
 - Internal node type. This avoids the need for interning keywords as nodes.
 - Added the `asami.Peer` class. This is very early access.
@@ -192,7 +192,8 @@ Nothing yet.
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0-alpha9...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/threatgrid/asami/compare/2.0.0-alpha9...2.0.0
 [2.0.0-alpha9]: https://github.com/threatgrid/asami/compare/2.0.0-alpha8...2.0.0-alpha9
 [2.0.0-alpha8]: https://github.com/threatgrid/asami/compare/2.0.0-alpha7...2.0.0-alpha8
 [2.0.0-alpha7]: https://github.com/threatgrid/asami/compare/2.0.0-alpha6...2.0.0-alpha7
