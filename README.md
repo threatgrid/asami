@@ -127,6 +127,23 @@ See the [Query Documentation](https://github.com/threatgrid/asami/wiki/Querying)
 
 Refer to the [Entity Structure documentation](https://github.com/threatgrid/asami/wiki/Entity-Structure) to understand how entities are stored and how to construct queries for them.
 
+### Local Storage
+The above code uses an in-memory database, specified with a URL of the form `asami:mem://dbname`. Creating a database on disk is done the same way, but with the URL scheme changed to `asami:local://dbname`. This would create a database in the `dbname` directory. Local databases do not use keywords as entity IDs, as keywords use up memory, and a local database could be gigabytes in size. Instead, these are `InternalNode` objects. These can be created with `asami.graph/new-node`, or by using the readers in `asami.graph`. For instance, if the above code were all done with a local graph instead of a memory graph:
+```clojure
+=> (d/q '[:find [?m ...] :where [?m :movie/release-year 1995]] db)
+(#a/n "3" #a/n "4")
+
+;; get a single entity
+=> (require '[asami.graph :as graph])
+=> (d/entity db (graph/new-node 4))
+#:movie{:title "Toy Story", :genre "animation/adventure/comedy", :release-year 1995}
+
+;; nodes can also be read from a string, with the appropriate reader
+=> (set! *data-readers* graph/node-reader)
+=> (d/entity db #a/n "4")
+#:movie{:title "Toy Story", :genre "animation/adventure/comedy", :release-year 1995}
+```
+
 ### Updates
 The _Open World Assumption_ allows each attribute to be multi-arity. In a _Closed World_ database an object may be loaded to replace those attributes that can only appear once. To do the same thing with Asami, annotate the attributes to be replaced with a quote character at the end of the attribute name. 
 ```clojure
@@ -167,6 +184,8 @@ More details are provided in [Entity Updates](https://github.com/threatgrid/asam
 
 ## Analytics
 Asami also has some support for graph analytics. These all operate on the _graph_ part of a database value, which can be retrieved with the `asami.core/graph` function.
+
+**NB:** `local` graphs on disk are not yet supported. These will be available soon.
 
 Start by populating a graph with the cast of ["The Flintstones"](https://www.imdb.com/title/tt0053502/). So that we can refer to entities after they have been created, we can provide them with temporary ID values. These are just negative numbers, and can be used elsewhere in the transaction to refer to the same entity. We will also avoid the `:tx-data` wrapper in the transaction:
 ```clojure
@@ -268,7 +287,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 
 ## TODO
 - Entity storage and indexing.
-- Transitive attributes in durable storage.
+- Analytics in durable storage.
 - ClojureScript durable storage.
 
 ## License
