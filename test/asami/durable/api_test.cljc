@@ -83,7 +83,7 @@
            (->> tx-data
                 (filter #(= one (first %)))
                 (remove #(= :aka (second %)))
-                (remove #(= :tg/sub (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident two]
@@ -94,7 +94,7 @@
            (->> tx-data
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
-                (remove #(= :tg/sub (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set))))
 
@@ -121,7 +121,7 @@
            (->> tx-data
                 (filter #(= one (first %)))
                 (remove #(= :aka (second %)))
-                (remove #(= :tg/sub (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident "anna"]
@@ -132,7 +132,7 @@
            (->> tx-data
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
-                (remove #(= :tg/sub (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set))))
 
