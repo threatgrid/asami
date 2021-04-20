@@ -670,4 +670,47 @@
       (delete-database db-io)
       (delete-database db-new))))
 
+(deftest test-update-unowned
+  (testing "Doing an update on an attribute that references a top level entity"
+    (let [c (connect "asami:mem://testupdate")
+          {d1 :db-after :as tx1} @(transact
+                                   c {:tx-data
+                                      [{:db/ident :p1
+                                        :person/name "Person"}
+                                       {:db/ident :c1
+                                        :change/person {:db/ident :p1}
+                                        :change/time "T1"}
+                                       {:article/name "Article"
+                                        :db/ident :a1
+                                        :article/change {:db/ident :c1}}]})
+          {d2 :db-after :as tx2} @(transact
+                                   c {:tx-data
+                                      [{:db/ident :a1
+                                        :article/change' {:db/ident :c2}}
+                                       {:db/ident :c2
+                                        :change/person {:db/ident :p1}
+                                        :change/time "T2"}]})]
+      (is (= (entity d1 :a1 true)
+             {:article/name "Article"
+              :article/change {:change/person {:person/name "Person"}
+                               :change/time "T1"}}))
+      (is (= (entity d1 :c1 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T1"}))
+      (is (= (entity d1 :p1 true)
+             {:person/name "Person"}))
+
+      (is (= (entity d2 :a1 true)
+             {:article/name "Article"
+              :article/change {:change/person {:person/name "Person"}
+                               :change/time "T2"}}))
+      (is (= (entity d2 :c1 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T1"}))
+      (is (= (entity d2 :c2 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T2"}))
+      (is (= (entity d2 :p1 true)
+             {:person/name "Person"})))))
+
 #?(:cljs (run-tests))
