@@ -94,10 +94,14 @@
 (defn ^:private as-graph
   "Converts the d argument to a Graph. Leaves it alone if it can't be converted."
   [d]
-  (if (not (satisfies? gr/Graph d))
+  (if (satisfies? gr/Graph d)
+    d
     (let [g (:graph d)]
-      (if (satisfies? gr/Graph g) g d))
-      d))
+      (cond
+        (satisfies? gr/Graph g) g
+        (satisfies? storage/Database d) (storage/graph d)
+        (satisfies? storage/Connection d) (storage/graph (storage/db d))
+        :default d))))
 
 (s/defn as-connection :- ConnectionType
   "Creates a Database/Connection around an existing Graph.

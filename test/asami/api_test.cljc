@@ -69,7 +69,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids -1)
         two (tempids -2)]
-    (is (= 19 (count tx-data)))
+    (is (= 21 (count tx-data)))
     (is (= #{[one :db/ident one]
              [one :tg/entity true]
              [one :name "Maksim"]
@@ -78,6 +78,7 @@
            (->> tx-data
                 (filter #(= one (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident two]
@@ -88,6 +89,7 @@
            (->> tx-data
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set))))
 
@@ -105,7 +107,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids "maksim")
         two (tempids "anna")]
-    (is (= 19 (count tx-data)))
+    (is (= 21 (count tx-data)))
     (is (= #{[one :db/ident "maksim"]
              [one :tg/entity true]
              [one :name "Maksim"]
@@ -114,6 +116,7 @@
            (->> tx-data
                 (filter #(= one (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident "anna"]
@@ -124,6 +127,7 @@
            (->> tx-data
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/owns (second %)))
                 (map (partial take 3))
                 set))))
 
@@ -237,7 +241,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [data])
         one (tempids -1)
         d (db c)]
-    (is (= 19 (count tx-data)))
+    (is (= 20 (count tx-data)))
     (is (= 2 (count (filter #(and (= :tg/first (nth % 1)) (= :tg/nil (nth % 2))) tx-data))))
     (is (= {:name  "Home"
             :address nil
@@ -665,5 +669,48 @@
              (is (every? graph/node-type? (map first r2))))))
       (delete-database db-io)
       (delete-database db-new))))
+
+(deftest test-update-unowned
+  (testing "Doing an update on an attribute that references a top level entity"
+    (let [c (connect "asami:mem://testupdate")
+          {d1 :db-after :as tx1} @(transact
+                                   c {:tx-data
+                                      [{:db/ident :p1
+                                        :person/name "Person"}
+                                       {:db/ident :c1
+                                        :change/person {:db/ident :p1}
+                                        :change/time "T1"}
+                                       {:article/name "Article"
+                                        :db/ident :a1
+                                        :article/change {:db/ident :c1}}]})
+          {d2 :db-after :as tx2} @(transact
+                                   c {:tx-data
+                                      [{:db/ident :a1
+                                        :article/change' {:db/ident :c2}}
+                                       {:db/ident :c2
+                                        :change/person {:db/ident :p1}
+                                        :change/time "T2"}]})]
+      (is (= (entity d1 :a1 true)
+             {:article/name "Article"
+              :article/change {:change/person {:person/name "Person"}
+                               :change/time "T1"}}))
+      (is (= (entity d1 :c1 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T1"}))
+      (is (= (entity d1 :p1 true)
+             {:person/name "Person"}))
+
+      (is (= (entity d2 :a1 true)
+             {:article/name "Article"
+              :article/change {:change/person {:person/name "Person"}
+                               :change/time "T2"}}))
+      (is (= (entity d2 :c1 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T1"}))
+      (is (= (entity d2 :c2 true)
+             {:change/person {:person/name "Person"}
+              :change/time "T2"}))
+      (is (= (entity d2 :p1 true)
+             {:person/name "Person"})))))
 
 #?(:cljs (run-tests))

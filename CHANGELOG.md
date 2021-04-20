@@ -1,7 +1,15 @@
 # Change Log
 
-## [Unreleased]
-Nothing yet.
+## [2.0.1] - 2021-04-20
+### Fixed
+- Entity references to top-level entities no longer delete the referenced entity when the reference changes.
+
+### Added
+- Expanded handling of graph conversion for query objects, including getting the latest database from a connection.
+
+### Changed
+- Updated to Zuko 0.6.4.
+- Top level entities now include `:tg/owns` edges to all sub structures that they own.
 
 ## [2.0.0] - 2021-04-08
 ### Changed
@@ -192,7 +200,8 @@ Nothing yet.
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.0...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.1...HEAD
+[2.0.1]: https://github.com/threatgrid/asami/compare/2.0.0...2.0.1
 [2.0.0]: https://github.com/threatgrid/asami/compare/2.0.0-alpha9...2.0.0
 [2.0.0-alpha9]: https://github.com/threatgrid/asami/compare/2.0.0-alpha8...2.0.0-alpha9
 [2.0.0-alpha8]: https://github.com/threatgrid/asami/compare/2.0.0-alpha7...2.0.0-alpha8
