@@ -43,15 +43,19 @@
 
 (s/defn ^:private entity-triples :- [(s/one [Triple] "New triples")
                                      (s/one [Triple] "Retractions")
-                                     (s/one {s/Any s/Any} "New list of ID mappings")]
+                                     (s/one {s/Any s/Any} "New list of ID mappings")
+                                     (s/one #{s/Any} "Running total set of top-level IDs")]
   "Creates the triples to be added and removed for a new entity.
    graph: the graph the entity is to be added to
    obj: The entity to generate triples for
    existing-ids: When IDs are provided by the user, then they get mapped to the internal ID that is actually used.
-                 This map contains a mapping of user IDs to the ID allocated for the entity"
+                 This map contains a mapping of user IDs to the ID allocated for the entity
+   top-ids: The IDs of entities that are inserted at the top level. These are accumulated and this set
+            avoids the need to query for them."
   [graph :- GraphType
    {id :db/id ident :db/ident :as obj} :- EntityMap
-   existing-ids :- {s/Any s/Any}]
+   existing-ids :- {s/Any s/Any}
+   top-ids :- #{s/Any}]
   (let [[new-obj removals additions]
         (if (contains-updates? obj)
           (do
@@ -102,13 +106,15 @@
                                                  new-node (node/new-node graph)]
                                              [[(find-tail head) :tg/rest new-node] [new-node :tg/first v] [head :tg/contains v]])) attr-heads)]
               [new-obj removals append-triples]))
-          [obj nil nil])]
-    (let [[triples ids] (writer/ident-map->triples graph new-obj existing-ids)
-          ;; if updates occurred new entity statements are redundant
-          triples (if (or (seq removals) (seq additions) (not (identical? obj new-obj)))
-                    (remove #(= :tg/entity (second %)) triples)
-                    triples)]
-      [(concat triples additions) removals ids])))
+          [obj nil nil])
+
+        [triples ids new-top-ids] (writer/ident-map->triples graph new-obj existing-ids top-ids)
+
+        ;; if updates occurred new entity statements are redundant
+        triples (if (or (seq removals) (seq additions) (not (identical? obj new-obj)))
+                  (remove #(= :tg/entity (second %)) triples)
+                  triples)]
+    [(concat triples additions) removals ids new-top-ids]))
 
 (defn- vec-rest
   "Takes a vector and returns a vector of all but the first element. Same as (vec (rest s))"
@@ -136,10 +142,10 @@
   (let [[retract-stmts new-data] (util/divide' #(= :db/retract (first %)) data)
         ref->id (partial resolve-lookup-refs graph)
         retractions (mapv (comp (partial mapv ref->id) rest) retract-stmts)
-        add-triples (fn [[acc racc ids] obj]
+        add-triples (fn [[acc racc ids top-ids] obj]
                       (if (map? obj)
-                        (let [[triples rtriples new-ids] (entity-triples graph obj ids)]
-                          [(into acc triples) (into racc rtriples) new-ids])
+                        (let [[triples rtriples new-ids new-top-ids] (entity-triples graph obj ids top-ids)]
+                          [(into acc triples) (into racc rtriples) new-ids new-top-ids])
                         (if (and (seqable? obj)
                                  (= 4 (count obj))
                                  (= :db/add (first obj)))
@@ -148,8 +154,12 @@
                              (let [id (nth obj 3)]
                                (when (temp-id? id)
                                  (let [new-id (or (ids id) (node/new-node graph))]
-                                   [(conj acc (assoc (vec-rest obj) 2 new-id)) racc (assoc ids (or id new-id) new-id)]))))
-                           [(conj acc (mapv #(or (ids %) (ref->id %)) (rest obj))) racc ids])
+                                   [(conj acc (assoc (vec-rest obj) 2 new-id))
+                                    racc
+                                    (assoc ids (or id new-id) new-id)
+                                    top-ids]))))
+                           [(conj acc (mapv #(or (ids %) (ref->id %)) (rest obj))) racc ids top-ids])
                           (throw (ex-info (str "Bad data in transaction: " obj) {:data obj})))))
-        [triples rtriples id-map] (reduce add-triples [[] retractions {}] new-data)]
+        [triples rtriples id-map top-level-ids] (reduce add-triples [[] retractions {} #{}] new-data)
+        triples (writer/backtrack-unlink-top-entities top-level-ids triples)]
     [triples rtriples id-map]))

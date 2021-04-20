@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "1.0.207"]
-                 [org.clojars.quoll/zuko "0.6.2"]
+                 [org.clojars.quoll/zuko "0.6.4-SNAPSHOT"]
                  [org.clojure/data.priority-map "1.0.0"]
                  [tailrecursion/cljs-priority-map "1.2.1"]]
   :plugins [[lein-cljsbuild "1.1.8"]]
