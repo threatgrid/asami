@@ -69,7 +69,6 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids -1)
         two (tempids -2)]
-    (println "data: " tx-data)
     (is (= 21 (count tx-data)))
     (is (= #{[one :db/ident one]
              [one :tg/entity true]
@@ -108,7 +107,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [maksim anna])
         one (tempids "maksim")
         two (tempids "anna")]
-    (is (= 19 (count tx-data)))
+    (is (= 21 (count tx-data)))
     (is (= #{[one :db/ident "maksim"]
              [one :tg/entity true]
              [one :name "Maksim"]
@@ -117,6 +116,7 @@
            (->> tx-data
                 (filter #(= one (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/sub (second %)))
                 (map (partial take 3))
                 set)))
     (is (= #{[two :db/ident "anna"]
@@ -127,6 +127,7 @@
            (->> tx-data
                 (filter #(= two (first %)))
                 (remove #(= :aka (second %)))
+                (remove #(= :tg/sub (second %)))
                 (map (partial take 3))
                 set))))
 
@@ -240,7 +241,7 @@
         {:keys [tempids tx-data] :as r} @(transact c [data])
         one (tempids -1)
         d (db c)]
-    (is (= 19 (count tx-data)))
+    (is (= 20 (count tx-data)))
     (is (= 2 (count (filter #(and (= :tg/first (nth % 1)) (= :tg/nil (nth % 2))) tx-data))))
     (is (= {:name  "Home"
             :address nil
