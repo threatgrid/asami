@@ -4,6 +4,9 @@
 ### Fixed
 - Entity references to top-level entities no longer delete the referenced entity when the reference changes.
 
+### Added
+- Expanded handling of graph conversion for query objects, including getting the latest database from a connection.
+
 ### Changed
 - Updated to Zuko 0.6.4.
 - Top level entities now include `:tg/owns` edges to all sub structures that they own.
