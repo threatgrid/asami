@@ -1,7 +1,12 @@
 # Change Log
 
-## [Unreleased]
-Nothing yet.
+## [2.0.1] - 2021-04-08
+### Fixed
+- Entity references to top-level entities no longer delete the referenced entity when the reference changes.
+
+### Changed
+- Updated to Zuko 0.6.4.
+- Top level entities now include `:tg/owns` edges to all sub structures that they own.
 
 ## [2.0.0] - 2021-04-08
 ### Changed
