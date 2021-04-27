@@ -63,6 +63,8 @@
    #?(:clj (Long/parseLong s)
       :cljs (long s))))
 
+;; can set this at a Clojure repl:
+;; (set! *data-readers* graph/node-reader)
 (def node-reader {'a/n node-read})
 
 #?(:cljs (swap! reader/*tag-table* assoc 'a/n node-read))
