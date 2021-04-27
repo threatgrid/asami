@@ -18,10 +18,10 @@
 
 ;; (set! *warn-on-reflection* true)
 
-(def spot-name "eavt.idx")
-(def post-name "avet.idx")
-(def ospt-name "veat.idx")
-(def tspo-name "teav.tdx")  ;; a flat file transaction index
+(def spot-name "eavt")
+(def post-name "avet")
+(def ospt-name "veat")
+(def tspo-name "teav")  ;; a flat file transaction index
 
 (declare ->BlockGraph)
 
