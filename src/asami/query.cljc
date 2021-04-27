@@ -637,11 +637,11 @@
 (s/defn context-execute-query
   "For each line in a context, execute a query specified by the where clause"
   [graph
+   grouping-vars :- #{Var}
    context :- Results
    [op & args :as where] :- Pattern]
   (let [context-cols (meta context)
-        child-vars (set (get-vars where))
-        colnumbers (keep-indexed (fn [n col] (when (child-vars col) n)) (:cols context-cols))
+        colnumbers (keep-indexed (fn [n col] (when (grouping-vars col) n)) (:cols context-cols))
         group-sel (fn [row] (mapv #(nth row %) colnumbers))
         groups (fn groups [[x & xs :as xa]]
                  (when (seq xa)
@@ -802,7 +802,8 @@
          :inner-queries inner-wheres}
         ;; execute the inner queries within the context provided by the outer queries
         ;; remove the empty results. This means that empty values are not counted!
-        (let [inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
+        (let [grouping-vars (->> (into find-var-set with-set) (remove agg-vars) set)
+              inner-results (filter seq (mapcat (partial context-execute-query graph grouping-vars) outer-results inner-wheres))]
           ;; calculate the aggregates from the final results and project
           (aggregate-over find with inner-results))))))
 
