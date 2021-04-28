@@ -30,7 +30,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "2.0.1"}
+    org.clojars.quoll/asami {:mvn/version "2.0.2"}
   }
 }
 ```
@@ -39,7 +39,13 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "2.0.1"]
+[org.clojars.quoll/asami "2.0.2"]
+```
+
+### Important Note for databases before 2.0.2
+The Asami filenames were being stored with filenames that accidentally had multiple extensions. We decided to fix this immediately, rather than waiting for a major release. To update files from an earlier database, use the `update.sh` script. For a database that was created in the current directory with the name `asami:local://dbname` then run:
+```bash
+./update.sh dbname
 ```
 
 ### Running
