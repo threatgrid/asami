@@ -448,6 +448,26 @@
                 (db conn)))))
     (delete-database "asami:local://test8")))
 
+(deftest test-aggregate
+  (testing "Aggregate grouping is working as expected"
+    (let [c (connect "asami:local://test-aggregate")]
+      @(transact c {:tx-data [{:name "Alison"
+                               :address "1313 Mockingbird Lane"
+                               :children [{:name "Andrew" :age 16} {:name "Boris" :age 14} {:name "Cassie" :age 12}]}
+                              {:name "Beatrice"
+                               :address "742 Evergreen Terrace"
+                               :children [{:name "Allie" :age 13} {:name "Barry" :age 11}]}
+                              {:name "Charlie"
+                               :address "1313 Mockingbird Lane"
+                               :children [{:name "Aaron" :age 16} {:name "Barbara" :age 6}]}]})
+      (is (= (set (q '[:find ?address (count ?child)
+                       :where
+                       [?parent :address ?address]
+                       [?parent :children ?children]
+                       [?children :tg/contains ?child]] (db c)))
+             #{["1313 Mockingbird Lane" 5] ["742 Evergreen Terrace" 2]})))
+    (delete-database "asami:local://test-aggregate")))
+
 (def transitive-data
     [{:db/id -1 :name "Washington Monument"}
      {:db/id -2 :name "National Mall"}

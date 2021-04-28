@@ -14,6 +14,7 @@
               [zuko.util :refer [fn-for]]
               [zuko.logging :as log :include-macros true]
               [schema.core :as s :include-macros true]
+              [clojure.set :as set]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 
@@ -592,7 +593,7 @@
 (s/defn execute-query
   [selection constraints bindings graph project-fn {:keys [query-plan] :as options}]
   ;; joins must happen across a seq that is a conjunction
-  (log/debug "executing selection: " selection " where: " constraints)
+  (log/debug "executing selection: " (seq selection) " where: " constraints)
   (log/debug "bindings: " bindings)
   (let [top-conjunction (if (seq? constraints) ;; is this a list?
                           (let [[op & args] constraints]
@@ -623,16 +624,45 @@
           (#{'and 'AND} op) (cons element args)
           :default (list element pattern)))
 
+(defn split-with*
+  "Same as clojure.core/split-with but only executes the predicate once on each matching element.
+  Returns the same as [(vec (take-while pred coll)) (drop-while pred coll)]"
+  [pred coll]
+  (loop [tw [] [r & rs :as allr] coll]
+    (if-not (seq allr)
+      [tw nil]       
+      (if (pred r)            
+        (recur (conj tw r) rs)
+        [tw allr]))))
+
+(defn seq-group-by
+  "Does a group-by style of operation, but it streams over the input and provides a sequence of groups.
+  The input data must already be in a groupable order, meaning that once a grouping variable has stopped
+  appearing, the group is finished. group-select is a function for selecting the data to group by."
+  [group-select xs]
+  (letfn [(groups [[x & xs :as xa]]
+            (when (seq xa)
+              (let [g (group-select x)
+                    gfn (fn [r] (= g (group-select r)))
+                    [grp rmdr] (split-with* gfn xs)]
+                (cons (cons x grp) (lazy-seq (groups rmdr))))))]
+    (groups xs)))
+
 (s/defn context-execute-query
   "For each line in a context, execute a query specified by the where clause"
   [graph
+   grouping-vars :- #{Var}
    context :- Results
    [op & args :as where] :- Pattern]
   (let [context-cols (meta context)
+        colnumbers (keep-indexed (fn [n col] (when (grouping-vars col) n)) (:cols context-cols))
+        group-sel (fn [row] (mapv #(nth row %) colnumbers))
         ljoin #(left-join %2 %1 graph)
         where (if (#{'and 'AND} op) args (list where))
-        subquery (fn [row] (reduce ljoin (with-meta (list row) context-cols) where))]
-    (map subquery context)))
+        subquery (fn [grp] (reduce ljoin grp where))]
+    (->> (seq-group-by group-sel context)
+         (map #(with-meta % context-cols))
+         (map subquery))))
 
 (def aggregate-fns
   "Map of aggregate symbols to functions that accept a seq of data to be aggregated"
@@ -743,8 +773,8 @@
           ;; extract every element of the or into an outer/inner pair of queries.
           ;; The inner/outer -wheres zip
           [outer-wheres inner-wheres agg-vars] (planner/split-aggregate-terms normalized find with)
-          _ (log/debug "inner query:" inner-wheres)
-          _ (log/debug "outer query:" outer-wheres)
+          _ (log/debug "inner query:" (seq inner-wheres))
+          _ (log/debug "outer query:" (seq outer-wheres))
           ;; outer wheres is a series of queries that make a sum (an OR operation). These all get run separately.
           ;; inner wheres is a matching series of queries that get run for the corresponding outer query.
 
@@ -778,9 +808,10 @@
         {:type :aggregate
          :outer-queries (map :plan outer-results)
          :inner-queries inner-wheres}
-          ;; execute the inner queries within the context provided by the outer queries
-          ;; remove the empty results. This means that empty values are not counted!
-        (let [inner-results (filter seq (mapcat (partial context-execute-query graph) outer-results inner-wheres))]
+        ;; execute the inner queries within the context provided by the outer queries
+        ;; remove the empty results. This means that empty values are not counted!
+        (let [grouping-vars (set/difference (into find-var-set with-set) agg-vars)
+              inner-results (filter seq (mapcat (partial context-execute-query graph grouping-vars) outer-results inner-wheres))]
           ;; calculate the aggregates from the final results and project
           (aggregate-over find with inner-results))))))
 

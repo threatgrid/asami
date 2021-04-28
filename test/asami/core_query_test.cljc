@@ -489,11 +489,14 @@
       pba (nn)
       pbb (nn)
       pc (nn)
+      pca (nn)
+      pcb (nn)
       f (nn)
       m (nn)
 
       data [[pa :name "Alice"]
             [pa :gender f]
+            [pa :address "1313 Mockingbird Lane"]
             [pa :child paa]
             [pa :child pab]
             [pa :child pac]
@@ -509,6 +512,7 @@
 
             [pb :name "Barbara"]
             [pb :gender f]
+            [pb :address "742 Evergreen Terrace"]
             [pb :child pba]
             [pb :child pbb]
             [pba :name "Ann"]
@@ -520,11 +524,76 @@
 
             [pc :name "Cary"]
             [pc :gender m]
+            [pc :address "742 Evergreen Terrace"]
             [pc :child pba]
             [pc :child pbb]
 
             [f :label "female"]
+            [m :label "male"]]
+
+      dat2 [[pa :name "Alison"]
+            [pa :gender f]
+            [pa :address "1313 Mockingbird Lane"]
+            [pa :child paa]
+            [pa :child pab]
+            [pa :child pac]
+            [paa :name "Andrew"]
+            [paa :age 16]
+            [paa :gender m]
+            [pab :name "Boris"]
+            [pab :age 14]
+            [pab :gender m]
+            [pac :name "Cassie"]
+            [pac :age 12]
+            [pac :gender f]
+
+            [pb :name "Beatrice"]
+            [pb :gender f]
+            [pb :address "742 Evergreen Terrace"]
+            [pb :child pba]
+            [pb :child pbb]
+            [pba :name "Allie"]
+            [pba :age 13]
+            [pba :gender f]
+            [pbb :name "Barry"]
+            [pbb :age 11]
+            [pbb :gender m]
+
+            [pc :name "Charlie"]
+            [pc :gender m]
+            [pc :address "1313 Mockingbird Lane"]
+            [pc :child pca]
+            [pc :child pcb]
+            [pca :name "Aaron"]
+            [pca :age 16]
+            [pca :gender m]
+            [pcb :name "Barbara"]
+            [pcb :age 6]
+            [pcb :gender f]
+
+            [f :label "female"]
             [m :label "male"]]]
+
+  (deftest test-grouped-aggregates
+    (let [st (-> empty-graph (assert-data data))
+
+          r1 (q '[:find ?address (count ?child)
+                  :where
+                  [?parent :address ?address]
+                  [?parent :child ?child]] st)
+
+          st2 (-> empty-graph (assert-data dat2))
+
+          r2 (q '[:find ?address (count ?child)
+                  :where
+                  [?parent :address ?address]
+                  [?parent :child ?child]] st2)]
+
+      (is (= '[?address ?count-child] (:cols (meta r1))))
+      (is (= #{["1313 Mockingbird Lane" 3] ["742 Evergreen Terrace" 2]} (set r1)))
+
+      (is (= '[?address ?count-child] (:cols (meta r2))))
+      (is (= #{["1313 Mockingbird Lane" 5] ["742 Evergreen Terrace" 2]} (set r2)))))
 
   (deftest test-aggregates
     (let [st (-> empty-graph (assert-data data))
@@ -569,6 +638,11 @@
                    :where
                    [?parent :gender ?f]
                    [?f :label "female"]
+                   [?parent :child ?child]])
+
+          r8 (sq '[:find ?address (count ?child)
+                   :where
+                   [?parent :address ?address]
                    [?parent :child ?child]])]
       (is (thrown-with-msg? ExceptionInfo #"Wildcard is not permitted for sum"
                             (sq '[:find (sum *) :where [?parent :child ?child]])))
@@ -595,7 +669,10 @@
       (is (= '[?count-child] (:cols (meta r6))))
       (is (= [[5]] r6))
       (is (= '[?count-child] (:cols (meta r7))))
-      (is (= #{[3] [2]} (set r7)))))
+      (is (= #{[3] [2]} (set r7)))
+
+      (is (= '[?address ?count-child] (:cols (meta r8))))
+      (is (= #{["1313 Mockingbird Lane" 3] ["742 Evergreen Terrace" 2]} (set r8)))))
 
   (deftest test-agg-projections
     (let [st (-> empty-graph (assert-data data))
