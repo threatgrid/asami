@@ -6,7 +6,7 @@
                                    EvalPattern eval-pattern?
                                    epv-pattern? filter-pattern?
                                    op-pattern? vartest?]]
-              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars VarOrWild get-vars]]
+              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
               [asami.graph :as gr]
               [asami.internal :as internal]
               [zuko.sandbox :as sandbox]
