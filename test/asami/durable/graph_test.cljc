@@ -34,8 +34,9 @@
                       :cljs nil)
         tx (latest tx-manager)
         counter (atom 0)
-        node-allocator (fn [] (new-node (swap! counter inc)))]
-    (assoc (new-block-graph nm (and tx (unpack-tx tx)) node-allocator)
+        node-allocator (fn [] (new-node (swap! counter inc)))
+        id-checker (fn [id] (when (> id @counter) (reset! counter id)))]
+    (assoc (new-block-graph nm (and tx (unpack-tx tx)) node-allocator id-checker)
            :to-close tx-manager)))
 
 (deftest test-new-graph
