@@ -29,12 +29,21 @@
   [graph [s p o :as pattern]]
   (count-triple graph s p o))
 
+
+(defprotocol IdCheck
+  (id-check [o checker] "Checks an object with the provided checker"))
+
+(extend-type #?(:clj Object :cljs object) IdCheck
+  (id-check [_ _]))
+
 #?(:clj
    (deftype InternalNode [^long id]
      Object
      (toString [_] (str "#a/n \"" id "\""))
      (equals [_ o] (and (instance? InternalNode o) (= id (.id o))))
-     (hashCode [_] (hash id)))
+     (hashCode [_] (hash id))
+     IdCheck
+     (id-check [_ checker] (checker id)))
 
    :cljs
    (deftype InternalNode [^long id]
@@ -48,7 +57,10 @@
      (-hash [_] (hash id))
 
      IPrintWithWriter
-     (-pr-writer [this writer _] (-write writer (str this)))))
+     (-pr-writer [this writer _] (-write writer (str this)))
+
+     IdCheck
+     (id-check [_ checker] (checker id))))
 
 #?(:clj
    (defmethod clojure.core/print-method InternalNode [o ^Writer w]

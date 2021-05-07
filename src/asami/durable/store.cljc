@@ -254,9 +254,11 @@
         _ (when-not ex (common/append-tx! tx-manager (new-db)))
         tx (latest tx-manager)
         unpacked-tx (and tx (unpack-tx tx))
-        node-ct (get :nodes unpacked-tx 0)
+        node-ct (get unpacked-tx :nodes 0)
         node-counter (atom node-ct)
         node-allocator (fn [] (graph/new-node (swap! node-counter inc)))
-        block-graph (dgraph/new-block-graph name unpacked-tx node-allocator)]
+        ;; the following function is called under locked conditions
+        id-checker (fn [id] (when (> id @node-counter) (reset! node-counter id)))
+        block-graph (dgraph/new-block-graph name unpacked-tx node-allocator id-checker)]
     (->DurableConnection name tx-manager (atom block-graph) node-counter (create-lock))))
 

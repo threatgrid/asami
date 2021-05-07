@@ -1,5 +1,10 @@
 # Change Log
 
+## [2.0.3] - 2021-05-06
+### Fixed
+- Fixed problem where the internal node IDs were not initializing from saved transactions.
+- Imports now update the node ID generator to allocate IDs after imported data.
+
 ## [2.0.2] - 2021-04-28
 ### Fixed
 - Removed multiple extensions for filenames.
@@ -205,7 +210,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.2...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.3...HEAD
+[2.0.3]: https://github.com/threatgrid/asami/compare/2.0.2...2.0.3
 [2.0.2]: https://github.com/threatgrid/asami/compare/2.0.1...2.0.2
 [2.0.1]: https://github.com/threatgrid/asami/compare/2.0.0...2.0.1
 [2.0.0]: https://github.com/threatgrid/asami/compare/2.0.0-alpha9...2.0.0
