@@ -33,7 +33,7 @@
 (defprotocol IdCheck
   (id-check [o checker] "Checks an object with the provided checker"))
 
-(extend-type Object IdCheck
+(extend-type #?(:clj Object :cljs object) IdCheck
   (id-check [_ _]))
 
 #?(:clj
