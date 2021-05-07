@@ -350,7 +350,9 @@
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db2))
            #{["Maksim"]}))
     (is (= (set (q '[:find ?name :where [?e :name ?name]] db3))
-           #{["Maksim"] ["Anna"]})))
+           #{["Maksim"] ["Anna"]}))
+    (is (= (set (q '[:find [?a ...] :where [?e ?a ?v]] db2))
+           #{:db/ident :name :age :aka :tg/entity :tg/contains :tg/first :tg/rest :tg/owns})))
   (delete-database "asami:local://test5"))
 
 (deftest test-update

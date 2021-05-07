@@ -439,10 +439,14 @@
            node0 (find-node tree 0)
            root-id (get-id (:root tree))
            ;; extract the file to check that it was truncated
-           block-file (:file (:block-file @(:state (:block-manager tree))))]
+           block-file (:file (:block-file @(:state (:block-manager tree))))
+           ro-tree (at tree root-id)]
        (is (= node0 (first-node tree)))
        (is (= (range 1024) (map get-data (node-seq tree node0))))
        (is (= (find-node tree 1023) (last-node tree)))
+
+       (is (= (get-id (first-node tree)) (get-id (first-node ro-tree))))
+       (is (= (get-id (last-node tree)) (get-id (last-node ro-tree))))
 
        (close tree)
        ;; check the truncated file length. Include the null node.

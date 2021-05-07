@@ -237,15 +237,11 @@
 
 (defn count-between
   [index start-coord end-coord]
-  ;(println "START: " start-coord)
-  ;(println "END: " end-coord)
   (let [{start-node :node start-pos :pos} (if (map? start-coord) start-coord (second start-coord))
         {end-node :node end-pos :pos} (if (map? end-coord)
                                         end-coord
                                         (update (first end-coord) :pos inc))
         end-id (get-id end-node)]
-    ;(println "\nstart: " (node-data start-node) ", pos: " start-pos)
-    ;(println "\nend: " (node-data end-node) ", end: " end-pos)
     (if (= (get-id start-node) end-id)
       (- end-pos start-pos)
       (loop [n (tree/next-node index start-node) total (- (get-count start-node) start-pos)]
