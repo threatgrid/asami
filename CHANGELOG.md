@@ -1,5 +1,9 @@
 # Change Log
 
+## [2.0.4] - 2021-05-07
+### Fixed
+- Fixed missing functions on read-only trees
+
 ## [2.0.3] - 2021-05-06
 ### Fixed
 - Fixed problem where the internal node IDs were not initializing from saved transactions.
@@ -210,7 +214,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.3...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.4...HEAD
+[2.0.4]: https://github.com/threatgrid/asami/compare/2.0.3...2.0.4
 [2.0.3]: https://github.com/threatgrid/asami/compare/2.0.2...2.0.3
 [2.0.2]: https://github.com/threatgrid/asami/compare/2.0.1...2.0.2
 [2.0.1]: https://github.com/threatgrid/asami/compare/2.0.0...2.0.1
