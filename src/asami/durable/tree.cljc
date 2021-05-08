@@ -319,8 +319,11 @@
 (defrecord ReadOnlyTree [root node-comparator block-manager node-cache]
   Tree
   (find-node [this key] (find-node* this key))
-  (add [this data writer] (throw (ex-info "Read-only trees cannot be modified" {:add data})))
-  (at [this new-root-id] (assoc this :root (get-node this new-root-id nil))))
+  (first-node [this] (find-end-node this left))
+  (last-node [this] (find-end-node this right))
+  (add [this data writer] (throw (ex-info "Read-only trees cannot be added to" {:add data})))
+  (at [this new-root-id] (assoc this :root (get-node this new-root-id nil)))
+  (modify-node! [this node] (throw (ex-info "Read-only trees cannot be modified" {:type :modify}))))
 
 
 (defrecord TxTree [root rewind-root node-comparator block-manager node-cache]
