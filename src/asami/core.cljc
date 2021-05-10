@@ -174,11 +174,13 @@
                (let [tx-id (storage/next-tx connection)
                      as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
                      current-db (storage/db connection)
+                     ;; single maps should not be passed in, but if they are then wrap them
+                     seq-wrapper (fn [x] (if (map? x) [x] x))
                      ;; a volatile to capture data for the user
                      generated-data (volatile! [tx-triples nil {}])
                      [db-before db-after] (if tx-triples
                                             ;; simple assertion of triples
-                                            (storage/transact-data connection tx-triples nil)
+                                            (storage/transact-data connection (seq-wrapper tx-triples) nil)
                                             ;; a seq of statements and/or entities
                                             ;; this generates triples and retractions inside a transaction
                                             ;; capture this data to return to the user
@@ -186,7 +188,7 @@
                                                                    (fn [graph]
                                                                      ;; building triples returns a tuple of assertions, retractions, tempids
                                                                      (vreset! generated-data
-                                                                              (entities/build-triples graph (or tx-data tx-info))))))
+                                                                              (entities/build-triples graph (seq-wrapper (or tx-data tx-info)))))))
                      ;; pull out the info captured during the transaction
                      [triples retracts tempids] (deref generated-data)]
                  {:db-before db-before
