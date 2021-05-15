@@ -8,7 +8,7 @@
               [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]
               [asami.entities :as entities]
-              [zuko.entity.general :refer [GraphType]]
+              [asami.entities.general :refer [GraphType]]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])
               #?(:clj  [schema.core :as s]

@@ -8,8 +8,8 @@
               [asami.graph :as gr]
               [asami.query :as query]
               [zuko.schema :refer [Triple]]
-              [zuko.entity.general :as entity :refer [GraphType]]
-              [zuko.entity.reader :as reader]
+              [asami.entities.general :as entity :refer [GraphType]]
+              [asami.entities.reader :as reader]
               [schema.core :as s :include-macros true]))
 
 (defn ^:private find-index
