@@ -37,3 +37,24 @@
 (def ^:const skey-type-mask (bit-shift-left skey-type-code 60))
 (def ^:const node-type-mask (bit-shift-left node-type-code 60))
 
+
+;; Header/Body description
+;; Header tries to use as many bits for length data as possible. This cuts into the bit available for type data.
+;; Byte 0
+;; 0xxxxxxx  String type, length of up to 127.
+;; 10xxxxxx  URI type, length of up to 64
+;; 110xxxxx  Keyword type, length of up to 32
+;;           For these 3 types, all remaining bytes are the data body.
+;; 111ytttt  Data is of type described in tttt.
+;;           Length is run-length encoded as follows:
+;; When y=0
+;; Byte 1
+;; xxxxxxxx  The length of the data, 0-255
+;;
+;; When y=1
+;; Length is run-length encoded
+;; Bytes 1-2
+;; 0xxxxxxx xxxxxxxx Length of the data, 256-32kB
+;; 1xxxxxxx xxxxxxxx Indicates a 4-byte length 32kB-32GB
+;; Bytes 3-4
+;; zzzzzzzz zzzzzzzz When Byte 1 started with 1, then included with bytes 1-2 to provide 32GB length
