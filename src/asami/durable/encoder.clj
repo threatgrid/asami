@@ -15,6 +15,8 @@
              [java.nio ByteBuffer]
              [java.nio.charset Charset]))
 
+;; Refer to asami.durable.codec for a description of the encoding implemented below
+
 ;; (set! *warn-on-reflection* true)
 
 (def type->code

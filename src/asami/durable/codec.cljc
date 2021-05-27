@@ -58,3 +58,8 @@
 ;; 1xxxxxxx xxxxxxxx Indicates a 4-byte length 32kB-32GB
 ;; Bytes 3-4
 ;; zzzzzzzz zzzzzzzz When Byte 1 started with 1, then included with bytes 1-2 to provide 32GB length
+
+;; NOTE: reconsidering using the y bit from byte 0 to indicate
+;; that byte 1 is extra type information. This would allow for
+;; short numerical types, types of URL that start with http://
+;; and https:// etc.

@@ -66,32 +66,33 @@
 (defn long-decoder
   [ext paged-rdr ^long pos]
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
-    (.getLong b 0)))
+    [(.getLong b 0) Long/BYTES]))
 
 (defn double-decoder
   [ext paged-rdr ^long pos]
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos Long/BYTES))]
-    (.getDouble b 0)))
+    [(.getDouble b 0) Long/BYTES]))
 
 (defn string-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
-    (read-str paged-rdr (+ pos i) len)))
+    [(read-str paged-rdr (+ pos i) len) (+ i len)]))
 
 (defn uri-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
-    (read-uri paged-rdr (+ pos i) len)))
+    [(read-uri paged-rdr (+ pos i) len) (+ i len)]))
 
 (defn bigint-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)
         b (read-bytes paged-rdr (+ i pos) len)]
-    (bigint (BigInteger. ^bytes b))))
+    [(bigint (BigInteger. ^bytes b)) (+ i len)]))
 
 (defn bigdec-decoder
   [ext paged-rdr ^long pos]
-  (bigdec (string-decoder ext paged-rdr pos)))
+  (let [[s len] (string-decoder ext paged-rdr pos)]
+    [(bigdec s) len]))
 
 (defn date-decoder
   [ext paged-rdr ^long pos]
@@ -104,12 +105,12 @@
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos instant-length))
         epoch (.getLong b 0)
         sec (.getInt b Long/BYTES)]
-    (Instant/ofEpochSecond epoch sec)))
+    [(Instant/ofEpochSecond epoch sec) instant-length]))
 
 (defn keyword-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
-    (read-keyword paged-rdr (+ pos i) len)))
+    [(read-keyword paged-rdr (+ pos i) len) (+ i len)]))
 
 (def ^:const uuid-length (* 2 Long/BYTES))
 
@@ -118,38 +119,61 @@
   (let [b (ByteBuffer/wrap (read-bytes paged-rdr pos uuid-length))
         low (.getLong b 0)
         high (.getLong b Long/BYTES)]
-    (UUID. high low)))
+    [(UUID. high low) uuid-length]))
 
 (defn blob-decoder
   [ext paged-rdr ^long pos]
   (let [[i len] (decode-length ext paged-rdr pos)]
-    (read-bytes paged-rdr (+ i pos) len)))
+    [(read-bytes paged-rdr (+ i pos) len) (+ i len)]))
 
 (defn xsd-decoder
   [ext paged-rdr ^long pos]
-  (let [s (string-decoder ext paged-rdr pos)
+  (let [[s len] (string-decoder ext paged-rdr pos)
         sp (s/index-of s \space)]
-    [(URI/create (subs s 0 sp)) (subs (inc sp))]))
+    [[(URI/create (subs s 0 sp)) (subs (inc sp))] len]))
 
 (defn default-decoder
   "This is a decoder for unsupported data that has a string constructor"
   [ext paged-rdr ^long pos]
-  (let [s (string-decoder ext paged-rdr pos)
+  (let [[s len] (string-decoder ext paged-rdr pos)
         sp (s/index-of s \space)
         class-name (subs s 0 sp)]
     (try
       (let [c (Class/forName class-name) 
             cn (.getConstructor c (into-array Class [String]))]
-        (.newInstance cn (object-array [(subs s (inc sp))])))
+        [(.newInstance cn (object-array [(subs s (inc sp))])) len])
       (catch Exception e
         (throw (ex-info (str "Unable to construct class: " class-name) {:class class-name}))))))
 
+(declare typecode->decoder read-object)
+
+(defn seq-decoder
+  "This is a decoder for sequences of data. Use a vector as the sequence."
+  [ext paged-rdr ^long pos]
+  (let [[i len] (decode-length ext paged-rdr pos)
+        start (+ i pos)
+        end (+ start len)
+        b0 (read-byte paged-rdr start)
+        decoder (if (zero? b0)
+                  ;; heterogeneous
+                  read-object
+                  ;; homogeneous
+                  (if-let [tdecoder (typecode->decoder (bit-and 0x0F b0))]
+                    #(tdecoder true %1 %2)
+                    (throw (ex-info "Illegal datatype in array" {:type-code (bit-and 0x0F b0)}))))]
+    (loop [s [] offset (inc start)]
+      (if (>= offset end)
+        [s (+ i len)]
+        (let [[o obj-len] (decoder paged-rdr offset)]
+          (recur (conj s o) (+ offset obj-len)))))))
+
 (def typecode->decoder
-  "Map of type codes to decoder functions"
+  "Map of type codes to decoder functions. Returns object and bytes read."
   {0 long-decoder
    1 double-decoder
    2 string-decoder
    3 uri-decoder
+   4 seq-decoder
    6 bigint-decoder
    7 bigdec-decoder
    8 date-decoder
@@ -276,15 +300,27 @@
     ;; otherwise, skip the type byte in the right-bytes, and raw compare left bytes to right bytes
     (or (first (drop-while zero? (map compare left-body (drop 1 right-bytes)))) 0)))
 
-(defn read-object
+(defn read-object-size
   "Reads an object from a paged-reader, at id=pos"
   [paged-rdr ^long pos]
   (let [b0 (read-byte paged-rdr pos)
         ipos (inc pos)]
-    (cond  ;; test for short format objects
-      (zero? (bit-and 0x80 b0)) (read-str paged-rdr ipos b0)
-      (zero? (bit-and 0x40 b0)) (read-uri paged-rdr ipos (bit-and 0x3F b0))
-      (zero? (bit-and 0x20 b0)) (read-keyword paged-rdr ipos (bit-and 0x1F b0))
-      ;; First byte contains only the type information
-      :default ((typecode->decoder (bit-and 0x0F b0) default-decoder)
-                (zero? (bit-and 0x10 b0)) paged-rdr ipos))))
+    (cond ;; test for short format objects
+      ;; calculate the length for short format objects, and increment by 1 to include the intro byte
+      (zero? (bit-and 0x80 b0)) [(read-str paged-rdr ipos b0) (inc b0)]
+      (zero? (bit-and 0x40 b0)) (let [len (bit-and 0x3F b0)]
+                                  [(read-uri paged-rdr ipos len) (inc len)])
+      (zero? (bit-and 0x20 b0)) (let [len (bit-and 0x1F b0)]
+                                  [(read-keyword paged-rdr ipos len) (inc len)])
+      ;; First byte contains only the type information. Increment the returned length to include b0
+      :default (update ((typecode->decoder (bit-and 0x0F b0) default-decoder)
+                        (zero? (bit-and 0x10 b0)) paged-rdr ipos)
+                       1 inc))))
+
+(defn read-object
+  "Reads an object from a paged-reader, at id=pos"
+  [paged-rdr ^long pos]
+  (first (read-object-size paged-rdr pos)))
+
+;; the test for zero here is the y bit described in asami.durable.codec
+;; This may need to change if the y bit is repurposed.
