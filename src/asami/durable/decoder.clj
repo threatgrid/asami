@@ -96,7 +96,7 @@
 
 (defn date-decoder
   [ext paged-rdr ^long pos]
-  (Date. ^long (long-decoder ext paged-rdr pos)))
+  [(Date. ^long (first (long-decoder ext paged-rdr pos))) Long/BYTES])
 
 (def ^:const instant-length (+ Long/BYTES Integer/BYTES))
 
