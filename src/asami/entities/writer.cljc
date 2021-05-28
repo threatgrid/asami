@@ -45,15 +45,17 @@
 
 (defn list-triples
   "Creates the triples for a list. Returns a node and list of nodes representing contents of the list."
-  [[v & vs :as vlist]]
-  (if (seq vlist)
-    (let [node-ref (node/new-node *current-graph*)
-          value-ref (value-triples v)
-          [next-ref value-nodes] (list-triples vs)]
-      (vswap! *triples* conj [node-ref (node/data-attribute *current-graph* value-ref) value-ref])
-      (when next-ref
-        (vswap! *triples* conj [node-ref :tg/rest next-ref]))
-      [node-ref (cons value-ref value-nodes)])))
+  [vlist]
+  (when (seq vlist)
+    (loop [list-ref nil, last-ref nil, value-nodes [], [v & vs :as val-list] vlist]
+      (if-not (seq val-list)
+        [list-ref value-nodes]
+        (let [node-ref (node/new-node *current-graph*)
+              _ (when last-ref
+                  (vswap! *triples* conj [last-ref :tg/rest node-ref]))
+              value-ref (value-triples v)]
+          (vswap! *triples* conj [node-ref (node/data-attribute *current-graph* value-ref) value-ref])
+          (recur (or list-ref node-ref) node-ref (conj value-nodes value-ref) vs))))))
 
 (s/defn value-triples-list
   [vlist :- [s/Any]]
