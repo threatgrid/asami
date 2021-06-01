@@ -764,7 +764,7 @@
 
 (defn aggregate-query
   [find bindings with where graph project-fn {:keys [query-plan] :as options}]
-  (log/debug "aggregate query:" query-plan)
+  (log/debug "aggregate query. plan only=" query-plan)
   (binding [*select-distinct* distinct]
     ;; flatten the query
     (let [simplified (planner/simplify-algebra where)
@@ -803,6 +803,7 @@
                                    (execute-query outer-terms ow bindings graph project-fn options))
                                  identity-binding))
                              outer-wheres inner-wheres)]
+      (log/debug "outer results: " (into [] outer-results))
       (if query-plan
         ;; results are audit plans
         {:type :aggregate
@@ -810,8 +811,10 @@
          :inner-queries inner-wheres}
         ;; execute the inner queries within the context provided by the outer queries
         ;; remove the empty results. This means that empty values are not counted!
-        (let [grouping-vars (set/difference (into find-var-set with-set) agg-vars)
+        (let [grouping-vars (into find-var-set with-set) ;; (set/difference (into find-var-set with-set) agg-vars)
+              _ (log/debug "grouping vars: " grouping-vars)
               inner-results (filter seq (mapcat (partial context-execute-query graph grouping-vars) outer-results inner-wheres))]
+          (log/debug "inner results: " (into [] inner-results))
           ;; calculate the aggregates from the final results and project
           (aggregate-over find with inner-results))))))
 

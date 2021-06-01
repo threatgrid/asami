@@ -1,5 +1,9 @@
 # Change Log
 
+## [2.0.5] - 2021-05-27
+### Changed
+- Entity conversion to statements is no longer recursive on arrays. This allows for larger arrays.
+
 ## [2.0.4] - 2021-05-07
 ### Fixed
 - Fixed missing functions on read-only trees
@@ -214,7 +218,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.4...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.5...HEAD
+[2.0.5]: https://github.com/threatgrid/asami/compare/2.0.4...2.0.5
 [2.0.4]: https://github.com/threatgrid/asami/compare/2.0.3...2.0.4
 [2.0.3]: https://github.com/threatgrid/asami/compare/2.0.2...2.0.3
 [2.0.2]: https://github.com/threatgrid/asami/compare/2.0.1...2.0.2

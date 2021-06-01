@@ -6,6 +6,7 @@
             [asami.graph :as graph]
             [asami.multi-graph :as m]
             [asami.internal :refer [now]]
+            [zuko.logging :as log]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
@@ -466,7 +467,12 @@
                        [?parent :address ?address]
                        [?parent :children ?children]
                        [?children :tg/contains ?child]] (db c)))
-             #{["1313 Mockingbird Lane" 5] ["742 Evergreen Terrace" 2]})))))
+             #{["1313 Mockingbird Lane" 5] ["742 Evergreen Terrace" 2]}))
+      (let [grouped (q '[:find ?entity (count ?entity)
+                         :where
+                         [?entity :tg/entity true]] (db c))]
+        (is (= 3 (count grouped)))
+        (is (every? #{1} (map second grouped)))))))
 
 (def transitive-data
     [{:db/id -1 :name "Washington Monument"}
