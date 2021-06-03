@@ -10,6 +10,8 @@ Asami is a _schemaless_ database, meaning that data may be inserted with no pred
 
 Asami also follows an _Open World Assumption_ model, in the same way that [RDF](http://www.w3.org/TR/rdf-primer) does. In practice, this has very little effect on the database, beyond what being schemaless provides.
 
+If you are new to graph databases, then please read our [Introduction page](https://github.com/threatgrid/asami/wiki/Introduction).
+
 Asami has a query API that looks very similar to a simplified Datomic. More details are available in the [Query documentation](https://github.com/threatgrid/asami/wiki/Querying).
 
 ## Features
