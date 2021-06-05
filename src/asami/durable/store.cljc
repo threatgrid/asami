@@ -19,7 +19,7 @@
   #?(:clj (:import [java.util.concurrent.locks Lock ReentrantLock]
                    [java.nio.channels FileLock])))
 
-;; (set! *warn-on-reflection* true)
+#?(:clj (set! *warn-on-reflection* true))
 
 (def tx-name "tx.dat")
 
@@ -184,7 +184,7 @@
   ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
   (let [file-lock (volatile! nil)]
     (m/with-lock connection
-      (m/with-open* [file-lock (common/acquire-lock! tx-manager)]
+      (m/with-open* [^ FileLock file-lock (common/acquire-lock! tx-manager)]
         ;; keep a reference of what the data looks like now
         (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
               ;; figure out the next transaction number to use

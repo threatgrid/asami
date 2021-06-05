@@ -19,7 +19,7 @@
 
 (defn instant
   "Creates an instant from a long millisecond value"
-  [ms]
+  [^long ms]
   #?(:clj (Date. ms) :cljs (js/Date. ms)))
 
 (defn long-time
