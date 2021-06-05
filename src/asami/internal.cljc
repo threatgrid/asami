@@ -4,6 +4,8 @@
   (:require [asami.graph :as graph])
   #?(:clj (:import [java.util Date])))
 
+#?(:clj (set! *warn-on-reflection* true))
+
 (defn now
   "Creates an object to represent the current time"
   []
@@ -22,7 +24,8 @@
 
 (defn long-time
   "Converts a timestamp to a long value as the number of milliseconds"
-  [t]
+  #?(:clj [^java.util.Date t]
+     :cljs [t])
   (.getTime t))  ;; this is an identical operation in both Java and Javascript
 
 (def project-args {:new-node graph/new-node
