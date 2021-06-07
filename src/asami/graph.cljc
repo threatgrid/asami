@@ -40,7 +40,7 @@
    (deftype InternalNode [^long id]
      Object
      (toString [_] (str "#a/n \"" id "\""))
-     (equals [_ o] (and (instance? InternalNode o) (= id (.id o))))
+     (equals [_ o] (and (instance? InternalNode o) (= id (.id ^InternalNode o))))
      (hashCode [_] (hash id))
      IdCheck
      (id-check [_ checker] (checker id)))
@@ -63,7 +63,7 @@
      (id-check [_ checker] (checker id))))
 
 #?(:clj
-   (defmethod clojure.core/print-method InternalNode [o ^Writer w]
+   (defmethod clojure.core/print-method InternalNode [^InternalNode o ^Writer w]
      (.write w "#a/n \"")
      (.write w (str (.id o)))
      (.write w "\"")))

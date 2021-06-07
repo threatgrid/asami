@@ -1,0 +1,8 @@
+{:deps
+ {org.clojure/clojurescript {:mvn/version "1.10.844"}
+  org.clojure/clojure {:mvn/version "1.10.3"}
+  prismatic/schema {:mvn/version "1.1.12"} 
+  org.clojure/core.cache {:mvn/version "1.0.207"}
+  org.clojars.quoll/zuko {:mvn/version "0.6.5"}
+  org.clojure/data.priority-map {:mvn/version "1.0.0"}
+  tailrecursion/cljs-priority-map {:mvn/version "1.2.1"}}}

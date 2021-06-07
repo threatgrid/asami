@@ -17,10 +17,9 @@
             #?(:clj [asami.durable.flat-file :as flat-file])
             #?(:clj [clojure.java.io :as io]))
   #?(:clj (:import [java.util.concurrent.locks Lock ReentrantLock]
-                   [java.nio.channels FileLock]
-                   [java.lang AutoCloseable])))
+                   [java.nio.channels FileLock])))
 
-;; (set! *warn-on-reflection* true)
+#?(:clj (set! *warn-on-reflection* true))
 
 (def tx-name "tx.dat")
 
@@ -185,7 +184,7 @@
   ;; Locking is required, as opposed to using atoms, since I/O operations cannot be repeated.
   (let [file-lock (volatile! nil)]
     (m/with-lock connection
-      (m/with-open* #?(:clj [^AutoCloseable file-lock (common/acquire-lock! tx-manager)]
+      (m/with-open* #?(:clj [^FileLock file-lock (common/acquire-lock! tx-manager)]
                        :cljs [file-lock (common/acquire-lock! tx-manager)])
         ;; keep a reference of what the data looks like now
         (let [{:keys [bgraph t timestamp] :as db-before} (db* connection)
