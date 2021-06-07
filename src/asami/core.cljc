@@ -9,6 +9,7 @@
               [asami.graph :as gr]
               [asami.entities :as entities]
               [asami.entities.general :refer [GraphType]]
+              [asami.internal :as internal]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])
               #?(:clj  [schema.core :as s]
@@ -123,6 +124,10 @@
 (def graph storage/graph)
 (def entity storage/entity)
 (def release storage/release)
+(def now internal/now)
+(def instant internal/instant)
+(def instant? internal/instant?)
+(def long-time internal/long-time)
 
 (def TransactData (s/if map?
                     {(s/optional-key :tx-data) [s/Any]

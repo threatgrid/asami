@@ -22,7 +22,7 @@
 
 (defn long-time
   "Converts a timestamp to a long value as the number of milliseconds"
-  [t]
+  [^Date t]
   (.getTime t))  ;; this is an identical operation in both Java and Javascript
 
 (def project-args {:new-node graph/new-node

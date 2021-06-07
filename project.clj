@@ -7,6 +7,7 @@
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "1.0.207"]
                  [org.clojars.quoll/zuko "0.6.5"]
+                 [org.clojars.quoll/qtest "0.1.1"]
                  [org.clojure/data.priority-map "1.0.0"]
                  [tailrecursion/cljs-priority-map "1.2.1"]]
   :plugins [[lein-cljsbuild "1.1.8"]]
