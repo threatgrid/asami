@@ -146,7 +146,7 @@
       (catch Exception e
         (throw (ex-info (str "Unable to construct class: " class-name) {:class class-name}))))))
 
-(declare typecode->decoder read-object)
+(declare typecode->decoder read-object-size)
 
 (defn seq-decoder
   "This is a decoder for sequences of data. Use a vector as the sequence."
@@ -157,7 +157,7 @@
         b0 (read-byte paged-rdr start)
         decoder (if (zero? b0)
                   ;; heterogeneous
-                  read-object
+                  read-object-size
                   ;; homogeneous
                   (if-let [tdecoder (typecode->decoder (bit-and 0x0F b0))]
                     #(tdecoder true %1 %2)
