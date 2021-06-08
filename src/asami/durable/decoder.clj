@@ -168,6 +168,13 @@
         (let [[o obj-len] (decoder paged-rdr offset)]
           (recur (conj s o) (+ offset obj-len)))))))
 
+(defn map-decoder
+  "A decoder for maps"
+  [ext paged-rdr ^long pos]
+  (let [[s len] (seq-decoder ext paged-rdr pos)
+        m (into {} (map vec (partition 2 s)))]
+    [m len]))
+
 (def typecode->decoder
   "Map of type codes to decoder functions. Returns object and bytes read."
   {0 long-decoder
@@ -175,6 +182,7 @@
    2 string-decoder
    3 uri-decoder
    4 seq-decoder
+   5 map-decoder
    6 bigint-decoder
    7 bigdec-decoder
    8 date-decoder

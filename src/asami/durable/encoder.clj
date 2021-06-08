@@ -271,8 +271,14 @@
              concat-bytes))))
 
   IPersistentVector
-  (header [this len] (header (seq this) len))
-  (body [this] (body (seq this)))
+  (header [this len] (header (or (seq this) '()) len))
+  (body [this] (body (or (seq this) '())))
+  
+  IPersistentMap
+  (header [this len]
+    (general-header (type->code IPersistentMap) len))
+  (body [this]
+    (body (apply concat (seq this))))
   
   Object
   (header [this len]

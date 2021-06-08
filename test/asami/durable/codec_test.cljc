@@ -221,6 +221,7 @@
                           (is (= a b))))]
                (is (= (count r) (count o)))
                (is (every? identity (map eq r o)))))]
+    (rt [])
     (rt ["hello"])
     (rt [:hello])
     (rt [(uri "http://hello.com/")])
@@ -244,6 +245,28 @@
     (rt ["hello" :hello 2020 20.20 (str-of-len 130) (uri "http://data.org/?ref=1234567890")
          123456789012345678901234567890N 12345678901234567890.0987654321M (now)
          #uuid "1df3b523-357e-4339-a009-2d744e372d44" (byte-array (range 256)) :end "end"])))
+
+(deftest test-map-codecs
+  (let [bb (byte-buffer (byte-array 2048))
+        rdr (->TestReader bb)
+        write! (fn [o]
+                 (let [[header body] (to-bytes o)
+                       header-size (byte-length header)
+                       body-size (byte-length body)]
+                   (.position bb 0)
+                   (.put bb header 0 header-size)
+                   (.put bb body 0 body-size)))
+        rt (fn [o]
+             (write! o)
+             (let [r (read-object rdr 0)]
+               (if (bytes? o)
+                 (is (array-equals o r))
+                 (is (= o r)))))]
+    (rt {})
+    (rt {:a 1})
+    (rt {:a 1 :b 2})
+    (rt {:a "foo" "bar" 5})
+    (rt {:a {:b 5 :c [6 7 8]} "b" ["9" 10]})))
 
 (defn copy-to!
   [dest dest-offset src len]
