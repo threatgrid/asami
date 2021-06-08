@@ -5,7 +5,8 @@
               [asami.graph :as graph]
               [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8
                                            long-type-mask date-type-mask inst-type-mask
-                                           sstr-type-mask skey-type-mask node-type-mask]])
+                                           sstr-type-mask skey-type-mask node-type-mask
+                                           boolean-true-bits boolean-false-bits]])
     (:import [clojure.lang Keyword BigInt ISeq IPersistentMap IPersistentVector]
              [java.io RandomAccessFile]
              [java.math BigInteger BigDecimal]
@@ -147,6 +148,14 @@
   (encapsulate-id [this]
     (encapsulate-sstr this sstr-type-mask))
 
+  Boolean
+  (header [this len]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (body [this]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (encapsulate-id [this]
+    (if this boolean-true-bits boolean-false-bits))
+
   URI
   (header [this len]
     (if (< len 0x40)
@@ -282,7 +291,7 @@
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
   (body [this]
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
-  (encapsulate-id [this]
+  (encapsulate-id [^asami.graph.InternalNode this]
     (bit-or node-type-mask (bit-and data-mask (.id this)))))
 
 (defn to-bytes

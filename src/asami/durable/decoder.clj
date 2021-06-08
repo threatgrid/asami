@@ -6,7 +6,8 @@
               [asami.durable.common :refer [read-byte read-bytes read-short]]
               [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8
                                            long-type-code date-type-code inst-type-code
-                                           sstr-type-code skey-type-code node-type-code]])
+                                           sstr-type-code skey-type-code node-type-code
+                                           boolean-false-bits boolean-true-bits]])
     (:import [clojure.lang Keyword BigInt]
              [java.math BigInteger BigDecimal]
              [java.net URI]
@@ -226,15 +227,18 @@
   "Converts an encapsulating ID into the object it encapsulates. Return nil if it does not encapsulate anything."
   [^long id]
   (when (> 0 id)
-    (let [tb (bit-and (bit-shift-right id type-nybble-shift) nybble-mask)]
-      (case tb
-        0x8 (extract-long id)                          ;; long-type-code
-        0xC (Date. (extract-long id))                  ;; date-type-code
-        0xA (Instant/ofEpochMilli (extract-long id))   ;; inst-type-code
-        0xE (extract-sstr id)                          ;; sstr-type-code
-        0x9 (keyword (extract-sstr id))                ;; skey-type-code
-        0xD (extract-node id)                          ;; node-type-code
-        nil))))
+    (case id
+      -0x5000000000000000 false                          ;; boolean-false-bits
+      -0x4800000000000000 true                           ;; boolean-true-bits
+      (let [tb (bit-and (bit-shift-right id type-nybble-shift) nybble-mask)]
+        (case tb
+          0x8 (extract-long id)                          ;; long-type-code
+          0xC (Date. (extract-long id))                  ;; date-type-code
+          0xA (Instant/ofEpochMilli (extract-long id))   ;; inst-type-code
+          0xE (extract-sstr id)                          ;; sstr-type-code
+          0x9 (keyword (extract-sstr id))                ;; skey-type-code
+          0xD (extract-node id)                          ;; node-type-code
+          nil)))))
 
 (defn encapsulated-node?
   [^long id]

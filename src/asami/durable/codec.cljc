@@ -22,6 +22,7 @@
 ;; 1 1 1 0: Short String
 ;; 1 0 0 1: Short Keyword
 ;; 1 1 0 1: Internal Node - asami.graph/InternalNode
+;; 1 0 1 1: boolean - This leaves a 58 bit space for something else
 
 (def ^:const long-type-code 0x8)
 (def ^:const date-type-code 0xC)
@@ -29,6 +30,7 @@
 (def ^:const sstr-type-code 0xE)
 (def ^:const skey-type-code 0x9)
 (def ^:const node-type-code 0xD)
+(def ^:const bool-type-code 0xB)
 
 (def ^:const long-type-mask (bit-shift-left long-type-code 60))
 (def ^:const date-type-mask (bit-shift-left date-type-code 60))
@@ -36,7 +38,11 @@
 (def ^:const sstr-type-mask (bit-shift-left sstr-type-code 60))
 (def ^:const skey-type-mask (bit-shift-left skey-type-code 60))
 (def ^:const node-type-mask (bit-shift-left node-type-code 60))
+(def ^:const bool-type-mask (bit-shift-left bool-type-code 60))
 
+
+(def ^:const boolean-false-bits bool-type-mask)
+(def ^:const boolean-true-bits (bit-or bool-type-mask (bit-shift-left 0x8 56)))
 
 ;; Header/Body description
 ;; Header tries to use as many bits for length data as possible. This cuts into the bit available for type data.

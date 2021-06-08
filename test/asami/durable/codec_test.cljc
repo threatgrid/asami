@@ -262,6 +262,8 @@
        (is (= (encapsulate-id date)      -0x3FFFFE88E0558E00)) ;; 0xC00001771FAA7200
        (is (= (encapsulate-id inst)      -0x5FFFFE88E0558E00)) ;; 0xA00001771FAA7200
        (is (nil? (encapsulate-id (.plusNanos inst 7))))
+       (is (= (encapsulate-id true)      -0x4800000000000000)) ;; 0xB800000000000000
+       (is (= (encapsulate-id false)     -0x5000000000000000)) ;; 0xB000000000000000
        (is (= (encapsulate-id 42)        -0x7FFFFFFFFFFFFFD6)) ;; 0x800000000000002A
        (is (= (encapsulate-id -42)       -0x700000000000002A)) ;; 0x8FFFFFFFFFFFFFD6
        ;; check some of the boundary conditions for long values
@@ -305,6 +307,8 @@
        (is (= :keyword (unencapsulate-id -0x68949A8688908D9C)))
        (is (= date (unencapsulate-id -0x3FFFFE88E0558E00)))
        (is (= inst (unencapsulate-id -0x5FFFFE88E0558E00)))
+       (is (= true (unencapsulate-id codec/boolean-true-bits)))
+       (is (= false (unencapsulate-id codec/boolean-false-bits)))
        (is (= 42 (unencapsulate-id -0x7FFFFFFFFFFFFFD6)))
        (is (= -42 (unencapsulate-id -0x700000000000002A)))
        (is (= 0x07FFFFFFFFFFFFFE (unencapsulate-id -0x7800000000000002)))
