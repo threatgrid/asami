@@ -166,6 +166,8 @@
      :cljs (and (= (count a) (count b))
                 (every? identity (map = a b)))))
 
+(defn now [] #?(:clj (Date.) :cljs (js/Date.)))
+
 (deftest test-codecs
   (let [bb (byte-buffer (byte-array 2048))
         rdr (->TestReader bb)
@@ -194,12 +196,77 @@
     (rt :key45678901234567890123456789012345)
     (rt 123456789012345678901234567890N)
     (rt 12345678901234567890.0987654321M)
-    #?(:clj (rt (Date.))
-       :cljs (rt (js/Date.)))
+    (rt (now))
     #?(:clj (rt (Instant/now)))
     (rt #uuid "1df3b523-357e-4339-a009-2d744e372d44")
     (rt (byte-array (range 256)))
     #?(:clj (rt (URL. "http://data.org/")))))
+
+(deftest test-collections-codecs
+  (let [bb (byte-buffer (byte-array 2048))
+        rdr (->TestReader bb)
+        write! (fn [o]
+                 (let [[header body] (to-bytes o)
+                       header-size (byte-length header)
+                       body-size (byte-length body)]
+                   (.position bb 0)
+                   (.put bb header 0 header-size)
+                   (.put bb body 0 body-size)))
+        rt (fn [o]
+             (write! o)
+             (let [r (read-object rdr 0)
+                   eq (fn [a b]
+                        (if (bytes? a)
+                          (is (array-equals a b))
+                          (is (= a b))))]
+               (is (= (count r) (count o)))
+               (is (every? identity (map eq r o)))))]
+    (rt [])
+    (rt ["hello"])
+    (rt [:hello])
+    (rt [(uri "http://hello.com/")])
+    (rt [2020])
+    (rt [20.20])
+    (rt [(str-of-len 128)])
+    (rt [(str-of-len 130)])
+    (rt [(str-of-len 2000)])
+    (rt [(uri (str "http://data.org/?ref=" (s/replace (str-of-len 100) "100 " "1234")))])
+    (rt [:key45678901234567890123456789012345])
+    (rt [123456789012345678901234567890N])
+    (rt [12345678901234567890.0987654321M])
+    (rt [(now)])
+    #?(:clj (rt [(Instant/now)]))
+    (rt [#uuid "1df3b523-357e-4339-a009-2d744e372d44"])
+    (rt [(byte-array (range 256))])
+    #?(:clj (rt [(URL. "http://data.org/")]))
+    (rt [1 2 3])
+    (rt (range 30))
+    (rt ["The" "quick" "brown" "fox" "" "jumps" "over" "the" "lazy" "dog"])
+    (rt ["hello" :hello 2020 20.20 (str-of-len 130) (uri "http://data.org/?ref=1234567890")
+         123456789012345678901234567890N 12345678901234567890.0987654321M (now)
+         #uuid "1df3b523-357e-4339-a009-2d744e372d44" (byte-array (range 256)) :end "end"])))
+
+(deftest test-map-codecs
+  (let [bb (byte-buffer (byte-array 2048))
+        rdr (->TestReader bb)
+        write! (fn [o]
+                 (let [[header body] (to-bytes o)
+                       header-size (byte-length header)
+                       body-size (byte-length body)]
+                   (.position bb 0)
+                   (.put bb header 0 header-size)
+                   (.put bb body 0 body-size)))
+        rt (fn [o]
+             (write! o)
+             (let [r (read-object rdr 0)]
+               (if (bytes? o)
+                 (is (array-equals o r))
+                 (is (= o r)))))]
+    (rt {})
+    (rt {:a 1})
+    (rt {:a 1 :b 2})
+    (rt {:a "foo" "bar" 5})
+    (rt {:a {:b 5 :c [6 7 8]} "b" ["9" 10]})))
 
 (defn copy-to!
   [dest dest-offset src len]
@@ -262,6 +329,8 @@
        (is (= (encapsulate-id date)      -0x3FFFFE88E0558E00)) ;; 0xC00001771FAA7200
        (is (= (encapsulate-id inst)      -0x5FFFFE88E0558E00)) ;; 0xA00001771FAA7200
        (is (nil? (encapsulate-id (.plusNanos inst 7))))
+       (is (= (encapsulate-id true)      -0x4800000000000000)) ;; 0xB800000000000000
+       (is (= (encapsulate-id false)     -0x5000000000000000)) ;; 0xB000000000000000
        (is (= (encapsulate-id 42)        -0x7FFFFFFFFFFFFFD6)) ;; 0x800000000000002A
        (is (= (encapsulate-id -42)       -0x700000000000002A)) ;; 0x8FFFFFFFFFFFFFD6
        ;; check some of the boundary conditions for long values
@@ -305,6 +374,8 @@
        (is (= :keyword (unencapsulate-id -0x68949A8688908D9C)))
        (is (= date (unencapsulate-id -0x3FFFFE88E0558E00)))
        (is (= inst (unencapsulate-id -0x5FFFFE88E0558E00)))
+       (is (= true (unencapsulate-id codec/boolean-true-bits)))
+       (is (= false (unencapsulate-id codec/boolean-false-bits)))
        (is (= 42 (unencapsulate-id -0x7FFFFFFFFFFFFFD6)))
        (is (= -42 (unencapsulate-id -0x700000000000002A)))
        (is (= 0x07FFFFFFFFFFFFFE (unencapsulate-id -0x7800000000000002)))

@@ -5,8 +5,9 @@
               [asami.graph :as graph]
               [asami.durable.codec :refer [byte-mask data-mask sbytes-shift len-nybble-shift utf8
                                            long-type-mask date-type-mask inst-type-mask
-                                           sstr-type-mask skey-type-mask node-type-mask]])
-    (:import [clojure.lang Keyword BigInt]
+                                           sstr-type-mask skey-type-mask node-type-mask
+                                           boolean-true-bits boolean-false-bits]])
+    (:import [clojure.lang Keyword BigInt ISeq IPersistentMap IPersistentVector]
              [java.io RandomAccessFile]
              [java.math BigInteger BigDecimal]
              [java.net URI]
@@ -15,13 +16,17 @@
              [java.nio ByteBuffer]
              [java.nio.charset Charset]))
 
+;; Refer to asami.durable.codec for a description of the encoding implemented below
+
 ;; (set! *warn-on-reflection* true)
 
 (def type->code
   {Long (byte 0)
    Double (byte 1)
    String (byte 2)
-   URI (byte 3)  ;; 4 & 5 are reserved for http and https URLs
+   URI (byte 3)
+   ISeq (byte 4)
+   IPersistentMap (byte 5)
    BigInt (byte 6)
    BigInteger (byte 6)
    BigDecimal (byte 7)
@@ -75,6 +80,25 @@
                  (bit-and 0xFF (bit-shift-right len 8))
                  (bit-and 0xFF len)])))
 
+;; to-bytes is required by the recursive concattenation operation
+(declare to-bytes)
+
+(defn concat-bytes
+  "Takes multiple byte arrays and returns an array with all of the bytes concattenated"
+  [bas]
+  (let [len (apply + (map alength bas))
+        output (byte-array len)]
+    (reduce (fn [offset arr]
+              (let [l (alength arr)]
+                (System/arraycopy arr 0 output offset l)
+                (+ offset l)))
+            0 bas)
+    output))
+
+(def zero-array
+  "A single element byte array containing 0"
+  (byte-array [(byte 0)]))
+
 (defprotocol FlatFile
   (header [this len] "Returns a byte array containing a header")
   (body [this] "Returns a byte array containing the encoded data")
@@ -109,6 +133,10 @@
   (when (and (< l max-short-long) (> l min-short-long))
     (bit-and data-mask l)))
 
+(def constant-length?
+  "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
+  #{Long Double Date Instant UUID})
+
 (extend-protocol FlatFile
   String
   (header [this len]
@@ -119,6 +147,14 @@
     (.getBytes this ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr this sstr-type-mask))
+
+  Boolean
+  (header [this len]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (body [this]
+    (throw (ex-info "Unexpected encoding of internal node" {:node this})))
+  (encapsulate-id [this]
+    (if this boolean-true-bits boolean-false-bits))
 
   URI
   (header [this len]
@@ -215,6 +251,34 @@
         (.putLong Long/BYTES (.getMostSignificantBits this)))
       b))
   (encapsulate-id [this] nil)
+
+  ISeq
+  (header [this len]
+    (general-header (type->code ISeq) len))
+  (body [this]
+    (if-not (seq this)
+      (byte-array 0)
+      (let [fst (first this)
+            t (type fst)
+            homogeneous (and (constant-length? t) (every? #(instance? t %) this))
+            [elt-fn prefix] (if homogeneous
+                               (let [hdr (byte-array [(bit-or 0xE0 (type->code t))])]
+                                 [#(vector (body %)) hdr])
+                               [to-bytes zero-array])]
+        (->> this
+             (mapcat elt-fn)
+             (cons prefix)
+             concat-bytes))))
+
+  IPersistentVector
+  (header [this len] (header (or (seq this) '()) len))
+  (body [this] (body (or (seq this) '())))
+  
+  IPersistentMap
+  (header [this len]
+    (general-header (type->code IPersistentMap) len))
+  (body [this]
+    (body (apply concat (seq this))))
   
   Object
   (header [this len]
@@ -233,7 +297,7 @@
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
   (body [this]
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
-  (encapsulate-id [this]
+  (encapsulate-id [^asami.graph.InternalNode this]
     (bit-or node-type-mask (bit-and data-mask (.id this)))))
 
 (defn to-bytes

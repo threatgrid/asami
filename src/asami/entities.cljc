@@ -4,10 +4,10 @@
     asami.entities
     (:require [asami.storage :as storage :refer [DatabaseType]]
               [asami.graph :as gr]
+              [asami.entities.general :refer [EntityMap GraphType]]
+              [asami.entities.writer :as writer :refer [Triple]]
               [zuko.util :as util]
               [zuko.node :as node]
-              [zuko.entity.general :refer [EntityMap GraphType]]
-              [zuko.entity.writer :as writer :refer [Triple]]
               #?(:clj  [schema.core :as s]
                  :cljs [schema.core :as s :include-macros true])))
 

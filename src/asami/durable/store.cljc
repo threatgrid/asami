@@ -11,8 +11,8 @@
             [asami.durable.tuples :as tuples]
             [asami.durable.graph :as dgraph]
             [zuko.schema :refer [Triple]]
-            [zuko.entity.general :refer [GraphType]]
-            [zuko.entity.reader :as reader]
+            [asami.entities.general :refer [GraphType]]
+            [asami.entities.reader :as reader]
             [schema.core :as s :include-macros true]
             #?(:clj [asami.durable.flat-file :as flat-file])
             #?(:clj [clojure.java.io :as io]))

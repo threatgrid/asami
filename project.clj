@@ -7,6 +7,7 @@
                  [prismatic/schema "1.1.12"] 
                  [org.clojure/core.cache "1.0.207"]
                  [org.clojars.quoll/zuko "0.6.5"]
+                 [org.clojars.quoll/qtest "0.1.1"]
                  [org.clojure/data.priority-map "1.0.0"]
                  [tailrecursion/cljs-priority-map "1.2.1"]]
   :plugins [[lein-cljsbuild "1.1.8"]]
@@ -17,19 +18,12 @@
       :aot [asami.peer]}}
   :cljsbuild {
     :builds {
-      :dev
-      {:source-paths ["src"]
-       :compiler {
-         :output-to "out/asami/core.js"
-         :optimizations :simple
-         :pretty-print true}}
-      :test
-      {:source-paths ["src" "test"]
-       :compiler {
-         :output-to "out/asami/test_memory.js"
-         :optimizations :simple
-         :pretty-print true}}
-      }
-    :test-commands {
-      "unit" ["node" "out/asami/test_memory.js"]}
-    })
+      :dev {:source-paths ["src"]
+            :compiler {:output-to "out/asami/core.js"
+                       :optimizations :simple
+                       :pretty-print true}}
+      :test {:source-paths ["src" "test"]
+             :compiler {:output-to "out/asami/test_memory.js"
+                        :optimizations :simple
+                        :pretty-print true}}}
+  :test-commands {"unit" ["node" "out/asami/test_memory.js"]}})
