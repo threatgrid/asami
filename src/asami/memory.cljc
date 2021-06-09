@@ -179,12 +179,10 @@
                          (gr/graph-transact graph tx-id asserts retracts))))))
 
 
-(s/defn entity* :- {s/Any s/Any}
+(s/defn entity* :- (s/maybe {s/Any s/Any})
   "Returns an entity based on an identifier, either the :db/id or a :db/ident if this is available. This eagerly retrieves the entity.
    Objects may be nested, but references to top level objects will be nil in order to avoid loops."
   ;; TODO Reference the up-coming entity index
   [{graph :graph :as db} id nested?]
-  (if-let [ref (or (and (seq (gr/resolve-triple graph id '?a '?v)) id)
-                   (ffirst (gr/resolve-triple graph '?e :db/ident id)))]
-    (reader/ref->entity graph ref nested?)))
+  (reader/ident->entity graph id nested?))
 

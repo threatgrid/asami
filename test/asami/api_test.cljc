@@ -194,6 +194,7 @@
   (let [c (connect "asami:mem://test4")
         maksim {:db/id -1
                 :db/ident :maksim
+                :id    "MakOvS"
                 :name  "Maksim"
                 :age   45
                 :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
@@ -214,14 +215,21 @@
         two (tempids -2)
         three (tempids -3)
         d (db c)]
-    (is (= {:name  "Maksim"
+    (is (= {:id    "MakOvS"
+            :name  "Maksim"
             :age   45
             :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
            (entity d one)))
-    (is (= {:name  "Maksim"
+    (is (= {:id    "MakOvS"
+            :name  "Maksim"
             :age   45
             :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
            (entity d :maksim)))
+    (is (= {:id    "MakOvS"
+            :name  "Maksim"
+            :age   45
+            :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+           (entity d "MakOvS")))
     (is (= {:name  "Anna"
             :age   31
             :husband {:db/ident :maksim}
