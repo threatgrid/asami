@@ -28,7 +28,13 @@ allow rules to successfully use this graph type."
    b :- s/Any
    c :- s/Any
    tx :- s/Any]
-  (update-in idx [a b c] (fn [m] (if m (update m :count *insert-op*) {:count 1 :tx tx}))))
+  (if-let [idxb (get idx a)]
+    (if-let [idxc (get idxb b)]
+      (if-let [entry (get idxc c)]
+        (assoc idx a (assoc idxb b (assoc idxc c (update entry :count *insert-op*))))
+        (assoc idx a (assoc idxb b (assoc idxc c {:count (*insert-op* 0) :tx tx}))))
+      (assoc idx a (assoc idxb b {c {:count (*insert-op* 0) :tx tx}})))
+    (assoc idx a {b {c {:count (*insert-op* 0) :tx tx}}})))
 
 (s/defn multi-delete :- (s/maybe IndexStructure)
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -38,13 +44,13 @@ allow rules to successfully use this graph type."
    c :- s/Any]
   (if-let [idx2 (idx a)]
     (if-let [idx3 (idx2 b)]
-      (if-let [c4 (:count (idx3 c))]
+      (if-let [{c4 :count :as elt} (idx3 c)]
         (if (= 1 c4)
           (let [new-idx3 (dissoc idx3 c)
                 new-idx2 (if (seq new-idx3) (assoc idx2 b new-idx3) (dissoc idx2 b))
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
             new-idx)
-          (update-in idx [a b c :count] dec))))))
+          (assoc idx a (assoc idx2 b (assoc idx3 c (assoc elt :count (dec c4))))))))))
 
 (defmulti get-from-multi-index
   "Lookup an index in the graph for the requested data.
@@ -53,14 +59,14 @@ allow rules to successfully use this graph type."
 
 ;; Extracts the required index (idx), and looks up the requested fields.
 ;; If an embedded index is pulled out, then this is referred to as edx.
-(defmethod get-from-multi-index [:v :v :v] [{idx :spo} s p o] (let [n (get-in idx [s p o :count])]
+(defmethod get-from-multi-index [:v :v :v] [{idx :spo} s p o] (let [n (some-> idx (get s) (get p) (get o) :count)]
                                                                 (if (and (number? n) (> n 0))
                                                                   (repeat n [])
                                                                   [])))
-(defmethod get-from-multi-index [:v :v  ?] [{idx :spo} s p o] (for [[o {c :count}] (get-in idx [s p])
+(defmethod get-from-multi-index [:v :v  ?] [{idx :spo} s p o] (for [[o {c :count}] (some-> idx (get s) (get p))
                                                                     _ (range c)]
                                                                 [o]))
-(defmethod get-from-multi-index [:v  ? :v] [{idx :osp} s p o] (for [[p {c :count}] (get-in idx [o s])
+(defmethod get-from-multi-index [:v  ? :v] [{idx :osp} s p o] (for [[p {c :count}] (some-> idx (get o) (get s))
                                                                     _ (range c)]
                                                                 [p]))
 (defmethod get-from-multi-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)]
@@ -68,7 +74,7 @@ allow rules to successfully use this graph type."
                                                                       [o {c :count}] (edx p)
                                                                       _ (range c)]
                                                                   [p o])))
-(defmethod get-from-multi-index [ ? :v :v] [{idx :pos} s p o] (for [[s {c :count}] (get-in idx [p o])
+(defmethod get-from-multi-index [ ? :v :v] [{idx :pos} s p o] (for [[s {c :count}] (some-> idx (get p) (get o))
                                                                     _ (range c)]
                                                                 [s]))
 (defmethod get-from-multi-index [ ? :v  ?] [{idx :pos} s p o] (let [edx (idx p)]

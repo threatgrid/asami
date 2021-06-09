@@ -43,11 +43,11 @@
 
 ;; Extracts the required index (idx), and looks up the requested fields.
 ;; If an embedded index is pulled out, then this is referred to as edx.
-(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (if (get-in idx [s p o]) [[]] []))
-(defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (get-in idx [s p])))
-(defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (get-in idx [o s])))
+(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (if (some-> idx (get s) (get p) (get o)) [[]] []))
+(defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (some-> idx (get s) (get p))))
+(defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (some-> idx (get o) (get s))))
 (defmethod get-from-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o])))
-(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (get-in idx [p o])))
+(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (some-> idx (get p) (get o))))
 (defmethod get-from-index [ ? :v  ?] [{idx :pos} s p o] (let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o])))
 (defmethod get-from-index [ ?  ? :v] [{idx :osp} s p o] (let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
