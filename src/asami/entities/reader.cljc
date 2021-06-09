@@ -160,10 +160,10 @@
     ident :- s/Any
     nested? :- s/Bool]
    ;; find the entity by its ident. Some systems will make the id the entity id,
-   ;; and the ident will be separate, so look for both.
-   (let [eid (or (ffirst (node/find-triple graph [ident '?a '?v]))
-                 (ffirst (node/find-triple graph ['?eid :db/ident ident]))
-                 (ffirst (node/find-triple graph ['?eid :id ident])))]
+   ;; and the ident will be separate, so look for both. Also supporting lookup by :id
+   (when-let [eid (or (and (seq (node/find-triple graph [ident '?a '?v])) ident)
+                      (ffirst (node/find-triple graph ['?eid :db/ident ident]))
+                      (ffirst (node/find-triple graph ['?eid :id ident])))]
      (ref->entity graph eid nested?))))
 
 (s/defn graph->entities :- [EntityMap]
