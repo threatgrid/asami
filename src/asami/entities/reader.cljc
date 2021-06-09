@@ -35,7 +35,7 @@
   [graph :- GraphType
    prop :- s/Any
    v :- s/Any]
-  (if (and (not (#{:db/ident :db/id} prop)) (node/node-type? graph prop v))
+  (when (and (not (#{:db/ident :db/id} prop)) (node/node-type? graph prop v))
     (let [data (property-values graph v)]
       data)))
 
@@ -80,8 +80,8 @@
    [prop v :as prop-val] :- KeyValue]
   (if-let [pairs (check-structure graph prop v)]
     (if (and (not *nested-structs*) (some #(= :tg/entity (first %)) pairs))
-      [prop (if-let [ident (some (fn [[k v]] (if (= :db/ident k) v)) pairs)]
-              {:db/ident ident}
+      [prop (if-let [[idd ident] (some (fn [[k v]] (if (#{:db/ident :id} k) [k v])) pairs)]
+              {idd ident}
               {:db/id v})]
       [prop (or (vbuild-list graph seen pairs)
                 (pairs->struct graph pairs (conj seen v)))])
@@ -162,7 +162,8 @@
    ;; find the entity by its ident. Some systems will make the id the entity id,
    ;; and the ident will be separate, so look for both.
    (let [eid (or (ffirst (node/find-triple graph [ident '?a '?v]))
-                 (ffirst (node/find-triple graph ['?eid :db/ident ident])))]
+                 (ffirst (node/find-triple graph ['?eid :db/ident ident]))
+                 (ffirst (node/find-triple graph ['?eid :id ident])))]
      (ref->entity graph eid nested?))))
 
 (s/defn graph->entities :- [EntityMap]

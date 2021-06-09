@@ -53,18 +53,19 @@
    top-ids: The IDs of entities that are inserted at the top level. These are accumulated and this set
             avoids the need to query for them."
   [graph :- GraphType
-   {id :db/id ident :db/ident :as obj} :- EntityMap
+   {id :db/id ident :db/ident ident2 :id :as obj} :- EntityMap
    existing-ids :- {s/Any s/Any}
    top-ids :- #{s/Any}]
   (let [[new-obj removals additions]
         (if (contains-updates? obj)
           (do
-            (when-not (or id ident)
+            (when-not (or id ident ident2)
               (throw (ex-info "Nodes to be updated must be identified with :db/id or :db/ident" obj)))
-            (let [node-ref (if id
-                             (and (seq (gr/resolve-triple graph id '?a '?v)) id)
-                             (ffirst (gr/resolve-triple graph '?r :db/ident ident)))
-                  _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident]))))
+            (let [node-ref (cond
+                             id (and (seq (gr/resolve-triple graph id '?a '?v)) id)
+                             ident (ffirst (gr/resolve-triple graph '?r :db/ident ident))
+                             ident2 (ffirst (gr/resolve-triple graph '?r :id ident2)))
+                  _ (when-not node-ref (throw (ex-info "Cannot update a non-existent node" (select-keys obj [:db/id :db/ident :id]))))
                   ;; find the annotated attributes
                   obj-keys (keys obj)
                   update-attributes (set (filter update-attribute? obj-keys))

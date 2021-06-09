@@ -271,7 +271,7 @@
         graph (assert-data graph' [[ref "Connected_To" ref]])
         obj1 (ref->entity graph ref)
         obj2 (ref->entity graph ref false #{"Connected_To"})]
-    (is (= (assoc data "Connected_To" {:db/ident ref})
+    (is (= (assoc data "Connected_To" {:id "1234"})
            obj1))
     (is (= data obj2))))
 
