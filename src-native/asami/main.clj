@@ -50,14 +50,16 @@
 (defn print-usage
   []
   (println "Usage: asami URL [-f filename] [-e query] [--help | -?]\n")
+  (println "-? | --help: This help")
   (println "URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
   (println "-f filename: loads the filename into the database. A filename of \"-\" will use stdin.")
   (println "             Data defaults to EDN. Filenames ending in .json are treated as JSON.")
   (println "-e query: executes a query. \"-\" (the default) will read from stdin instead of a command line argument.")
   (println "          Multiple queries can be specified as edn (vector of query vectors) or ; separated.")
-  (println "          Available readers: internal nodes -  #a/n \"node-id\"")
-  (println "                             regex          -  #a/r \"[Tt]his is a (regex|regular expression)\"")
-  (println "-? | --help: This help"))
+  (println)
+  (println "Available EDN readers:")
+  (println "  internal nodes -  #a/n \"node-id\"")
+  (println "  regex          -  #a/r \"[Tt]his is a (regex|regular expression)\""))
 
 (defn -main
   [& args]
