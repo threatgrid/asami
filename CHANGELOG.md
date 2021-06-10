@@ -13,6 +13,7 @@
 ### Changed
 - Integrating entity code fully into Asami. This is no longer imported from Zuko.
 - Minor efficiency improvements to in-memory updates and reads.
+- Booleans are now encoded into IDs and no longer serialized.
 
 ## [2.0.5] - 2021-05-27
 ### Changed
