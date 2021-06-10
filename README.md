@@ -32,7 +32,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "2.0.5"}
+    org.clojars.quoll/asami {:mvn/version "2.0.6"}
   }
 }
 ```
@@ -41,7 +41,7 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "2.0.5"]
+[org.clojars.quoll/asami "2.0.6"]
 ```
 
 ### Important Note for databases before 2.0.2
@@ -292,11 +292,43 @@ If functions are provided to Loom, then they can be used to provide labels for c
 (loom-io/view (graph db) :fmt :pdg :alg :sfpd :edge-label edge-label :node-label node-label)
 ```
 
+## Command Line Tool
+A command line tool is available to load data into an Asami graph and query it. This uses GraalVM CE 21.1.0 or later.
+Leiningen needs to see GraalVM on the classpath first, so if there are problems with building, check to see if this is the case.
 
-## TODO
-- Entity storage and indexing.
-- Analytics in durable storage.
-- ClojureScript durable storage.
+To build from sources:
+
+```bash
+lein with-profile native uberjar
+lein with-profile native native
+```
+
+This will create a binary called `asami` in the `target` directory. Execute with the `-?` flag for help:
+
+```
+$ ./target/asami -?
+Usage: asami URL [-f filename] [-e query] [--help | -?]
+
+-? | --help: This help
+URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://
+-f filename: loads the filename into the database. A filename of "-" will use stdin.
+             Data defaults to EDN. Filenames ending in .json are treated as JSON.
+-e query: executes a query. "-" (the default) will read from stdin instead of a command line argument.
+          Multiple queries can be specified as edn (vector of query vectors) or ; separated.
+
+Available EDN readers:
+  internal nodes -  #a/n "node-id"
+  regex          -  #a/r "[Tt]his is a (regex|regular expression)"
+```
+
+#### Example:
+Loading a json file, and querying for keys (attributes) that are strings with spaces in them:
+
+```bash
+asami asami:mem://tmp -f data.json -e ':find ?a :where [?e ?a ?v][(string? ?a)][(re-find #a/r " " ?a)]'
+```
+
+The command will also work on `local` stores, which means that they can be loaded once and then queried multiple times.
 
 ## License
 
