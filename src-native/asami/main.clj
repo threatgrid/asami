@@ -5,8 +5,11 @@
             [clojure.edn :as edn]
             [cheshire.core :as json]
             [clojure.pprint :refer [pprint]]
-            [asami.core :as asami])
+            [asami.core :as asami]
+            [asami.graph :as graph])
   (:gen-class))
+
+(def reader-opts {:readers (assoc graph/node-reader 'a/r re-pattern)})
 
 (defn process-args
   [args]
@@ -25,7 +28,7 @@
   (let [text (slurp (if (= f "-") *in* f))]
     (if (s/ends-with? f ".json")
       (json/parse-string text)
-      (edn/read-string text))))
+      (edn/read-string reader-opts text))))
 
 (defn load-data-file
   [conn f]
@@ -37,7 +40,7 @@
         mtext (s/split text #";")
         all (mapv (fn [text]
                     (let [txt (if (= \: (first (s/trim text))) (str "[" text "]") text)]
-                      (edn/read-string txt)))
+                      (edn/read-string reader-opts txt)))
                   mtext)]
     (if (= 1 (count all))
       (let [[qv] all]
@@ -46,12 +49,14 @@
 
 (defn print-usage
   []
-  (println "Usage: asami URL [-f filename] [-e query] [--help | -?]")
+  (println "Usage: asami URL [-f filename] [-e query] [--help | -?]\n")
   (println "URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
   (println "-f filename: loads the filename into the database. A filename of \"-\" will use stdin.")
   (println "             Data defaults to EDN. Filenames ending in .json are treated as JSON.")
-  (println "-e query: executes a query. Not specifying, or using \"-\" will read from stdin instead of a command line argument.")
+  (println "-e query: executes a query. \"-\" (the default) will read from stdin instead of a command line argument.")
   (println "          Multiple queries can be specified as edn (vector of query vectors) or ; separated.")
+  (println "          Available readers: internal nodes -  #a/n \"node-id\"")
+  (println "                             regex          -  #a/r \"[Tt]his is a (regex|regular expression)\"")
   (println "-? | --help: This help"))
 
 (defn -main
