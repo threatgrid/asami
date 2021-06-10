@@ -1,5 +1,19 @@
 # Change Log
 
+## [2.0.6] - 2021-06-27
+### Added
+- A new CLI for loading data and executing queries. This builds natively with GraalVM.
+- Exposing `now` and `instant?` from `asami.core`
+- Serialization of arrays and maps. This will enable upcoming features.
+- An `:id` attribute can now be used as a synonym for `:db/ident`. These values are not removed from entities, unlike the `:db` attributes.
+
+### Fixed
+- Aggregates correctly group even when selections are not sensible.
+
+### Changed
+- Integrating entity code fully into Asami. This is no longer imported from Zuko.
+- Minor efficiency improvements to in-memory updates and reads.
+
 ## [2.0.5] - 2021-05-27
 ### Changed
 - Entity conversion to statements is no longer recursive on arrays. This allows for larger arrays.
@@ -218,7 +232,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.5...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.6...HEAD
+[2.0.5]: https://github.com/threatgrid/asami/compare/2.0.5...2.0.6
 [2.0.5]: https://github.com/threatgrid/asami/compare/2.0.4...2.0.5
 [2.0.4]: https://github.com/threatgrid/asami/compare/2.0.3...2.0.4
 [2.0.3]: https://github.com/threatgrid/asami/compare/2.0.2...2.0.3
