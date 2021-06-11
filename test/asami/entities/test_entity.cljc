@@ -259,9 +259,10 @@
       (is (= ret6 [[id6 :data-struct id-e1]])))))
 
 (defn get-node-ref
-  [graph id]
-  (ffirst (q [:find '?n :where ['?n :id id]] graph)))
-
+  [graph id] 
+  (or
+   (ffirst (q [:find '?n :where ['?n :id id]] graph))
+   (ffirst (q [:find '?n :where ['?n :db/ident id]] graph))))
 
 (deftest test-ref->entity
   (let [data {:id "1234" :prop "value" :attribute 2}
@@ -285,6 +286,22 @@
         obj2 (ref->entity graph ref true)]
     (is (= data obj1))
     (is (= (assoc data :sub (dissoc d0 :db/ident)) obj2))))
+
+(deftest test-looped-ref->entity
+  (let [d1 {:db/ident :t1, :task/name "Task 1", :task/requires [#:db{:ident :t3}]}
+        d2 {:db/ident :t2, :task/name "Task 2", :task/requires [#:db{:ident :t1}]}
+        d3 {:db/ident :t3, :task/name "Task 3", :task/requires [#:db{:ident :t1}
+                                                                #:db{:ident :t2}]}
+        m (entities->triples empty-graph [d1 d2 d3])
+        graph (assert-data empty-graph m)
+        ref (get-node-ref graph :t3)
+        obj1 (ref->entity graph ref)
+        obj2 (ref->entity graph ref true)
+        [d1' d2' d3'] (map #(dissoc % :db/ident) [d1 d2 d3])]
+    (is (= d3' obj1))
+    (is (= {:task/name "Task 3"
+            :task/requires [d1' (assoc d2' :task/requires [d1'])]}
+         obj2))))
 
 (defn ident-map->graph
   ([m] (ident-map->graph m {}))

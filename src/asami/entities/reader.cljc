@@ -79,12 +79,14 @@
    seen :- #{NodeType}
    [prop v :as prop-val] :- KeyValue]
   (if-let [pairs (check-structure graph prop v)]
-    (if (and (not *nested-structs*) (some #(= :tg/entity (first %)) pairs))
+    (if (or (seen v)
+            (and (not *nested-structs*) (some #(= :tg/entity (first %)) pairs)))
       [prop (if-let [[idd ident] (some (fn [[k v]] (if (#{:db/ident :id} k) [k v])) pairs)]
               {idd ident}
               {:db/id v})]
-      [prop (or (vbuild-list graph seen pairs)
-                (pairs->struct graph pairs (conj seen v)))])
+      (let [next-seen (conj seen v)]
+        [prop (or (vbuild-list graph next-seen pairs)
+                  (pairs->struct graph pairs next-seen))]))
     (if (= :tg/empty-list v)
       [prop []]
       prop-val)))
@@ -121,7 +123,6 @@
      (do
        (->> prop-vals
             (remove (comp #{:db/id :db/ident :tg/entity} first))  ;; INTERNAL PROPERTIES
-            (remove (comp seen second))
             (map (fn [[a v :as av]] (if (= :tg/nil v) [a nil] av)))
             (map (partial recurse-node graph seen))
             (map (fn [[a v :as av]] (if (seq? v) [a (vec v)] av)))
@@ -147,7 +148,7 @@
            pvs (if (seq exclusions)
                  (remove (comp exclusions first) prop-vals)
                  prop-vals)]
-       (pairs->struct graph pvs)))))
+       (pairs->struct graph pvs #{entity-id})))))
 
 
 (s/defn ident->entity :- EntityMap
