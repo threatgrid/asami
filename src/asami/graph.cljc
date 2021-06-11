@@ -39,7 +39,7 @@
 #?(:clj
    (deftype InternalNode [^long id]
      Object
-     (toString [_] (str "#a/n \"" id "\""))
+     (toString [_] (str "#a/n[" id "]"))
      (equals [_ o] (and (instance? InternalNode o) (= id (.id ^InternalNode o))))
      (hashCode [_] (hash id))
      IdCheck
@@ -48,7 +48,7 @@
    :cljs
    (deftype InternalNode [^long id]
      Object
-     (toString [_] (str "#a/n \"" id "\""))
+     (toString [_] (str "#a/n[" id "]"))
 
      IEquiv
      (-equiv [_ o] (and (instance? InternalNode o) (= id (.-id o))))
@@ -64,16 +64,26 @@
 
 #?(:clj
    (defmethod clojure.core/print-method InternalNode [^InternalNode o ^Writer w]
-     (.write w "#a/n \"")
+     (.write w "#a/n[")
      (.write w (str (.id o)))
-     (.write w "\"")))
+     (.write w "]")))
 
-(defn node-read
-  "Reads a node from a string"
-  [s]
-  (InternalNode.
-   #?(:clj (Long/parseLong s)
-      :cljs (long s))))
+(defprotocol NodeData
+  (node-read [data] "Reads an internal node out of data"))
+
+#?(:clj
+   (extend-protocol NodeData
+     String
+     (node-read [s] (InternalNode. (Long/parseLong s)))
+     clojure.lang.Indexed
+     (node-read [v] (InternalNode. (nth v 0))))
+
+   :cljs
+   (extend-protocol NodeData
+     string
+     (node-read [s] (InternalNode. (long s)))
+     PersistentVector
+     (node-read [v] (InternalNode. (nth v 0)))))
 
 ;; can set this at a Clojure repl:
 ;; (set! *data-readers* graph/node-reader)
