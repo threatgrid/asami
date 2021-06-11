@@ -1,5 +1,5 @@
 language: clojure
-lein: 2.9.4
+lein: 2.9.6
 
 before_script:
 - mkdir -p out/asami
