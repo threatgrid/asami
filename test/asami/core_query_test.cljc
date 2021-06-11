@@ -281,7 +281,10 @@
                   (or [?observable :verdict ?related]
                       [?observable :sighting ?related])
                   [?related :id ?id]]
-                st)]
+                st)
+          r4 (q '[:find ?observable
+                  :where (or [?observable :value "ilo.pl"]
+                             [?observable :value "nonexistent"])] st)]
       (is (= #{[ver1 "domain" "cisco.com"]
                [sight1 "ip" "72.163.4.161"]}
              (set r1)))
@@ -290,7 +293,8 @@
              (set r2)))
       (is (= #{["verdict-1" "domain" "cisco.com"]
                ["sighting-1" "ip" "72.163.4.161"]}
-             (set r3))))))
+             (set r3)))
+      (is (= [[o3]] r4)))))
 
 
 (let [b1 (nn)
