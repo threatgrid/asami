@@ -94,22 +94,27 @@
 
 (s/defn into-multimap
   "Takes key/value tuples and inserts them into a map. If there are duplicate keys then create a set for the values."
-  [kvs :- [[(s/one s/Any "Key") (s/one s/Any "Value")]]]
+  [xform kvs :- [[(s/one s/Any "Key") (s/one s/Any "Value")]]]
   #?(:clj 
-     (persistent!
-      (reduce (fn [m [k v]]
-                (assoc! m k (if-let [[km vm] (find m k)]
-                              (if (set? vm) (conj vm v) (hash-set vm v))
-                              v)))
-              (transient {}) kvs))
+     (transduce xform
+                (fn
+                  ([m] (persistent! m))
+                  ([m [k v]]
+                   (assoc! m k (if-let [[km vm] (find m k)]
+                                 (if (set? vm) (conj vm v) (hash-set vm v))
+                                 v))))
+                (transient {}) kvs)
      :cljs
-     (persistent!
-      (reduce (fn [m [k v]]
-                (assoc! m k (let [vm (get m k ::null)]
-                              (if-not (= ::null vm)
-                                (if (set? vm) (conj vm v) (hash-set vm v))
-                                v))))
-              (transient {}) kvs))))
+     (transduce xform
+                (fn
+                  ([m] (persistent! m))
+                  ([m [k v]]
+                   (assoc! m k (let [vm (get m k ::null)]
+                                 (if-not (= ::null vm)
+                                   (if (set? vm) (conj vm v) (hash-set vm v))
+                                   v)))))
+                (transient {}) kvs)))
+
 
 (s/defn pairs->struct :- EntityMap
   "Uses a set of property-value pairs to load up a nested data structure from the graph"
@@ -120,13 +125,13 @@
     seen :- #{NodeType}]
    (if (some (fn [[k _]] (= :tg/first k)) prop-vals)
      (vbuild-list graph seen prop-vals)
-     (do
-       (->> prop-vals
-            (remove (comp #{:db/id :db/ident :tg/entity} first))  ;; INTERNAL PROPERTIES
-            (map (fn [[a v :as av]] (if (= :tg/nil v) [a nil] av)))
-            (map (partial recurse-node graph seen))
-            (map (fn [[a v :as av]] (if (seq? v) [a (vec v)] av)))
-            into-multimap)))))
+     (into-multimap
+      (comp
+       (remove (comp #{:db/id :db/ident :tg/entity} first)) ;; INTERNAL PROPERTIES
+       (map (fn [[a v :as av]] (if (= :tg/nil v) [a nil] av)))
+       (map (partial recurse-node graph seen))
+       (map (fn [[a v :as av]] (if (seq? v) [a (vec v)] av))))
+      prop-vals))))
 
 
 (s/defn ref->entity :- EntityMap
