@@ -20,6 +20,11 @@
 
 ;; (set! *warn-on-reflection* true)
 
+(def ^:dynamic *entity-offsets* nil)
+(def ^:dynamic *current-offset* nil)
+
+(def empty-bytes (byte-array 0))
+
 (def type->code
   {Long (byte 0)
    Double (byte 1)
@@ -81,7 +86,7 @@
                  (bit-and 0xFF len)])))
 
 ;; to-bytes is required by the recursive concattenation operation
-(declare to-bytes)
+(declare to-counted-bytes)
 
 (defn concat-bytes
   "Takes multiple byte arrays and returns an array with all of the bytes concattenated"
@@ -257,17 +262,26 @@
     (general-header (type->code ISeq) len))
   (body [this]
     (if-not (seq this)
-      (byte-array 0)
+      empty-bytes
       (let [fst (first this)
             t (type fst)
             homogeneous (and (constant-length? t) (every? #(instance? t %) this))
             [elt-fn prefix] (if homogeneous
-                               (let [hdr (byte-array [(bit-or 0xE0 (type->code t))])]
-                                 [#(vector (body %)) hdr])
-                               [to-bytes zero-array])]
+                              (let [hdr (byte-array [(bit-or 0xE0 (type->code t))])]
+                                [#(vector (body %)) hdr])
+                              [to-counted-bytes zero-array])]
         (->> this
-             (mapcat elt-fn)
-             (cons prefix)
+             ;; like a mapv but records the lengths of the data as it iterates through the seq
+             (reduce (fn [arrays x]
+                       (let [offset @*current-offset*  ;; save the start, as the embedded objects will update this
+                             [head body] (elt-fn x)]
+                         ;; regardless of what embedded objects have update the *current-offset* to, change it to the
+                         ;; start of the current object, plus its total size
+                         (vreset! *current-offset* (+ offset (alength head) (alength body)))
+                         ;; add the bytes of this object to the overall result of byte arrays
+                         (conj! (conj! arrays head) body)))
+                     (transient [prefix]))
+             persistent!
              concat-bytes))))
 
   IPersistentVector
@@ -278,6 +292,10 @@
   (header [this len]
     (general-header (type->code IPersistentMap) len))
   (body [this]
+    ;; If this is an identified object, then save it's location
+    (doseq [id-attr [:db/id :db/ident :id]]
+      (when-let [id (id-attr this)]
+        (vswap! *entity-offsets* assoc id @*current-offset*)))
     (body (apply concat (seq this))))
   
   Object
@@ -300,8 +318,15 @@
   (encapsulate-id [^asami.graph.InternalNode this]
     (bit-or node-type-mask (bit-and data-mask (.id this)))))
 
-(defn to-bytes
+(defn to-counted-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [^bytes b (body o)]
     [(header o (alength b)) b]))
+
+(defn to-bytes
+  "Returns a tuple of byte arrays, representing the header and the body"
+  [o]
+  (binding [*entity-offsets* (volatile! {})
+            *current-offset* (volatile! 0)]
+    (conj (to-counted-bytes o) @*entity-offsets*)))
