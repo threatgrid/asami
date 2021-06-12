@@ -90,7 +90,7 @@
 
 (defn concat-bytes
   "Takes multiple byte arrays and returns an array with all of the bytes concattenated"
-  [bas]
+  ^bytes [bas]
   (let [len (apply + (map alength bas))
         output (byte-array len)]
     (reduce (fn [offset arr]
@@ -267,22 +267,36 @@
             t (type fst)
             homogeneous (and (constant-length? t) (every? #(instance? t %) this))
             [elt-fn prefix] (if homogeneous
-                              (let [hdr (byte-array [(bit-or 0xE0 (type->code t))])]
-                                [#(vector (body %)) hdr])
-                              [to-counted-bytes zero-array])]
-        (->> this
-             ;; like a mapv but records the lengths of the data as it iterates through the seq
-             (reduce (fn [arrays x]
-                       (let [offset @*current-offset*  ;; save the start, as the embedded objects will update this
-                             [head body] (elt-fn x)]
-                         ;; regardless of what embedded objects have update the *current-offset* to, change it to the
-                         ;; start of the current object, plus its total size
-                         (vreset! *current-offset* (+ offset (alength head) (alength body)))
-                         ;; add the bytes of this object to the overall result of byte arrays
-                         (conj! (conj! arrays head) body)))
-                     (transient [prefix]))
-             persistent!
-             concat-bytes))))
+                              (let [arr-hdr (byte-array [(bit-or 0xE0 (type->code t))])]
+                                ;; simple homogenous arrays store everything in the object header, with nil bodies
+                                [#(vector (body %)) arr-hdr])
+                              [to-counted-bytes zero-array])
+            starting-offset @*current-offset*
+            _ (vswap! *current-offset* + 3)  ;; 2 bytes for a short header + 1 byte for the prefix array
+            result (->> this
+                        ;; like a mapv but records the lengths of the data as it iterates through the seq
+                        (reduce (fn [arrays x]
+                                  (let [offset @*current-offset* ;; save the start, as the embedded objects will update this
+                                        [head body] (elt-fn x)]
+                                    ;; regardless of what embedded objects have update the *current-offset* to, change it to the
+                                    ;; start of the current object, plus its total size
+                                    (vreset! *current-offset* (+ offset (alength head) (if body (alength body) 0)))
+                                    ;; add the bytes of this object to the overall result of byte arrays
+                                    (cond-> (conj! arrays head)
+                                      body (conj! body))))  ;; only add the body if there is one
+                                (transient [prefix]))
+                        persistent!
+                        concat-bytes)
+            update-lengths (fn [m u]
+                             (into {} (map (fn [[k v :as kv]]
+                                             (if (> v starting-offset) [k (+ v u)] kv))
+                                           m)))
+            rlen (alength result)]
+        ;; correct offsets for longer headers
+        (cond
+          (> rlen 0x7FFF) (vswap! *entity-offsets* update-lengths 3) ;; total 5 after the 2 already added
+          (> rlen 0xFF) (vswap! *entity-offsets* update-lengths 1))  ;; total 3 after the 2 already added
+        result)))
 
   IPersistentVector
   (header [this len] (header (or (seq this) '()) len))

@@ -184,17 +184,24 @@
 
 (deftest test-map-codecs
   (let [buffer-size 10240
-        bb (byte-buffer (byte-array buffer-size))
-        rdr (->TestReader bb)]
-    (let [[header body offsets] (to-bytes data)
-          header-size (byte-length header)
-          body-size (byte-length body)]
-      (if (>= (+ header-size body-size) buffer-size)
-        (throw (ex-info "Buffer too small" {:header (alength header) :body (alength body)})))
-      (.position bb 0)
-      (.put bb header 0 header-size)
-      (.put bb body 0 body-size)
-      ;;(pprint offsets)
-      )))
+        ba (byte-array buffer-size)
+        bb (byte-buffer ba)
+        rdr (->TestReader bb)
+        [header body offsets] (to-bytes data)
+        header-size (byte-length header)
+        body-size (byte-length body)]
+    (if (>= (+ header-size body-size) buffer-size)
+      (throw (ex-info "Buffer too small" {:header (alength header) :body (alength body)})))
+    (.position bb 0)
+    (.put bb header 0 header-size)
+    (.put bb body 0 body-size)
+    (is (= (get data "layers") (read-object rdr (offsets "layers"))))
+    (is (= (get-in data ["layers" "frame"]) (read-object rdr (offsets "frame-data"))))
+    (is (= (get-in data ["layers" "eth"]) (read-object rdr (offsets "eth-data"))))
+    (is (= (get-in data ["layers" "ip"]) (read-object rdr (offsets "ip-data"))))
+    (is (= (get-in data ["layers" "tcp"]) (read-object rdr (offsets "tcp-data"))))
+    (is (= (get-in data ["layers" "tcp" "tcp.options_tree" "tcp.options.sack_tree"
+                         "D-SACK Sequence" "_ws.expert"])
+           (read-object rdr (offsets :dsack))))))
 
 
