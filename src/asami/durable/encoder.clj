@@ -151,19 +151,18 @@
     ret))
 
 (defn num-bytes
-  "Determines the number of bytes that can hold a value"
+  "Determines the number of bytes that can hold a value.
+  From 2-4 tests, this preferences small numbers."
   [^long n]
   (let [f (neg? n)
         nn (if f (dec (- n)) n)]
-    (cond
-      (<= nn 0x7F) 1
-      (<= nn 0x7FFF) 2
-      (<= nn 0x7FFFFF) 3
-      (<= nn 0x7FFFFFFF) 4
-      (<= nn 0x7FFFFFFFFF) 5
-      (<= nn 0x7FFFFFFFFFFF) 6
-      (<= nn 0x7FFFFFFFFFFFFF) 7
-      :default 8)))
+    (if (<= nn 0x7FFF)
+      (if (<= nn 0x7F) 1 2)
+      (if (<= nn 0x7FFFFFFF)
+        (if (<= nn 0x7FFFFF) 3 4)
+        (if (<= nn 0x7FFFFFFFFFFF)
+          (if (<= nn 0x7FFFFFFFFF) 5 6)
+          (if (<= nn 0x7FFFFFFFFFFFFF) 7 8))))))
 
 (def constant-length?
   "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
@@ -248,7 +247,7 @@
     (assert (= len Long/BYTES))
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
-    (body (.getTime this)))
+    (n-byte-number Long/BYTES (.getTime this)))
   (encapsulate-id [this]
     (when-let [v (encapsulate-long (.getTime ^Date this))]
       (bit-or date-type-mask v)))
@@ -290,10 +289,16 @@
             t (type fst)
             homogeneous (and (constant-length? t) (every? #(instance? t %) this))
             [elt-fn prefix] (if homogeneous
-                              (let [arr-hdr (byte-array [(bit-or 0xE0 (type->code t))])]
-                                ;; simple homogenous arrays store everything in the object header, with nil bodies
-                                [#(vector (body %)) arr-hdr])
+                              (if (= t Long)
+                                (let [elt-len (apply max (map num-bytes this))
+                                      arr-hdr (byte-array [(bit-or 0xD0 elt-len)])]         ;; 0xDllll is the header byte for longs
+                                  ;; integer homogenous arrays store the number in the header, with nil bodies
+                                  [#(vector (n-byte-number elt-len %)) arr-hdr])
+                                (let [arr-hdr (byte-array [(bit-or 0xE0 (type->code t))])]  ;; 0xEtttt is the header byte for typed things
+                                  ;; simple homogenous arrays store everything in the object header, with nil bodies
+                                  [#(vector (body %)) arr-hdr]))
                               [to-counted-bytes zero-array])
+            ;; start counting the bytes that are going into the buffer
             starting-offset @*current-offset*
             _ (vswap! *current-offset* + 3)  ;; 2 bytes for a short header + 1 byte for the prefix array
             result (->> this

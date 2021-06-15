@@ -157,29 +157,35 @@
 (defn seq-decoder
   "This is a decoder for sequences of data. Use a vector as the sequence."
   [ext paged-rdr ^long pos]
+  ;; read the length of the header and the length of the seq data
   (let [[i len] (decode-length ext paged-rdr pos)
         start (+ i pos)
         end (+ start len)
+        ;; get the 0 byte. This contain info about the types in the seq
         b0 (read-byte paged-rdr start)
         decoder (if (zero? b0)
-                  ;; heterogeneous
+                  ;; heterogeneous types. Full header on every element. Read objects with size.
                   read-object-size
-                  ;; homogeneous
+                  ;; homogeneous types. The header is only written once
                   (if (= 0xD0 (bit-and 0xF0 b0))      ;; homogenous numbers
-                    (let [num-len (bit-and 0x0F b0)]  ;; number length
-                      #(read-long %1 %2 num-len))
+                    (let [num-len (bit-and 0x0F b0)]  ;; get the byte length of all the numbers
+                      ;; return a function that deserializes the number and pairs it with the length
+                      #(vector (read-long %1 %2 num-len) num-len))
                     (if-let [tdecoder (typecode->decoder (bit-and 0x0F b0))] ;; reader for type
+                      ;; the standard decoder already returns a deserialized value/length pair
                       #(tdecoder true %1 %2)
                       (throw (ex-info "Illegal datatype in array" {:type-code (bit-and 0x0F b0)})))))]
+    ;; iterate over the buffer deserializing until the end is reached
     (loop [s [] offset (inc start)]
       (if (>= offset end)
-        [s (+ i len)]
-        (let [[o obj-len] (decoder paged-rdr offset)]
+        [s (+ i len)]  ;; end of the buffer, return the seq and the number of bytes read
+        (let [[o obj-len] (decoder paged-rdr offset)]  ;; deserialize, then step forward
           (recur (conj s o) (+ offset obj-len)))))))
 
 (defn map-decoder
-  "A decoder for maps"
+  "A decoder for maps. Returns the map and the bytes read."
   [ext paged-rdr ^long pos]
+  ;; read the map as one long seq, then split into pairs
   (let [[s len] (seq-decoder ext paged-rdr pos)
         m (into {} (map vec (partition 2 s)))]
     [m len]))

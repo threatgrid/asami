@@ -21,17 +21,17 @@
         (doto of
           (write-object "1234567890") ;; 1 + 10
           (write-object :keyword)     ;; 1 + 7
-          (write-object 1023)         ;; 1 + 8
+          (write-object 1023)         ;; 1 + 2
           (.seek 0))
-        (is (= 28 (.length of)))
+        (is (= 22 (.length of)))
         (is (= 0xa (.read of)))
         (is (= 10 (.read of buffer)))
         (is (= "1234567890" (String. buffer "UTF-8")))
         (is (= 0xc7 (.read of)))
         (is (= 7 (.read of buffer 0 7)))
         (is (= "keyword" (String. buffer 0 7 "UTF-8")))
-        (is (= 0xe0 (.read of)))
-        (is (= 1023 (.readLong of)))))
+        (is (= 0xd2 (.read of)))
+        (is (= 1023 (.readShort of)))))
     (.delete f)))
 
 (defn b-as-long [b] (bit-and 0xff b))
@@ -43,16 +43,13 @@
       (doto of
         (write-object "1234567890") ;; 1 + 10
         (write-object :keyword)     ;; 1 + 7
-        (write-object 1023))        ;; 1 + 8
+        (write-object 1023))        ;; 1 + 2
       (let [r (paged-file of)
             bytes (byte-array 10)]
-        (is (= 0xe0 (b-as-long (read-byte r 19))))
+        (is (= 0xd2 (b-as-long (read-byte r 19))))
         (is (= 0xc7 (b-as-long (read-byte r 11))))
         (is (= 0x0a (b-as-long (read-byte r 0))))
-        (is (= 0 (read-short r 20)))
-        (is (= 0 (read-short r 22)))
-        (is (= 0 (read-short r 24)))
-        (is (= 0x03ff (read-short r 26)))
+        (is (= 0x03ff (read-short r 20)))
         (is (= "keyword" (String. (read-bytes r 12 7) "UTF-8")))
         (is (= "1234567890" (String. (read-bytes r 1 10) "UTF-8")))))
     (.delete f)))
@@ -74,7 +71,7 @@
           (let [offset (* n 20)]
             (is (= 0xa (read-byte r offset)))
             (is (= (format "123456789%d" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")))
-            (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
+            (is (= 0xd8 (b-as-long (read-byte r (+ offset 11)))))
             (is (= 0x1234 (read-short r (+ offset 12))))
             (is (= 0x5678 (read-short r (+ offset 14))))
             (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
@@ -96,7 +93,7 @@
             (let [offset (* n 20)]
               (is (= 0xa (read-byte r offset)))
               (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")))
-              (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
+              (is (= 0xd8 (b-as-long (read-byte r (+ offset 11)))))
               (is (= 0x1234 (read-short r (+ offset 12))))
               (is (= 0x5678 (read-short r (+ offset 14))))
               (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
@@ -112,7 +109,7 @@
             (let [offset (* n 20)]
               (is (= 0xa (read-byte r offset)) (str "Failed for n=" n))
               (is (= (format "123456789%x" n) (String. (read-bytes r (inc offset) buffer) "UTF-8")) (str "Failed for n=" n))
-              (is (= 0xe0 (b-as-long (read-byte r (+ offset 11)))))
+              (is (= 0xd8 (b-as-long (read-byte r (+ offset 11)))))
               (is (= 0x1234 (read-short r (+ offset 12))))
               (is (= 0x5678 (read-short r (+ offset 14))))
               (is (= 0x9abc (s-as-long (read-short r (+ offset 16)))))
