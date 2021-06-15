@@ -168,6 +168,25 @@
 
 (defn now [] #?(:clj (Date.) :cljs (js/Date.)))
 
+
+(deftest test-long-codec
+  (let [bb (byte-buffer (byte-array 2048))
+        rdr (->TestReader bb)
+        write! (fn [o]
+                 (let [[header body] (to-bytes o)
+                       header-size (byte-length header)
+                       body-size (byte-length body)]
+                   (.position bb 0)
+                   (.put bb header 0 header-size)
+                   (.put bb body 0 body-size)))
+        rt (fn [o]
+             (write! o)
+             (let [r (read-object rdr 0)]
+               (if (bytes? o)
+                 (is (array-equals o r))
+                 (is (= o r)))))]
+    (rt 2020)))
+
 (deftest test-codecs
   (let [bb (byte-buffer (byte-array 2048))
         rdr (->TestReader bb)

@@ -85,7 +85,7 @@
                  (bit-and 0xFF (bit-shift-right len 8))
                  (bit-and 0xFF len)])))
 
-;; to-bytes is required by the recursive concattenation operation
+;; to-counted-bytes is required by the recursive concattenation operation
 (declare to-counted-bytes)
 
 (defn concat-bytes
@@ -138,6 +138,33 @@
   (when (and (< l max-short-long) (> l min-short-long))
     (bit-and data-mask l)))
 
+(def ^:dynamic *number-bytes* nil)
+(def ^:dynamic *number-buffer* nil)
+
+(defn n-byte-number
+  "Returns an array of n bytes representing the number x.
+  Must be initialized for the current thread."
+  [^long n ^long x]
+  (.putLong *number-buffer* 0 x)
+  (let [ret (byte-array n)]
+    (System/arraycopy ^bytes *number-bytes* (int (- Long/BYTES n)) ret 0 (int n))
+    ret))
+
+(defn num-bytes
+  "Determines the number of bytes that can hold a value"
+  [^long n]
+  (let [f (neg? n)
+        nn (if f (dec (- n)) n)]
+    (cond
+      (<= nn 0x7F) 1
+      (<= nn 0x7FFF) 2
+      (<= nn 0x7FFFFF) 3
+      (<= nn 0x7FFFFFFF) 4
+      (<= nn 0x7FFFFFFFFF) 5
+      (<= nn 0x7FFFFFFFFFFF) 6
+      (<= nn 0x7FFFFFFFFFFFFF) 7
+      :default 8)))
+
 (def constant-length?
   "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
   #{Long Double Date Instant UUID})
@@ -172,25 +199,21 @@
   
   Keyword
   (header [this len]
-    (if (< len 0x20)
+    (if (< len 0x10)
       (byte-array [(bit-or 0xC0 len)])
       (general-header (type->code Keyword) len)))
   (body [this]
-    (let [nms (namespace this)
-          n (name this)]
-      (.getBytes (subs (str this) 1) ^Charset utf8)))
+    (.getBytes (subs (str this) 1) ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
   Long
   (header [this len]
-    (assert (= len Long/BYTES))
-    (byte-array [(bit-or 0xE0 (type->code Long))]))
+    (assert (<= len Long/BYTES))
+    (byte-array [(bit-or 0xD0 len)]))
   (body [^long this]
-    (let [b (byte-array Long/BYTES)
-          bb (ByteBuffer/wrap b)]
-      (.putLong bb 0 this)
-      b))
+    (let [n (num-bytes this)]
+      (n-byte-number n this)))
   (encapsulate-id [this]
     (when-let [v (encapsulate-long this)]
       (bit-or long-type-mask v)))
@@ -342,5 +365,7 @@
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (binding [*entity-offsets* (volatile! {})
-            *current-offset* (volatile! 0)]
-    (conj (to-counted-bytes o) @*entity-offsets*)))
+            *current-offset* (volatile! 0)
+            *number-bytes* (byte-array Long/BYTES)]
+    (binding [*number-buffer* (ByteBuffer/wrap *number-bytes*)]
+      (conj (to-counted-bytes o) @*entity-offsets*))))
