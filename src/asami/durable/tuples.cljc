@@ -514,7 +514,7 @@
     (count-index-tuples index blocks tuple)))
 
 
-(defrecord TupleIndex [index blocks root-id]
+(defrecord TupleIndex [index blocks root-id own-manager]
   TupleStorage
   (tuples-at [this root]
     (->ReadOnlyTupleIndex (tree/at index root) blocks root))
@@ -545,30 +545,46 @@
 
   Transaction
   (rewind! [this]
-    (rewind! blocks)
+    (when own-manager
+      (rewind! blocks))
     (let [rindex (rewind! index)]
       (assoc this :index rindex :root-id (:root rindex))))
 
   (commit! [this]
-    (commit! blocks)
+    (when own-manager
+      (commit! blocks))
     (assoc this :index (commit! index)))
 
   Closeable
   (close [this]
     (close index)
-    (close blocks))
+    (when own-manager
+      (close blocks)))
 
   (delete! [this]
     (delete! index)
-    (delete! blocks)))
+    (when own-manager
+      (delete! blocks))))
+
+
+(defn create-tuple-index-for-managers
+  "Creates a tuple index for a provided pair of block managers."
+  ([index-manager tuple-block-manager]
+   (create-tuple-index-for-managers index-manager tuple-block-manager nil))
+  ([index-manager tuple-block-manager root-id]
+   ;; create a factory fn that returns false on 0-arity to indicate that the index manager is not owned by the tree
+   (let [block-manager-factory (fn ([] false) ([_ _] index-manager))
+         index (tree/new-block-tree block-manager-factory nil tree-node-size tuple-node-compare root-id)]
+     (->TupleIndex index tuple-block-manager root-id false))))
 
 
 (defn open-tuples
   [order-name name root-id]
-  (let [index (tree/new-block-tree (partial common-utils/create-block-manager name)
+  ;; create a factory fn that returns true on 0-arity to indicate that the index manager is owned by the calling tree
+  (let [index (tree/new-block-tree (fn ([] true) ([lname size] (common-utils/create-block-manager name lname size)))
                                    (str order-name index-name) tree-node-size tuple-node-compare root-id)
-        blocks (common-utils/create-block-manager name (str order-name block-name) (* block-max tuple-size long-size))]
-    (->TupleIndex index blocks root-id)))
+        blocks (common-utils/create-block-manager name (str order-name block-name) block-bytes)]
+    (->TupleIndex index blocks root-id true)))
 
 (defn create-tuple-index
   "Creates a tuple index for a name"

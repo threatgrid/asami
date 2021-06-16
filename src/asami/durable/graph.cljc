@@ -1,34 +1,40 @@
 (ns ^{:doc "The implements the Graph over durable storage"
       :author "Paula Gearon"}
     asami.durable.graph
-  (:require [asami.graph :as graph]
-            [asami.internal :refer [now instant? long-time]]
-            [asami.common-index :as common-index :refer [?]]
-            [asami.durable.common :as common :refer [TxData Transaction Closeable
-                                                     find-tuples tuples-at write-new-tx-tuple!
-                                                     write-tuple! delete-tuple!
-                                                     find-object find-id write! at latest rewind! commit!
-                                                     close delete! append! next-id max-long]]
-            [asami.durable.pool :as pool]
-            [asami.durable.tuples :as tuples]
-            [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
-            #?(:clj [asami.durable.flat-file :as flat-file])
-            [zuko.node :as node]
-            [zuko.logging :as log :include-macros true]))
+    (:require [asami.graph :as graph]
+              [asami.internal :refer [now instant? long-time]]
+              [asami.common-index :as common-index :refer [?]]
+              [asami.durable.common :as common :refer [TxData Transaction Closeable
+                                                       find-tuples tuples-at write-new-tx-tuple!
+                                                       write-tuple! delete-tuple!
+                                                       find-object find-id write! at latest rewind! commit!
+                                                       close delete! append! next-id max-long]]
+              [asami.durable.common-utils :as common-utils]
+              [asami.durable.pool :as pool]
+              [asami.durable.tuples :as tuples]
+              [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
+              #?(:clj [asami.durable.flat-file :as flat-file])
+              [zuko.node :as node]
+              [zuko.logging :as log :include-macros true]))
 
 ;; (set! *warn-on-reflection* true)
 
+;; names to use when index files are all separate
 (def spot-name "eavt")
 (def post-name "avet")
 (def ospt-name "veat")
 (def tspo-name "teav")  ;; a flat file transaction index
+
+;; names to use when index files are shared
+(def index-name "stmtidx.bin")
+(def block-name "stmt.bin")
 
 (declare ->BlockGraph)
 
 (defn square [x] (* x x))
 (defn cube [x] (* x x x))
 
-(defrecord BlockGraph [spot post ospt tspo pool node-allocator id-checker]
+(defrecord BlockGraph [spot post ospt tspo pool node-allocator id-checker tree-block-manager tuple-block-manager]
   graph/Graph
   (new-graph
     [this]
@@ -155,6 +161,8 @@
 
   Transaction
   (rewind! [this]
+    (when tree-block-manager (rewind! tree-block-manager))
+    (when tuple-block-manager (rewind! tuple-block-manager))
     (let [spot* (rewind! spot)
           post* (rewind! post)
           ospt* (rewind! ospt)
@@ -167,6 +175,8 @@
              :pool pool*)))
 
   (commit! [this]
+    (when tree-block-manager (commit! tree-block-manager))
+    (when tuple-block-manager (commit! tuple-block-manager))
     (let [spot* (commit! spot)
           post* (commit! post)
           ospt* (commit! ospt)
@@ -217,5 +227,21 @@
         ospt-index (tuples/create-tuple-index name ospt-name r-ospt)
         tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
         data-pool (pool/create-pool name r-pool)]
-    (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker)))
+    (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker nil nil)))
+
+(defn new-merged-block-graph
+  "Creates a new BlockGraph object, under a given name. If the resources for that name exist, then they are opened.
+  If the resources do not exist, then they are created.
+  name: the label of the location for the graph resources.
+  tx: The transaction record for this graph."
+  [name {:keys [r-spot r-post r-ospt r-pool]} node-allocator id-checker]
+  (let [tree-block-manager (common-utils/create-block-manager name index-name tuples/tree-node-size)
+        tuple-block-manager (common-utils/create-block-manager name block-name tuples/block-bytes)
+        spot-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-spot)
+        post-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-post)
+        ospt-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-ospt)
+        tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
+        data-pool (pool/create-pool name r-pool)]
+    (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker
+                  tree-block-manager tuple-block-manager)))
 

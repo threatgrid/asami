@@ -15,23 +15,25 @@
 (defn create-block-manager
   "Creates a block manager. If the reuse? flag is on, then an existing non-empty block manager is returned.
   Otherwise the block manager has only fresh blocks."
-  [name block-size & [reuse?]]
-  #?(:clj
-     ;; get-filename will ensure that a file is EMPTY.
-     ;; to reuse a temporary file, will need to find it directly with temp-file
-     (let [f (if reuse?
-               (util/temp-file name)
-               (get-filename name))]
-       (create-managed-block-file f block-size))
+  ([] true)
+  ([name block-size & [reuse?]]
+   #?(:clj
+      ;; get-filename will ensure that a file is EMPTY.
+      ;; to reuse a temporary file, will need to find it directly with temp-file
+      (let [f (if reuse?
+                (util/temp-file name)
+                (get-filename name))]
+        (create-managed-block-file f block-size))
 
-     :cljs
-     ;; TODO: create ClojureScript block manager
-     nil
-     ))
+      :cljs
+      ;; TODO: create ClojureScript block manager
+      nil
+      )))
 
 (defn reopen-block-manager
-  [name block-size]
-  (create-block-manager name block-size true))
+  ([] true)
+  ([name block-size]
+   (create-block-manager name block-size true)))
 
 (defn long-compare
   [a node]
