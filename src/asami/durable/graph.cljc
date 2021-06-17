@@ -199,11 +199,15 @@
   Closeable
   (close [this]
     (doseq [resource [spot post ospt tspo pool]]
-      (close resource)))
+      (close resource))
+    (when tree-block-manager (close tree-block-manager))
+    (when tuple-block-manager (close tuple-block-manager)))
 
   (delete! [this]
     (doseq [resource [spot post ospt tspo pool]]
-      (delete! resource))))
+      (delete! resource))
+    (when tree-block-manager (delete! tree-block-manager))
+    (when tuple-block-manager (delete! tuple-block-manager))))
 
 (defn graph-at
   "Returns a graph based on another graph, but with different set of index roots. This returns a historical graph.
@@ -235,11 +239,12 @@
   name: the label of the location for the graph resources.
   tx: The transaction record for this graph."
   [name {:keys [r-spot r-post r-ospt r-pool]} node-allocator id-checker]
-  (let [tree-block-manager (common-utils/create-block-manager name index-name tuples/tree-node-size)
+  ;; NOTE: Tree nodes blocks must hold the tuples payload and the tree node header
+  (let [tree-block-manager (common-utils/create-block-manager name index-name tuples/tree-block-size)
         tuple-block-manager (common-utils/create-block-manager name block-name tuples/block-bytes)
-        spot-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-spot)
-        post-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-post)
-        ospt-index (tuples/create-tuple-index-for-managers tree-block-manager tuple-block-manager r-ospt)
+        spot-index (tuples/create-tuple-index-for-managers "SPO" tree-block-manager tuple-block-manager r-spot)
+        post-index (tuples/create-tuple-index-for-managers "POS" tree-block-manager tuple-block-manager r-post)
+        ospt-index (tuples/create-tuple-index-for-managers "OSP" tree-block-manager tuple-block-manager r-ospt)
         tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
         data-pool (pool/create-pool name r-pool)]
     (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker

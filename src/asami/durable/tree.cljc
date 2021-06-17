@@ -94,6 +94,12 @@
         (assoc (->Node new-block (get-parent this)) :side (:side this))
         this)))
 
+  Object
+  (toString [this]
+    (let [payload (mapv #(Long/toHexString (get-long this %)) (range (/ (- (:size block) header-size) 8)))]
+      (str "Node[" (get-id this) "] L:" (get-child-id this left) " R:" (get-child-id this right) " payload:"
+           payload)))
+
   Block
   (get-id [this]
     (get-id block))
@@ -163,7 +169,7 @@
    (new-node tree nil nil nil))
   ([tree data writer]
    (new-node tree data nil writer))
-  ([{:keys [block-manager node-cache]} data parent writer]
+  ([{:keys [block-manager node-cache] :as tree} data parent writer]
    (let [block (allocate-block! block-manager)]
      (let [node (->Node block parent)]
        (when data
@@ -326,7 +332,7 @@
   (modify-node! [this node] (throw (ex-info "Read-only trees cannot be modified" {:type :modify}))))
 
 
-(defrecord TxTree [root rewind-root node-comparator block-manager node-cache own-manager]
+(defrecord TxTree [label root rewind-root node-comparator block-manager node-cache own-manager]
   Tree
   (find-node [this key] (find-node* this key))
 
@@ -408,6 +414,10 @@
     (when own-manager
       (delete! block-manager))))
 
+(defn calc-block-size
+  "Determines the size of a block used by a tree, based on the payload in the node"
+  [payload-size]
+  (+ header-size payload-size))
 
 (defn new-block-tree
   "Creates an empty block tree.
@@ -416,13 +426,13 @@
   ([block-manager-factory store-name data-size node-comparator]
    (new-block-tree block-manager-factory store-name data-size node-comparator nil))
   ([block-manager-factory store-name data-size node-comparator root-id]
-   (let [block-manager (block-manager-factory store-name (+ header-size data-size))
+   (let [block-manager (block-manager-factory store-name (calc-block-size data-size))
          own-manager? (block-manager-factory)]
      (if-not (get-block block-manager null)
        (throw (ex-info "Unable to initialize tree with null block" {:block-manager block-manager})))
      (let [data-size (- (get-block-size block-manager) header-size)
            root (if (and root-id (not= null root-id))
                   (->Node (get-block block-manager root-id) nil))]
-       (->TxTree root root node-comparator block-manager
+       (->TxTree store-name root root node-comparator block-manager
                  (atom (lru-cache-factory {} :threshold node-cache-size))
                  own-manager?)))))

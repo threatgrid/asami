@@ -32,6 +32,9 @@
 
 (def ^:const tree-node-size "Number of bytes used in the index nodes" (* (inc block-reference-offset) long-size))
 
+(def tree-block-size "All the node data, plus overhead normally managed by the tree"
+  (tree/calc-block-size tree-node-size))
+
 ;; range is 0-511
 (def ^:const block-max "Maximum number of tuples in a block" 512)
 
@@ -419,7 +422,10 @@
   (set-block-ref! node block-id))
 
 (defn insert-tuple!
-  "Inserts a tuple into an index"
+  "Inserts a tuple into an index.
+  tuple: the data to be inserted.
+  short-tuple: a possibly shortened tuple to search on. This allows searching for tuples
+  that don't share every element (such as a statement ID)"
   [{:keys [index blocks root-id] :as this} tuple short-tuple]
   (let [insert-coord (find-coord index blocks short-tuple)]
     (cond
@@ -514,17 +520,21 @@
     (count-index-tuples index blocks tuple)))
 
 
-(defrecord TupleIndex [index blocks root-id own-manager]
+(defrecord TupleIndex [label index blocks root-id own-manager]
   TupleStorage
   (tuples-at [this root]
     (->ReadOnlyTupleIndex (tree/at index root) blocks root))
 
+  ;; this operation drops the statement ID from a tuple, so as not to overwrite an existing statement
   (write-new-tx-tuple! [this tuple]
     (let [part-tuple (if (vector? tuple)
                        (subvec tuple 0 dec-tuple-size)
                        (vec (butlast tuple)))]
       (insert-tuple! this tuple part-tuple)))
 
+  ;; this operation assumes that the provided statements is not already present.
+  ;; write-new-tx-tuple should have been used to check this first
+  ;; can be used on a non-primary index if the primary index has already checked.
   (write-tuple! [this tuple]
     (insert-tuple! this tuple tuple))
 
@@ -569,13 +579,13 @@
 
 (defn create-tuple-index-for-managers
   "Creates a tuple index for a provided pair of block managers."
-  ([index-manager tuple-block-manager]
+  ([label index-manager tuple-block-manager]
    (create-tuple-index-for-managers index-manager tuple-block-manager nil))
-  ([index-manager tuple-block-manager root-id]
+  ([label index-manager tuple-block-manager root-id]
    ;; create a factory fn that returns false on 0-arity to indicate that the index manager is not owned by the tree
    (let [block-manager-factory (fn ([] false) ([_ _] index-manager))
-         index (tree/new-block-tree block-manager-factory nil tree-node-size tuple-node-compare root-id)]
-     (->TupleIndex index tuple-block-manager root-id false))))
+         index (tree/new-block-tree block-manager-factory label tree-node-size tuple-node-compare root-id)]
+     (->TupleIndex label index tuple-block-manager root-id false))))
 
 
 (defn open-tuples
@@ -584,7 +594,7 @@
   (let [index (tree/new-block-tree (fn ([] true) ([lname size] (common-utils/create-block-manager name lname size)))
                                    (str order-name index-name) tree-node-size tuple-node-compare root-id)
         blocks (common-utils/create-block-manager name (str order-name block-name) block-bytes)]
-    (->TupleIndex index blocks root-id true)))
+    (->TupleIndex name index blocks root-id true)))
 
 (defn create-tuple-index
   "Creates a tuple index for a name"

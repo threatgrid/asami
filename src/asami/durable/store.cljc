@@ -258,6 +258,6 @@
         node-allocator (fn [] (graph/new-node (swap! node-counter inc)))
         ;; the following function is called under locked conditions
         id-checker (fn [id] (when (> id @node-counter) (reset! node-counter id)))
-        block-graph (dgraph/new-block-graph name unpacked-tx node-allocator id-checker)]
+        block-graph (dgraph/new-merged-block-graph name unpacked-tx node-allocator id-checker)]
     (->DurableConnection name tx-manager (atom block-graph) node-counter (create-lock))))
 

@@ -126,7 +126,7 @@
                                    tree-node-size
                                    tuple-node-compare
                                    (get-id root))
-        tuples (->TupleIndex index blocks (get-id root) true)]
+        tuples (->TupleIndex "test" index blocks (get-id root) true)]
     (set-low-tuple! lchild [2 4 6 1])
     (set-high-tuple! lchild [2 8 8 1])
     (set-count! lchild 2)
@@ -257,7 +257,7 @@
   (let [{:keys [root lchild rchild rlchild tuples]
          [block1 block2 block3 block4] :tuple-blocks
          {:keys [index blocks]} :tuples} (create-test-tree)
-        tuples (->TupleIndex index blocks (get-id root) true)
+        tuples (->TupleIndex "test" index blocks (get-id root) true)
         [tuples t] (delete-tuple! tuples [2 8 14 1])
         _ (is (= [[2 4 6 1] [2 8 8 1] [2 8 10 1] [2 8 18 1] [2 8 20 1]
                   [2 10 4 1] [2 20 8 1] [3 1 1 1] [3 1 3 1] [3 2 1 1]]
@@ -329,7 +329,7 @@
                (constantly node-blocks)
                "" tree-node-size tuple-node-compare)
         tuple-blocks (faux-manager tuples-block-size)]
-    (->TupleIndex index tuple-blocks nil true)))
+    (->TupleIndex "test" index tuple-blocks nil true)))
 
 (deftest test-small-insert
   (let [tuples (create-test-tuples)

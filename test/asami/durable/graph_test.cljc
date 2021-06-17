@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.graph-test
   (:require [asami.graph :refer [resolve-triple graph-transact new-node]]
-            [asami.durable.graph :refer [graph-at new-block-graph]]
+            [asami.durable.graph :refer [graph-at new-merged-block-graph]]
             [asami.durable.store :refer [unpack-tx tx-record-size]]
             [asami.durable.common :refer [latest close get-tx-data commit!]]
             #?(:clj [asami.durable.flat-file :as flat-file])
@@ -36,7 +36,7 @@
         counter (atom 0)
         node-allocator (fn [] (new-node (swap! counter inc)))
         id-checker (fn [id] (when (> id @counter) (reset! counter id)))]
-    (assoc (new-block-graph nm (and tx (unpack-tx tx)) node-allocator id-checker)
+    (assoc (new-merged-block-graph nm (and tx (unpack-tx tx)) node-allocator id-checker)
            :to-close tx-manager)))
 
 (deftest test-new-graph
