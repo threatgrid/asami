@@ -5,4 +5,5 @@
   org.clojure/core.cache {:mvn/version "1.0.207"}
   org.clojars.quoll/zuko {:mvn/version "0.6.5"}
   org.clojure/data.priority-map {:mvn/version "1.0.0"}
+  cheshire/cheshire {:mvn/version "5.10.0"}
   tailrecursion/cljs-priority-map {:mvn/version "1.2.1"}}}

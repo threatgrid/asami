@@ -49,8 +49,9 @@
 ;; Byte 0
 ;; 0xxxxxxx  String type, length of up to 127.
 ;; 10xxxxxx  URI type, length of up to 64
-;; 110xxxxx  Keyword type, length of up to 32
+;; 1100xxxx  Keyword type, length of up to 16
 ;;           For these 3 types, all remaining bytes are the data body.
+;; 1101xxxx  Long value. xxxx encodes the number of bytes
 ;; 111ytttt  Data is of type described in tttt.
 ;;           Length is run-length encoded as follows:
 ;; When y=0

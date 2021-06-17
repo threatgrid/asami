@@ -154,7 +154,9 @@
   [name root-id]
   (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
-        index (tree/new-block-tree (partial common-utils/create-block-manager name)
+        index (tree/new-block-tree (fn
+                                     ([] true)
+                                     ([lname size] (common-utils/create-block-manager name lname size)))
                                    index-name tree-node-size data-compare root-id)
         encap-cache (atom (lru-cache-factory {} :threshold encap-cache-size))]
    (->DataPool data-store index root-id encap-cache)))

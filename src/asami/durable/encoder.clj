@@ -20,6 +20,11 @@
 
 ;; (set! *warn-on-reflection* true)
 
+(def ^:dynamic *entity-offsets* nil)
+(def ^:dynamic *current-offset* nil)
+
+(def empty-bytes (byte-array 0))
+
 (def type->code
   {Long (byte 0)
    Double (byte 1)
@@ -80,12 +85,12 @@
                  (bit-and 0xFF (bit-shift-right len 8))
                  (bit-and 0xFF len)])))
 
-;; to-bytes is required by the recursive concattenation operation
-(declare to-bytes)
+;; to-counted-bytes is required by the recursive concattenation operation
+(declare to-counted-bytes)
 
 (defn concat-bytes
   "Takes multiple byte arrays and returns an array with all of the bytes concattenated"
-  [bas]
+  ^bytes [bas]
   (let [len (apply + (map alength bas))
         output (byte-array len)]
     (reduce (fn [offset arr]
@@ -133,6 +138,32 @@
   (when (and (< l max-short-long) (> l min-short-long))
     (bit-and data-mask l)))
 
+(def ^:dynamic *number-bytes* nil)
+(def ^:dynamic *number-buffer* nil)
+
+(defn n-byte-number
+  "Returns an array of n bytes representing the number x.
+  Must be initialized for the current thread."
+  [^long n ^long x]
+  (.putLong *number-buffer* 0 x)
+  (let [ret (byte-array n)]
+    (System/arraycopy ^bytes *number-bytes* (int (- Long/BYTES n)) ret 0 (int n))
+    ret))
+
+(defn num-bytes
+  "Determines the number of bytes that can hold a value.
+  From 2-4 tests, this preferences small numbers."
+  [^long n]
+  (let [f (neg? n)
+        nn (if f (dec (- n)) n)]
+    (if (<= nn 0x7FFF)
+      (if (<= nn 0x7F) 1 2)
+      (if (<= nn 0x7FFFFFFF)
+        (if (<= nn 0x7FFFFF) 3 4)
+        (if (<= nn 0x7FFFFFFFFFFF)
+          (if (<= nn 0x7FFFFFFFFF) 5 6)
+          (if (<= nn 0x7FFFFFFFFFFFFF) 7 8))))))
+
 (def constant-length?
   "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
   #{Long Double Date Instant UUID})
@@ -167,25 +198,21 @@
   
   Keyword
   (header [this len]
-    (if (< len 0x20)
+    (if (< len 0x10)
       (byte-array [(bit-or 0xC0 len)])
       (general-header (type->code Keyword) len)))
   (body [this]
-    (let [nms (namespace this)
-          n (name this)]
-      (.getBytes (subs (str this) 1) ^Charset utf8)))
+    (.getBytes (subs (str this) 1) ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr (subs (str this) 1) skey-type-mask))
   
   Long
   (header [this len]
-    (assert (= len Long/BYTES))
-    (byte-array [(bit-or 0xE0 (type->code Long))]))
+    (assert (<= len Long/BYTES))
+    (byte-array [(bit-or 0xD0 len)]))
   (body [^long this]
-    (let [b (byte-array Long/BYTES)
-          bb (ByteBuffer/wrap b)]
-      (.putLong bb 0 this)
-      b))
+    (let [n (num-bytes this)]
+      (n-byte-number n this)))
   (encapsulate-id [this]
     (when-let [v (encapsulate-long this)]
       (bit-or long-type-mask v)))
@@ -220,7 +247,7 @@
     (assert (= len Long/BYTES))
     (byte-array [(bit-or 0xE0 (type->code Date))]))
   (body [^Date this]
-    (body (.getTime this)))
+    (n-byte-number Long/BYTES (.getTime this)))
   (encapsulate-id [this]
     (when-let [v (encapsulate-long (.getTime ^Date this))]
       (bit-or date-type-mask v)))
@@ -257,18 +284,47 @@
     (general-header (type->code ISeq) len))
   (body [this]
     (if-not (seq this)
-      (byte-array 0)
+      empty-bytes
       (let [fst (first this)
             t (type fst)
             homogeneous (and (constant-length? t) (every? #(instance? t %) this))
             [elt-fn prefix] (if homogeneous
-                               (let [hdr (byte-array [(bit-or 0xE0 (type->code t))])]
-                                 [#(vector (body %)) hdr])
-                               [to-bytes zero-array])]
-        (->> this
-             (mapcat elt-fn)
-             (cons prefix)
-             concat-bytes))))
+                              (if (= t Long)
+                                (let [elt-len (apply max (map num-bytes this))
+                                      arr-hdr (byte-array [(bit-or 0xD0 elt-len)])]         ;; 0xDllll is the header byte for longs
+                                  ;; integer homogenous arrays store the number in the header, with nil bodies
+                                  [#(vector (n-byte-number elt-len %)) arr-hdr])
+                                (let [arr-hdr (byte-array [(bit-or 0xE0 (type->code t))])]  ;; 0xEtttt is the header byte for typed things
+                                  ;; simple homogenous arrays store everything in the object header, with nil bodies
+                                  [#(vector (body %)) arr-hdr]))
+                              [to-counted-bytes zero-array])
+            ;; start counting the bytes that are going into the buffer
+            starting-offset @*current-offset*
+            _ (vswap! *current-offset* + 3)  ;; 2 bytes for a short header + 1 byte for the prefix array
+            result (->> this
+                        ;; like a mapv but records the lengths of the data as it iterates through the seq
+                        (reduce (fn [arrays x]
+                                  (let [offset @*current-offset* ;; save the start, as the embedded objects will update this
+                                        [head body] (elt-fn x)]
+                                    ;; regardless of what embedded objects have update the *current-offset* to, change it to the
+                                    ;; start of the current object, plus its total size
+                                    (vreset! *current-offset* (+ offset (alength head) (if body (alength body) 0)))
+                                    ;; add the bytes of this object to the overall result of byte arrays
+                                    (cond-> (conj! arrays head)
+                                      body (conj! body))))  ;; only add the body if there is one
+                                (transient [prefix]))
+                        persistent!
+                        concat-bytes)
+            update-lengths (fn [m u]
+                             (into {} (map (fn [[k v :as kv]]
+                                             (if (> v starting-offset) [k (+ v u)] kv))
+                                           m)))
+            rlen (alength result)]
+        ;; correct offsets for longer headers
+        (cond
+          (> rlen 0x7FFF) (vswap! *entity-offsets* update-lengths 3) ;; total 5 after the 2 already added
+          (> rlen 0xFF) (vswap! *entity-offsets* update-lengths 1))  ;; total 3 after the 2 already added
+        result)))
 
   IPersistentVector
   (header [this len] (header (or (seq this) '()) len))
@@ -278,6 +334,10 @@
   (header [this len]
     (general-header (type->code IPersistentMap) len))
   (body [this]
+    ;; If this is an identified object, then save it's location
+    (doseq [id-attr [:db/id :db/ident :id]]
+      (when-let [id (id-attr this)]
+        (vswap! *entity-offsets* assoc id @*current-offset*)))
     (body (apply concat (seq this))))
   
   Object
@@ -300,8 +360,17 @@
   (encapsulate-id [^asami.graph.InternalNode this]
     (bit-or node-type-mask (bit-and data-mask (.id this)))))
 
-(defn to-bytes
+(defn to-counted-bytes
   "Returns a tuple of byte arrays, representing the header and the body"
   [o]
   (let [^bytes b (body o)]
     [(header o (alength b)) b]))
+
+(defn to-bytes
+  "Returns a tuple of byte arrays, representing the header and the body"
+  [o]
+  (binding [*entity-offsets* (volatile! {})
+            *current-offset* (volatile! 0)
+            *number-bytes* (byte-array Long/BYTES)]
+    (binding [*number-buffer* (ByteBuffer/wrap *number-bytes*)]
+      (conj (to-counted-bytes o) @*entity-offsets*))))

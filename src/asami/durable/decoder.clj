@@ -41,9 +41,9 @@
   [^bytes data]
   (let [b0 (aget data 0)]
     (cond ;; test for short format objects
-      (zero? (bit-and 0x80 b0)) b0
-      (zero? (bit-and 0x40 b0)) (bit-and 0x3F b0)
-      (zero? (bit-and 0x20 b0)) (bit-and 0x1F b0)
+      (zero? (bit-and 0x80 b0)) b0                ;; short string
+      (zero? (bit-and 0x40 b0)) (bit-and 0x3F b0) ;; short URI
+      (zero? (bit-and 0x20 b0)) (bit-and 0x0F b0) ;; short keyword OR number
       ;; First byte contains only the type information. Give a large number = 63
       :default 0x3F)))
 
@@ -60,6 +60,12 @@
 (defn read-keyword
   [paged-rdr ^long pos ^long len]
   (keyword (read-str paged-rdr pos len)))
+
+(defn read-long
+  "Raw reading of big-endian bytes into a long"
+  ^long [paged-rdr ^long pos ^long len]
+  (let [^bytes b (read-bytes paged-rdr pos len)]
+    (areduce b i ret 0 (bit-or (bit-shift-left ret Byte/SIZE) (bit-and 0xFF (aget b i))))))
 
 ;; decoders operate on the bytes following the initial type byte information
 ;; if the data type has variable length, then this is decoded first
@@ -151,26 +157,35 @@
 (defn seq-decoder
   "This is a decoder for sequences of data. Use a vector as the sequence."
   [ext paged-rdr ^long pos]
+  ;; read the length of the header and the length of the seq data
   (let [[i len] (decode-length ext paged-rdr pos)
         start (+ i pos)
         end (+ start len)
+        ;; get the 0 byte. This contain info about the types in the seq
         b0 (read-byte paged-rdr start)
         decoder (if (zero? b0)
-                  ;; heterogeneous
+                  ;; heterogeneous types. Full header on every element. Read objects with size.
                   read-object-size
-                  ;; homogeneous
-                  (if-let [tdecoder (typecode->decoder (bit-and 0x0F b0))]
-                    #(tdecoder true %1 %2)
-                    (throw (ex-info "Illegal datatype in array" {:type-code (bit-and 0x0F b0)}))))]
+                  ;; homogeneous types. The header is only written once
+                  (if (= 0xD0 (bit-and 0xF0 b0))      ;; homogenous numbers
+                    (let [num-len (bit-and 0x0F b0)]  ;; get the byte length of all the numbers
+                      ;; return a function that deserializes the number and pairs it with the length
+                      #(vector (read-long %1 %2 num-len) num-len))
+                    (if-let [tdecoder (typecode->decoder (bit-and 0x0F b0))] ;; reader for type
+                      ;; the standard decoder already returns a deserialized value/length pair
+                      #(tdecoder true %1 %2)
+                      (throw (ex-info "Illegal datatype in array" {:type-code (bit-and 0x0F b0)})))))]
+    ;; iterate over the buffer deserializing until the end is reached
     (loop [s [] offset (inc start)]
       (if (>= offset end)
-        [s (+ i len)]
-        (let [[o obj-len] (decoder paged-rdr offset)]
+        [s (+ i len)]  ;; end of the buffer, return the seq and the number of bytes read
+        (let [[o obj-len] (decoder paged-rdr offset)]  ;; deserialize, then step forward
           (recur (conj s o) (+ offset obj-len)))))))
 
 (defn map-decoder
-  "A decoder for maps"
+  "A decoder for maps. Returns the map and the bytes read."
   [ext paged-rdr ^long pos]
+  ;; read the map as one long seq, then split into pairs
   (let [[s len] (seq-decoder ext paged-rdr pos)
         m (into {} (map vec (partition 2 s)))]
     [m len]))
@@ -313,7 +328,7 @@
     (or (first (drop-while zero? (map compare left-body (drop 1 right-bytes)))) 0)))
 
 (defn read-object-size
-  "Reads an object from a paged-reader, at id=pos"
+  "Reads an object from a paged-reader, at id=pos. Returns both the object and it's length."
   [paged-rdr ^long pos]
   (let [b0 (read-byte paged-rdr pos)
         ipos (inc pos)]
@@ -322,12 +337,14 @@
       (zero? (bit-and 0x80 b0)) [(read-str paged-rdr ipos b0) (inc b0)]
       (zero? (bit-and 0x40 b0)) (let [len (bit-and 0x3F b0)]
                                   [(read-uri paged-rdr ipos len) (inc len)])
-      (zero? (bit-and 0x20 b0)) (let [len (bit-and 0x1F b0)]
-                                  [(read-keyword paged-rdr ipos len) (inc len)])
       ;; First byte contains only the type information. Increment the returned length to include b0
-      :default (update ((typecode->decoder (bit-and 0x0F b0) default-decoder)
-                        (zero? (bit-and 0x10 b0)) paged-rdr ipos)
-                       1 inc))))
+      (= 0xE0 (bit-and 0xE0 b0)) (update ((typecode->decoder (bit-and 0x0F b0) default-decoder)
+                                          (zero? (bit-and 0x10 b0)) paged-rdr ipos)
+                                         1 inc)
+      ;; high nybble is 1100 for keywords or 1101 for long number
+      :default (let [read-fn (if (zero? (bit-and 0x30 b0)) read-keyword read-long)
+                     len (bit-and 0x0F b0)]
+                 [(read-fn paged-rdr ipos len) (inc len)]))))
 
 (defn read-object
   "Reads an object from a paged-reader, at id=pos"
