@@ -19,6 +19,14 @@
 
 (defonce connections (atom {}))
 
+(defn shutdown
+  "Releases all connection resources for a clean shutdown"
+  []
+  (doseq [connection (vals @connections)] (storage/release connection)))
+
+#?(:clj
+   (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown)))
+
 (s/defn ^:private parse-uri :- {:type s/Str
                                 :name s/Str}
   "Splits up a database URI string into structured parts"
