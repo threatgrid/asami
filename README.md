@@ -17,10 +17,10 @@ Asami has a query API that looks very similar to a simplified Datomic. More deta
 ## Features
 There are several other graph databases available in the Clojure ecosystem, with each having their own focus. Asami is characterized by the following:
 - Clojure and ClojureScript: Asami runs identically in both systems.
+- Schema-less: Asami does not require a schema to insert data.
 - Query planner: Queries are analyzed to find an efficient execution plan. This can be turned off.
 - Analytics: Supports fast graph traversal operations, such as transitive closures, and can identify subgraphs.
 - Integrated with Loom: Asami graphs are valid Loom graphs, via [Asami-Loom](https://github.com/threatgrid/asami-loom).
-- Schema-less: Asami does not require a schema to insert data.
 - Open World Assumption: Related to being schema-less, Asami borrows semantics from [RDF](http://www.w3.org/TR/rdf-primer) to lean towards an open world model.
 - Pluggable Storage: Like Datomic, storage in Asami can be implemented in multiple ways. There are currently 2 in-memory graph systems, and durable storage available on the JVM.
 
@@ -32,7 +32,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "2.0.6"}
+    org.clojars.quoll/asami {:mvn/version "2.1.0"}
   }
 }
 ```
@@ -41,14 +41,11 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "2.0.6"]
+[org.clojars.quoll/asami "2.1.0"]
 ```
 
-### Important Note for databases before 2.0.2
-The Asami filenames were being stored with filenames that accidentally had multiple extensions. We decided to fix this immediately, rather than waiting for a major release. To update files from an earlier database, use the `update.sh` script. For a database that was created in the current directory with the name `asami:local://dbname` then run:
-```bash
-./update.sh dbname
-```
+### Important Note for databases before 2.1.0
+Asami 2.1.0 now uses fewer files to manage data. This makes it incompatible with previous versions. To port data from an older store to a new one, use the `asami.core/export-data` function on a database on the previous version of Asami, and `asami.core/import-data` to load the data into a new connection.
 
 ### Running
 The [Asami API](https://github.com/threatgrid/asami/wiki/Asami-API) tries to look a little like Datomic.

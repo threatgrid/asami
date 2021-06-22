@@ -1,6 +1,20 @@
 # Change Log
 
-## [2.0.6] - 2021-06-27
+## [2.1.0] - 2021-06-22
+### Added
+- Transactions include resource usage, so resources (files) can be cleaned up after failure.
+
+### Fixed
+- Recursive entities now correctly cut the recursion when extracting entities from the graph.
+- Shutdown now releases connections. This truncates files to used space only.
+
+### Changed
+- Nodes now serialized using vector notation and without a redundant space. Previous node deserialization still supported.
+- Serializing numbers is now smaller.
+- Arrays and maps can now be serialized as values. This will show up in the API soon.
+- Indexes now share file resources. This has removed 4 files.
+
+## [2.0.6] - 2021-06-10
 ### Added
 - A new CLI for loading data and executing queries. This builds natively with GraalVM.
 - Exposing `now` and `instant?` from `asami.core`
@@ -233,8 +247,9 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.0.6...HEAD
-[2.0.5]: https://github.com/threatgrid/asami/compare/2.0.5...2.0.6
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.0...HEAD
+[2.1.0]: https://github.com/threatgrid/asami/compare/2.0.6...2.1.0
+[2.0.6]: https://github.com/threatgrid/asami/compare/2.0.5...2.0.6
 [2.0.5]: https://github.com/threatgrid/asami/compare/2.0.4...2.0.5
 [2.0.4]: https://github.com/threatgrid/asami/compare/2.0.3...2.0.4
 [2.0.3]: https://github.com/threatgrid/asami/compare/2.0.2...2.0.3
