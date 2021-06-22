@@ -8,7 +8,8 @@
               [asami.durable.tree :as tree]
               [asami.durable.encoder :as encoder :refer [to-bytes]]
               [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
-              [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id]]
+              [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id
+                                                     CountedBlocks get-block-count]]
               [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
               #?(:clj [asami.durable.flat-file :as flat-file])))
 
@@ -124,6 +125,11 @@
   (at [this new-root-id]
     (->ReadOnlyPool data (tree/at index new-root-id) new-root-id cache))
 
+  CountedBlocks
+  (get-block-count
+    [this]
+    (get-block-count index))
+  
   Transaction
   (commit! [this]
     (force! data)
@@ -163,5 +169,5 @@
 
 (defn create-pool
   "Creates a datapool object"
-  ([name] (create-pool name nil))
-  ([name root-id] (common-utils/named-storage open-pool name root-id)))
+  ([name] (create-pool name nil nil))
+  ([name root-id block-count] (common-utils/named-storage open-pool name root-id block-count)))

@@ -7,9 +7,9 @@
 
 (defn create-block-manager
   "Creates a block manager"
-  [name manager-name block-size]
+  [name manager-name block-size nr-blocks]
   #?(:clj
-     (block-file/create-managed-block-file (.getPath (io/file name manager-name)) block-size)))
+     (block-file/create-managed-block-file (.getPath (io/file name manager-name)) block-size nr-blocks)))
 
 (defn named-storage
   "A common function for opening storage with a given name. Must be provided with a storage constructor and the name.

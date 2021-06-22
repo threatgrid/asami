@@ -591,9 +591,9 @@
 (defn open-tuples
   [order-name name root-id]
   ;; create a factory fn that returns true on 0-arity to indicate that the index manager is owned by the calling tree
-  (let [index (tree/new-block-tree (fn ([] true) ([lname size] (common-utils/create-block-manager name lname size)))
+  (let [index (tree/new-block-tree (fn ([] true) ([lname size] (common-utils/create-block-manager name lname size nil)))
                                    (str order-name index-name) tree-node-size tuple-node-compare root-id)
-        blocks (common-utils/create-block-manager name (str order-name block-name) block-bytes)]
+        blocks (common-utils/create-block-manager name (str order-name block-name) block-bytes nil)]
     (->TupleIndex name index blocks root-id true)))
 
 (defn create-tuple-index

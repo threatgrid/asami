@@ -14,6 +14,7 @@
               [asami.durable.tuples :as tuples]
               [asami.durable.resolver :as resolver :refer [get-from-index get-transitive-from-index]]
               #?(:clj [asami.durable.flat-file :as flat-file])
+              [asami.durable.block.block-api :as block-api]
               [zuko.node :as node]
               [zuko.logging :as log :include-macros true]))
 
@@ -194,7 +195,10 @@
     {:r-spot (:root-id spot)
      :r-post (:root-id post)
      :r-ospt (:root-id ospt)
-     :r-pool (:root-id pool)})
+     :r-pool (:root-id pool)
+     :nr-index-node (block-api/get-block-count tree-block-manager)
+     :nr-index-block (block-api/get-block-count tuple-block-manager)
+     :nr-pool-node (block-api/get-block-count pool)})
 
   Closeable
   (close [this]
@@ -238,15 +242,15 @@
   If the resources do not exist, then they are created.
   name: the label of the location for the graph resources.
   tx: The transaction record for this graph."
-  [name {:keys [r-spot r-post r-ospt r-pool]} node-allocator id-checker]
+  [name {:keys [r-spot r-post r-ospt r-pool nr-index-node nr-index-block nr-pool-node]} node-allocator id-checker]
   ;; NOTE: Tree nodes blocks must hold the tuples payload and the tree node header
-  (let [tree-block-manager (common-utils/create-block-manager name index-name tuples/tree-block-size)
-        tuple-block-manager (common-utils/create-block-manager name block-name tuples/block-bytes)
+  (let [tree-block-manager (common-utils/create-block-manager name index-name tuples/tree-block-size nr-index-node)
+        tuple-block-manager (common-utils/create-block-manager name block-name tuples/block-bytes nr-index-block)
         spot-index (tuples/create-tuple-index-for-managers "SPO" tree-block-manager tuple-block-manager r-spot)
         post-index (tuples/create-tuple-index-for-managers "POS" tree-block-manager tuple-block-manager r-post)
         ospt-index (tuples/create-tuple-index-for-managers "OSP" tree-block-manager tuple-block-manager r-ospt)
         tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
-        data-pool (pool/create-pool name r-pool)]
+        data-pool (pool/create-pool name r-pool nr-pool-node)]
     (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker
                   tree-block-manager tuple-block-manager)))
 
