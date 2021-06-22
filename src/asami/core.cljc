@@ -81,9 +81,10 @@
       (storage/delete-database conn))
     ;; database not in the connections
     ;; connect to it to free its resources
-    (when (db-exists? uri)
-      (if-let [conn (connection-for uri)]
-        (storage/delete-database conn)))))
+    (boolean
+     (when (db-exists? uri)
+       (if-let [conn (connection-for uri)]
+         (storage/delete-database conn))))))
 
 (s/defn get-database-names
   "Returns a seq of database names that this instance is aware of."
