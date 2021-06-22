@@ -25,8 +25,9 @@
 
 ;; transactions contain tree roots for the 3 tree indices,
 ;; the tree root for the data pool,
+;; the 3 block counts for the tuples index tree, the tuples blocks, and the data pool index tree
 ;; the internal node counter
-(def tx-record-size (* 5 common/long-size))
+(def tx-record-size (* 8 common/long-size))
 
 (def TxRecord {(s/required-key :r-spot) (s/maybe s/Int)
                (s/required-key :r-post) (s/maybe s/Int)

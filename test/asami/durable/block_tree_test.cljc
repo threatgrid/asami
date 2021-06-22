@@ -23,7 +23,7 @@
       (let [f (if reuse?
                 (util/temp-file name)
                 (get-filename name))]
-        (create-managed-block-file f block-size))
+        (create-managed-block-file f block-size nil))
 
       :cljs
       ;; TODO: create ClojureScript block manager

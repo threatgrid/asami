@@ -157,12 +157,12 @@
 
 (defn open-pool
   "Opens all the resources required for a pool, and returns the pool structure"
-  [name root-id]
+  [name root-id block-count]
   (let [data-store (data-constructor name data-name)
         data-compare (pool-comparator-fn data-store)
         index (tree/new-block-tree (fn
                                      ([] true)
-                                     ([lname size] (common-utils/create-block-manager name lname size)))
+                                     ([lname size] (common-utils/create-block-manager name lname size block-count)))
                                    index-name tree-node-size data-compare root-id)
         encap-cache (atom (lru-cache-factory {} :threshold encap-cache-size))]
    (->DataPool data-store index root-id encap-cache)))
