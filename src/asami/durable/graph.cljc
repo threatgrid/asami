@@ -234,7 +234,7 @@
         post-index (tuples/create-tuple-index name post-name r-post)
         ospt-index (tuples/create-tuple-index name ospt-name r-ospt)
         tspo-index #?(:clj (flat-file/record-store name tspo-name tuples/tuple-size-bytes) :cljs nil)
-        data-pool (pool/create-pool name r-pool)]
+        data-pool (pool/create-pool name r-pool nil)]
     (->BlockGraph spot-index post-index ospt-index tspo-index data-pool node-allocator id-checker nil nil)))
 
 (defn new-merged-block-graph

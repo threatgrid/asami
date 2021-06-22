@@ -601,4 +601,4 @@
   ([name order-name]
    (create-tuple-index name order-name nil))
   ([name order-name root-id]
-   (common-utils/named-storage (partial open-tuples order-name) name root-id)))
+   (common-utils/named-storage (partial open-tuples order-name) name root-id nil)))

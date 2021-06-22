@@ -29,6 +29,11 @@
 
 (def ^:const node-cache-size 1024)
 
+(defn to-hex
+  [n]
+  #?(:clj (Long/toHexString n)
+     :cljs (.toString n 16)))
+
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
   (get-child-id [this side] "Gets the Node ID of the child on the given side")
@@ -96,7 +101,7 @@
 
   Object
   (toString [this]
-    (let [payload (mapv #(Long/toHexString (get-long this %)) (range (/ (- (:size block) header-size) 8)))]
+    (let [payload (mapv #(to-hex (get-long this %)) (range (/ (- (:size block) header-size) 8)))]
       (str "Node[" (get-id this) "] L:" (get-child-id this left) " R:" (get-child-id this right) " payload:"
            payload)))
 
