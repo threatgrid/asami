@@ -283,8 +283,8 @@
   [filename block-size nr-blocks]
   (let [block-file (open-block-file filename block-size nr-blocks)
         next-id (dec (:nr-blocks block-file))]
-    (when (and nr-blocks (= (inc next-id) nr-blocks))
-      (throw (ex-info "Inconsistent reopening of block file" {:set-blocks nr-blocks :file-blocks (dec (:nr-blocks block-file))})))
+    (when (and nr-blocks (= next-id nr-blocks))
+      (throw (ex-info "Inconsistent reopening of block file" {:set-blocks nr-blocks :file-blocks (:nr-blocks block-file)})))
     (->ManagedBlockFile (volatile! {:block-file block-file
                                     :next-id next-id
                                     :commit-point next-id
