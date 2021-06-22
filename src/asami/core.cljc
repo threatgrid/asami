@@ -19,6 +19,14 @@
 
 (defonce connections (atom {}))
 
+(defn shutdown
+  "Releases all connection resources for a clean shutdown"
+  []
+  (doseq [connection (vals @connections)] (storage/release connection)))
+
+#?(:clj
+   (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown)))
+
 (s/defn ^:private parse-uri :- {:type s/Str
                                 :name s/Str}
   "Splits up a database URI string into structured parts"
@@ -81,9 +89,10 @@
       (storage/delete-database conn))
     ;; database not in the connections
     ;; connect to it to free its resources
-    (when (db-exists? uri)
-      (if-let [conn (connection-for uri)]
-        (storage/delete-database conn)))))
+    (boolean
+     (when (db-exists? uri)
+       (if-let [conn (connection-for uri)]
+         (storage/delete-database conn))))))
 
 (s/defn get-database-names
   "Returns a seq of database names that this instance is aware of."

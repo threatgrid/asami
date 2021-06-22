@@ -96,7 +96,7 @@
       (is (= id (find-id pool value)) (str "data: " value)))
     (close pool)
 
-    (let [pool2 (create-pool "pool-test" root)]
+    (let [pool2 (create-pool "pool-test" root nil)]
       (doseq [[id value] (map vector ids data)]
         (is (= value (find-object pool2 id))))
 
@@ -194,7 +194,7 @@
 
     (close bpool)
 
-    (let [new-pool (create-pool "book2" root)
+    (let [new-pool (create-pool "book2" root nil)
           g2 (find-id new-pool "Gutenberg")
           output-words2 (map #(find-object new-pool %) coded)
           [coded2 bpool2] (load-strings! words new-pool)]

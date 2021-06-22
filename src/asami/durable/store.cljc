@@ -25,13 +25,17 @@
 
 ;; transactions contain tree roots for the 3 tree indices,
 ;; the tree root for the data pool,
+;; the 3 block counts for the tuples index tree, the tuples blocks, and the data pool index tree
 ;; the internal node counter
-(def tx-record-size (* 5 common/long-size))
+(def tx-record-size (* 8 common/long-size))
 
 (def TxRecord {(s/required-key :r-spot) (s/maybe s/Int)
                (s/required-key :r-post) (s/maybe s/Int)
                (s/required-key :r-ospt) (s/maybe s/Int)
                (s/required-key :r-pool) (s/maybe s/Int)
+               (s/required-key :nr-index-node) (s/maybe s/Int)
+               (s/required-key :nr-index-block) (s/maybe s/Int)
+               (s/required-key :nr-pool-node) (s/maybe s/Int)
                (s/required-key :nodes) s/Int
                (s/required-key :timestamp) s/Int})
 
@@ -40,27 +44,37 @@
                                                 (s/one s/Int "post root id")
                                                 (s/one s/Int "ospt root id")
                                                 (s/one s/Int "pool root id")
+                                                (s/one s/Int "number of index nodes allocated")
+                                                (s/one s/Int "number of index blocks allocated")
+                                                (s/one s/Int "number of pool index nodes allocated")
                                                 (s/one s/Int "node id counter")]})
 
 (s/defn pack-tx :- TxRecordPacked
   "Packs a transaction into a vector for serialization"
-  [{:keys [r-spot r-post r-ospt r-pool nodes timestamp]} :- TxRecord]
-  {:timestamp timestamp :tx-data [(or r-spot 0) (or r-post 0) (or r-ospt 0) (or r-pool 0) nodes]})
+  [{:keys [r-spot r-post r-ospt r-pool nr-index-node nr-index-block nr-pool-node nodes timestamp]} :- TxRecord]
+  {:timestamp timestamp :tx-data [(or r-spot 0) (or r-post 0) (or r-ospt 0) (or r-pool 0)
+                                  (or nr-index-node 0) (or nr-index-block 0) (or nr-pool-node 0)
+                                  nodes]})
 
 (s/defn unpack-tx :- TxRecord
   "Unpacks a transaction vector into a structure when deserializing"
-  [{[r-spot r-post r-ospt r-pool nodes] :tx-data timestamp :timestamp} :- TxRecordPacked]
+  [{[r-spot r-post r-ospt r-pool
+     nr-index-node nr-index-block nr-pool-node nodes] :tx-data
+    timestamp :timestamp} :- TxRecordPacked]
   (letfn [(non-zero [v] (and v (when-not (zero? v) v)))]
     {:r-spot (non-zero r-spot)
      :r-post (non-zero r-post)
      :r-ospt (non-zero r-ospt)
      :r-pool (non-zero r-pool)
+     :nr-index-node (non-zero nr-index-node)
+     :nr-index-block (non-zero nr-index-block)
+     :nr-pool-node (non-zero nr-pool-node)
      :nodes nodes
      :timestamp timestamp}))
 
 (s/defn new-db :- TxRecordPacked
   []
-  {:timestamp (long-time (now)) :tx-data [0 0 0 0 0]})
+  {:timestamp (long-time (now)) :tx-data [0 0 0 0 0 0 0 0]})
 
 (declare ->DurableDatabase)
 

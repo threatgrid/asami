@@ -27,13 +27,13 @@
   [s sz]
   (let [f (get-filename s)]
     [f
-     #?(:clj (create-managed-block-file f sz))]))
+     #?(:clj (create-managed-block-file f sz nil))]))
 
 (defn recreate-block-manager
   "Central BlockManager construction. On the JVM this is ManagedBlockFile.
   Takes an argument for creating the manager (e.g. File, or string), and a size."
   [f sz]
-  #?(:clj (create-managed-block-file f sz)))
+  #?(:clj (create-managed-block-file f sz nil)))
 
 (defn remove-file
   "Remove block manager resources."

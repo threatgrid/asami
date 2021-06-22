@@ -1,14 +1,14 @@
 (ns ^{:doc "This namespace provides the basic mechanisms for AVL trees"
       :author "Paula Gearon"}
     asami.durable.tree
-  (:require [asami.durable.block.block-api :refer [Block
+  (:require [asami.durable.block.block-api :refer [Block CountedBlocks
                                                    get-id get-byte get-int get-long
                                                    get-bytes get-ints get-longs
                                                    put-byte! put-int! put-long!
                                                    put-bytes! put-ints! put-longs!
                                                    put-block! copy-over!
                                                    allocate-block! get-block get-block-size
-                                                   write-block copy-to-tx]]
+                                                   write-block copy-to-tx get-block-count]]
             [asami.durable.common :refer [Transaction Closeable Forceable close delete! rewind! commit! force! long-size]]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
 
@@ -28,6 +28,11 @@
 (def ^:const header-size-long (bit-shift-right header-size 3))
 
 (def ^:const node-cache-size 1024)
+
+(defn to-hex
+  [n]
+  #?(:clj (Long/toHexString n)
+     :cljs (.toString n 16)))
 
 (defprotocol TreeNode
   (get-parent [this] "Returns the parent node. Not the Node ID, but the node object.")
@@ -96,7 +101,7 @@
 
   Object
   (toString [this]
-    (let [payload (mapv #(Long/toHexString (get-long this %)) (range (/ (- (:size block) header-size) 8)))]
+    (let [payload (mapv #(to-hex (get-long this %)) (range (/ (- (:size block) header-size) 8)))]
       (str "Node[" (get-id this) "] L:" (get-child-id this left) " R:" (get-child-id this right) " payload:"
            payload)))
 
@@ -388,6 +393,11 @@
               ;; no parent, so nd is the root
               ;; if modified-node is not yet set, then new-node was the root
               [(assoc this :root nd) (or modified-node new-node)]))))))
+
+  CountedBlocks
+  (get-block-count [this]
+    (when own-manager
+      (get-block-count block-manager)))
 
   Transaction
   (rewind! [this]

@@ -19,7 +19,7 @@
 (defn exec-bf
   [filename f]
   (let [filename (util/temp-file filename)
-        {:keys [block-file file]} (open-block-file filename test-block-size)]
+        {:keys [block-file file]} (open-block-file filename test-block-size nil)]
     (try
       (f file block-file)
       (finally
@@ -34,7 +34,7 @@
 
 (deftest test-allocate
   (let [filename (util/temp-file "ualloc")
-        block-file (open-block-file filename test-block-size)
+        block-file (open-block-file filename test-block-size nil)
         block-file (set-nr-blocks! block-file 1)]
     (try
       (let [blk (block-for block-file 0)]
@@ -48,7 +48,7 @@
 (deftest test-write
   (let [file-str "bftest"
         filename (util/temp-file file-str)
-        block-file (open-block-file filename test-block-size)
+        block-file (open-block-file filename test-block-size nil)
         bf (set-nr-blocks! block-file 4)
         b (block-for bf 0)
         _ (put-string! b str0)
@@ -68,7 +68,7 @@
     (unmap bf)
     (cleanup)
 
-    (let [block-file (open-block-file filename test-block-size)]
+    (let [block-file (open-block-file filename test-block-size nil)]
       
       ;; did it persist
       
@@ -87,7 +87,7 @@
 (deftest test-performance
   (let [file-str "perftest"
         filename (util/temp-file file-str)
-        block-file (open-block-file filename test-block-size)
+        block-file (open-block-file filename test-block-size nil)
         block-file (clear! block-file)
         nr-blocks 100000
         bf (set-nr-blocks! block-file nr-blocks)]

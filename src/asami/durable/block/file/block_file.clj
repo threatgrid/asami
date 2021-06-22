@@ -3,7 +3,7 @@
   asami.durable.block.file.block-file
   (:require [clojure.java.io :as io]
             [asami.durable.common :refer [Transaction Closeable Forceable rewind! commit! close]]
-            [asami.durable.block.block-api :refer [BlockManager copy-over! copy-block! allocate-block! get-id]]
+            [asami.durable.block.block-api :refer [CountedBlocks BlockManager copy-over! copy-block! allocate-block! get-id get-block-count]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo]
             [asami.durable.cache :refer [lookup hit miss lru-cache-factory]])
@@ -45,12 +45,14 @@
 (defn open-block-file
   "Opens a file for storing blocks. Returns a structure with the block file
    and the RandomAccessFile that the block file uses. The file will need to be
-   closed when block files based on this initial block file are no longer needed."
-  [file block-size]
+   closed when block files based on this initial block file are no longer needed.
+   When the init-nr-blocks is not nil, then it holds the recorded number of blocks
+   in the file."
+  [file block-size init-nr-blocks]
   (let [file (io/file file)
         raf (RandomAccessFile. file "rw")
         ^FileChannel fc (.getChannel raf)
-        nr-blocks (long (/ (.size fc) block-size))
+        nr-blocks (or init-nr-blocks (long (/ (.size fc) block-size)))
         slack (mod region-size block-size)
         stride (if (zero? slack) region-size (+ region-size (- block-size slack)))]
     (set-nr-blocks! (->BlockFile 0 block-size 0 [] stride file raf fc) nr-blocks)))
@@ -243,12 +245,16 @@
 
   (get-block-size [this]
     (:block-size (:block-file @state)))
-  
+
   (copy-to-tx [this block]
     (if (<= (get-id block) (:commit-point @state))
       (copy-block! this block)
       block))
 
+  CountedBlocks
+  (get-block-count [this]
+    (get-nr-blocks (:block-file @state)))
+  
   Transaction
   (rewind! [this]
     (vswap! state #(assoc % :next-id (:commit-point %)))
@@ -274,9 +280,11 @@
       (.delete ^File file))))
 
 (defn create-managed-block-file
-  [filename block-size]
-  (let [block-file (open-block-file filename block-size)
+  [filename block-size nr-blocks]
+  (let [block-file (open-block-file filename block-size nr-blocks)
         next-id (dec (:nr-blocks block-file))]
+    (when (and nr-blocks (= next-id nr-blocks))
+      (throw (ex-info "Inconsistent reopening of block file" {:set-blocks nr-blocks :file-blocks (:nr-blocks block-file)})))
     (->ManagedBlockFile (volatile! {:block-file block-file
                                     :next-id next-id
                                     :commit-point next-id

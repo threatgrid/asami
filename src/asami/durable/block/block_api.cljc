@@ -30,3 +30,6 @@
   (get-block [this id] "Returns the block associated with an ID.")
   (get-block-size [this] "Returns the size of blocks allocated by this manager")
   (copy-to-tx [this block] "Returns a block that is in the current transaction, possibly returning the current block"))
+
+(defprotocol CountedBlocks
+  (get-block-count [this] "Returns the number of blocks that this object has allocated, or nil if not managed by this object."))
