@@ -334,7 +334,7 @@
                 (zipmap patterns (map (comp :cols meta) spread))))))
     (with-meta
       ;; Does distinct create a scaling issue?
-      (*select-distinct* (apply concat (map #(left-join % part graph) patterns)))
+      (*select-distinct* (apply concat spread))
       {:cols cols})))
 
 (s/defn conjunction
