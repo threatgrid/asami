@@ -211,7 +211,6 @@
         var-map (->> (:cols m)
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
-        arg-indexes (map-indexed #(var-map %2 (- %1)) args)
         arg-indexes (map-indexed
                      (fn [i arg]
                        (if-let [j (get var-map arg)]
