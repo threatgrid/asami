@@ -335,7 +335,7 @@
     (with-meta
       ;; Does distinct create a scaling issue?
       (*select-distinct* (apply concat (map #(left-join % part graph) patterns)))
-      {:cols (:cols (meta (first spread)))})))
+      {:cols cols})))
 
 (s/defn conjunction
   "Iterates over the arguments to perform a left-join on each"
