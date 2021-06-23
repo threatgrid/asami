@@ -211,7 +211,6 @@
         var-map (->> (:cols m)
                      (map-indexed (fn [a b] [b a]))
                      (into {}))
-        arg-indexes (map-indexed #(var-map %2 (- %1)) args)
         arg-indexes (map-indexed
                      (fn [i arg]
                        (if-let [j (get var-map arg)]
@@ -334,8 +333,8 @@
                 (zipmap patterns (map (comp :cols meta) spread))))))
     (with-meta
       ;; Does distinct create a scaling issue?
-      (*select-distinct* (apply concat (map #(left-join % part graph) patterns)))
-      {:cols (:cols (meta (first spread)))})))
+      (*select-distinct* (sequence cat spread))
+      {:cols cols})))
 
 (s/defn conjunction
   "Iterates over the arguments to perform a left-join on each"
@@ -701,8 +700,7 @@
   [selection :- [s/Any]
    with :- [Var]
    partial-results :- [Results]]
-  (let [var-index (fn [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
-        selection-count (count selection)]
+  (let [selection-count (count selection)]
     (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
             (get-selectors [idxs selected]
               (map (fn [s]
