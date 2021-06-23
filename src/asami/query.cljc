@@ -700,8 +700,7 @@
   [selection :- [s/Any]
    with :- [Var]
    partial-results :- [Results]]
-  (let [var-index (fn [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
-        selection-count (count selection)]
+  (let [selection-count (count selection)]
     (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
             (get-selectors [idxs selected]
               (map (fn [s]
