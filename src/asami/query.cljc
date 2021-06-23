@@ -334,7 +334,7 @@
                 (zipmap patterns (map (comp :cols meta) spread))))))
     (with-meta
       ;; Does distinct create a scaling issue?
-      (*select-distinct* (apply concat spread))
+      (*select-distinct* (sequence cat spread))
       {:cols cols})))
 
 (s/defn conjunction
