@@ -169,12 +169,21 @@
           (concat row-l row-r)))
       {:cols total-cols})))
 
+(def VarIndex
+  {Var s/Num})
+
+(s/defn index-vars :- VarIndex
+  {:private true}
+  [vars :- [Var]]
+  (into {} (map-indexed (fn [n c] [c n]) vars)))
+
 (s/defn missing :- (s/maybe Var)
-  "Returns a value when it is a var that does not appear in the varmap."
-  [varmap :- {Var s/Num}
+  "Returns a value when it is a var that does not appear in the var
+  index var-index."
+  [var-index :- VarIndex
    arg :- s/Any]
   (when (and (vartest? arg)
-             (not (get varmap arg)))
+             (not (get var-index arg)))
     arg))
 
 (def Fcn (s/pred #(or (fn? %) (var? %))))
@@ -190,11 +199,14 @@
     (fn-for s)))
 
 (s/defn retrieve-op :- Fcn
-  "Retrieves a function for a provided operation. An op can be a variable, a function, a symbol for a function, or a string"
-  [op var-map part]
+  "Retrieves a function for a provided operation. An op can be a
+  variable, a function, a symbol for a function, or a string."
+  [op
+   var-index :- VarIndex
+   part]
   (or
    (cond
-     (vartest? op) (retrieve-op (nth (first part) (var-map op)) var-map part) ;; assuming operation is constant
+     (vartest? op) (retrieve-op (nth (first part) (get var-index op)) var-index part) ;; assuming operation is constant
      (fn? op) op
      (symbol? op) (or (get *env* op) (resolve-op op))
      (string? op) (resolve-op (symbol op))
@@ -208,29 +220,27 @@
    part :- Results
    [[op & args :as fltr]] :- FilterPattern]
   (let [m (meta part)
-        var-map (->> (:cols m)
-                     (map-indexed (fn [a b] [b a]))
-                     (into {}))
+        var-index (index-vars (:cols m))
         arg-indexes (map-indexed
                      (fn [i arg]
-                       (if-let [j (get var-map arg)]
+                       (if-let [j (get var-index arg)]
                          j
                          (constantly (nth args i))))
                      args)
         filter-fn (if (vartest? op)
-                    (if-let [op-idx (var-map op)]
+                    (if-let [op-idx (get var-index op)]
                       (fn [a]
-                        (let [callable-op (retrieve-op (nth a op-idx) var-map part)]
+                        (let [callable-op (retrieve-op (nth a op-idx) var-index part)]
                           (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes))))
                       (throw (ex-info (str "Unknown variable: " op) {:op op})))
-                    (let [callable-op (retrieve-op op var-map part)]
+                    (let [callable-op (retrieve-op op var-index part)]
                       (fn [a]
                         (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes)))))]
     (try
       (with-meta (filter filter-fn part) m)
       (catch #?(:clj Throwable :cljs :default) e
-        (throw (if-let [ev (some (partial missing var-map) args)]
-                 (ex-info (str "Unknown variable in filter: " (name ev)) {:vars (keys var-map) :filter-var ev})
+        (throw (if-let [ev (some (partial missing var-index) args)]
+                 (ex-info (str "Unknown variable in filter: " (name ev)) {:vars (keys var-index) :filter-var ev})
                  (ex-info (str "Error executing filter: " e) {:error e})))))))
 
 (s/defn binding-join
@@ -241,22 +251,20 @@
    [[op & args :as expr] bnd-var] :- EvalPattern]
   (let [cols (vec (:cols (meta part)))
         new-cols (conj cols bnd-var)
-        var-map (->> cols
-                     (map-indexed (fn [a b] [b a]))
-                     (into {}))
-        arg-indexes (keep-indexed #(when-not (zero? %1) (var-map %2 (- %1))) expr)
+        var-index (index-vars cols)
+        arg-indexes (keep-indexed #(when-not (zero? %1) (get var-index %2 (- %1))) expr)
         expr (vec expr)
         binding-fn (if (vartest? op)
-                     (if-let [op-idx (var-map op)]
+                     (if-let [op-idx (get var-index op)]
                        (fn [row]
-                         (let [o (retrieve-op (nth row op-idx) var-map part)]
+                         (let [o (retrieve-op (nth row op-idx) var-index part)]
                            (concat row
                                    [(apply o
                                            (map
                                             #(if (neg? %) (nth expr (- %)) (nth row %))
                                             arg-indexes))])))
                        (throw (ex-info (str "Unknown variable: " op) {:op op})))
-                     (let [callable-op (retrieve-op op var-map part)]
+                     (let [callable-op (retrieve-op op var-index part)]
                        (fn [row]
                          (concat row
                                  [(apply callable-op
@@ -701,8 +709,7 @@
    with :- [Var]
    partial-results :- [Results]]
   (let [selection-count (count selection)]
-    (letfn [(var-index [columns] (into {} (map-indexed (fn [n c] [c n]) columns)))
-            (get-selectors [idxs selected]
+    (letfn [(get-selectors [idxs selected]
               (map (fn [s]
                      (if (vartest? s)
                        [first #(nth % (idxs s)) *select-distinct*]
@@ -715,8 +722,8 @@
                            (throw (ex-info (str "Unknown operation: " op) {:expr s}))))))
                    selected))
             (project-aggregate [selected result]
-              (let [idxs (var-index (:cols (meta result)))]
-                (for [[col-fn col-selector dfn] (get-selectors idxs selected)]
+              (let [var-index (index-vars (:cols (meta result)))]
+                (for [[col-fn col-selector dfn] (get-selectors var-index selected)]
                   (let [col-data (map col-selector result)]
                     (col-fn (dfn col-data))))))]
       (cond
@@ -729,8 +736,8 @@
               dfn (distinct-fn op)]
           (if (planner/wildcard? v)
             (col-fn (dfn result))
-            (let [idxs (var-index (:cols (meta result)))
-                  col (idxs v)
+            (let [var-index (index-vars (:cols (meta result)))
+                  col (get var-index v)
                   col-data (map #(nth % col) result)]
               (col-fn (dfn col-data)))))
 
@@ -748,7 +755,8 @@
                                (fn [result]
                                  (col-fn (dfn result)))
                                (fn [result]
-                                 (let [col (get (var-index (:cols (meta result))) v)
+                                 (let [var-index (index-vars (:cols (meta result)))
+                                       col (get var-index v)
                                        col-data (map #(nth % col) result)]
                                    (col-fn (dfn col-data)))))]
               (map single-agg partial-results))
