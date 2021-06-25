@@ -252,6 +252,11 @@
             (as-graph database))]
     (gr/resolve-pattern g '[?e ?a ?v ?t]))) ;; Note that transactions are not returned yet
 
+(defn export-str
+  "A wrapper on export-data to serialize to a string"
+  [database]
+  (prn-str (export-data database)))
+
 (defn import-data
   "Loads raw statements into a connection. This does no checking of existing contents of storage.
   Accepts either a seq of tuples, or an EDN string which contains a seq of tuples"
