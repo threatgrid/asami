@@ -91,9 +91,10 @@
   DataStorage
   (find-object
     [this id]
-    (or
-     (decoder/unencapsulate-id id)
-     (get-object data id)))
+    (let [value (decoder/unencapsulate-id id)]
+      (if (nil? value)
+        (get-object data id)
+        value)))
 
   (find-id
     [this object]
