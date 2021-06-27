@@ -259,9 +259,18 @@
 
 (defn import-data
   "Loads raw statements into a connection. This does no checking of existing contents of storage.
-  Accepts either a seq of tuples, or an EDN string which contains a seq of tuples"
-  [connection data]
-  (let [statements (if (string? data)
-                     (edn/read-string {:readers gr/node-reader} data)
-                     data)]
-    (transact connection {:tx-triples statements})))
+  Accepts either a seq of tuples, or an EDN string which contains a seq of tuples.
+  Optionally accepts options for reading a string (will be ignored if the data is not a string).
+  These options are the same as for clojure.edn/read and cljs.reader/read."
+  ([connection data]
+   (import-data connection {} data))
+  ([connection opts data]
+   (let [readers #?(:cljs gr/node-reader
+                    :clj (merge clojure.core/*data-readers* gr/node-reader))
+         ;; add any user-provided readers to the system readers
+         user-readers (merge readers (:readers opts))
+         statements (if (string? data)
+                      (edn/read-string (merge opts {:readers user-readers}) data)
+                      data)]
+     ;; TODO: consider making imported nodes unique by adding an offset
+     (transact connection {:tx-triples statements}))))
