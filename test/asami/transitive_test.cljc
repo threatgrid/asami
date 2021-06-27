@@ -1,9 +1,11 @@
 (ns asami.transitive-test
   "Tests internals of the query portion of the memory storage"
   (:require
+            [clojure.set :as set]
             [asami.graph :refer [Graph graph-add resolve-pattern]]
             [asami.index :refer [empty-graph]]
             [asami.multi-graph :refer [empty-multi-graph]]
+            [asami.common-index :refer [step-by-predicate]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -315,5 +317,89 @@
     (dbl-branch-loop-path g)
     (dbl-branch-loop-path gm)))
 
+
+(def regions
+  [[:columboola   :n :goombi]
+   [:greenswamp   :n :goombi]
+   [:columboola   :n :nangram]
+   [:goombi       :n :rywung]
+   [:greenswamp   :n :baking-board]
+   [:rywung       :n :baking-board]
+   [:columboola   :n :greenswamp]
+   [:nangram      :n :greenswamp]
+   [:greenswamp   :n :chinchilla]
+   [:baking-board :n :chinchilla]
+   [:nangram      :n :crossroads]
+   [:greenswamp   :n :crossroads]
+   [:crossroads   :n :hopeland]
+   [:chinchilla   :n :boonarga]
+   [:boonarga     :n :brigalow]
+   [:hopeland     :n :brigalow]
+   [:kogan        :n :brigalow]
+   [:hopeland     :n :kogan]])
+
+(def closure
+  [[:columboola   :rywung]
+   [:columboola   :baking-board]
+   [:columboola   :chinchilla]
+   [:columboola   :boonarga]
+   [:columboola   :brigalow]
+   [:columboola   :crossroads]
+   [:columboola   :hopeland]
+   [:columboola   :brigalow]
+   [:columboola   :kogan]
+   [:greenswamp   :rywung]
+   [:greenswamp   :boonarga]
+   [:greenswamp   :brigalow]
+   [:greenswamp   :hopeland]
+   [:greenswamp   :kogan]
+   [:goombi       :baking-board]
+   [:goombi       :chinchilla]
+   [:goombi       :boonarga]
+   [:goombi       :brigalow]
+   [:rywung       :chinchilla]
+   [:rywung       :boonarga]
+   [:rywung       :brigalow]
+   [:nangram      :goombi]
+   [:nangram      :rywung]
+   [:nangram      :baking-board]
+   [:nangram      :chinchilla]
+   [:nangram      :boonarga]
+   [:nangram      :brigalow]
+   [:nangram      :hopeland]
+   [:nangram      :kogan]
+   [:baking-board :chinchilla]
+   [:baking-board :boonarga]
+   [:baking-board :brigalow]
+   [:crossroads   :brigalow]
+   [:crossroads   :kogan]
+   [:chinchilla   :brigalow]])
+
+(defn rpairs
+  [m]
+  (for [[k vs] m v vs]
+    [v k]))
+
+(def spairs (comp set rpairs))
+
+(deftest test-network-closure
+  (let [g (assert-data empty-graph regions)
+        non-trans (unordered-resolve g '[?a :n ?b])
+        step1 (step-by-predicate (:n (:pos g)))
+        step2 (step-by-predicate step1)
+        step3 (step-by-predicate step2)
+        r1 (unordered-resolve g '[?a :n+ ?b])
+        r2 (unordered-resolve g '[?a :n* ?b])
+        locations (-> #{} (into (map first regions)) (into (map #(nth % 2) regions)))
+        zeros (map (fn [a] [a a]) locations)]
+    (is (= non-trans (set (map (fn [[a _ b]] [a b]) regions))))
+    (is (= non-trans (spairs (:n (:pos g)))))
+    
+    (is (every? (spairs step1) non-trans))
+    (is (every? (spairs step2) (spairs step1)))
+    (is (every? (spairs step2) (spairs step3)))
+    (is (= (spairs step3) r1))
+    (is (= r1 (into non-trans closure)))
+    (is (= r2 (-> non-trans (into closure) (into zeros))))))
 
 #?(:cljs (run-tests))

@@ -127,26 +127,6 @@ and multigraph implementations."
             (recur next-nodes next-seen)
             (if (seq next-nodes) [[]] [])))))))
 
-;; follows a predicate transitively from a node
-(defmethod get-transitive-from-index [:v :v  ?]
-  [{idx :spo :as graph} tag s p o]
-  (let [get-objects (lowest-level-fn graph)]
-    (loop [seen? #{} starts [s] result []]
-      (let [step (for [s' starts o (get-objects (get-in idx [s' p])) :when (not (seen? o))] o)]
-        (if (empty? step)
-          (zero-step tag [s] (map vector result))
-          (recur (into seen? step) step (concat result step)))))))
-
-;; finds all transitive paths that end at a node
-(defmethod get-transitive-from-index [ ? :v :v]
-  [{idx :pos :as graph} tag s p o]
-  (let [get-subjects (lowest-level-fn graph)]
-    (loop [seen? #{} starts [o] result []]
-      (let [step (for [o' starts s (get-subjects (get-in idx [p o'])) :when (not (seen? s))] s)]
-        (if (empty? step)
-          (zero-step tag [o] (map vector result))
-          (recur (into seen? step) step (concat result step)))))))
-
 (def counter (atom 0))
 
 (defn *stream-from
@@ -242,9 +222,15 @@ and multigraph implementations."
                        (for [p (keys edge-idx) o (get-objects (edge-idx p))] [p o])))]
     (get-path-between idx edges-from broad-node-type? tag s o)))
 
+(def sinto (fnil into #{}))
+(def sconj (fnil conj #{}))
+
 (defn step-by-predicate
-  "Function to add an extra step to a current resolution.
-  Takes a map of nodes to sets of nodes that they are connected to"
+  "Function to add an extra step to a current resolution. Steps to the 'left' where it finds
+  a new edge where the object is the subject of an existing edge.
+  A single 'step' may traverse multiple edges, if new edges are added during iteration which
+  contain objects that have yet to be processed.
+  Takes a map of object nodes to sets of subject nodes that they are connected to by the desired predicate"
   [resolution]
   ;; for each object node...
   (loop [[o & os] (keys resolution) result resolution]
@@ -256,25 +242,58 @@ and multigraph implementations."
                             (let [next-result (if-let [next-ss (result s)]
                                                 ;; add all of these to the resolution
                                                 ;; consider only adding if there are things to add
-                                                (update o-result o into next-ss)
+                                                (update o-result o sinto next-ss)
                                                 o-result)]
                               (recur ss next-result))
                             o-result))]
         (recur os next-result))
       result)))
 
+(defn add-zero-step
+  "Uses the initial object->subject map to add reflexive connections to all nodes"
+  [os-map index]
+  (reduce-kv (fn [idx o ss]
+               (-> idx
+                   (update o sconj o)
+                   ((fn [x] (reduce #(update %1 %2 sconj %2) x ss)))))
+             index os-map))
+
+(defn get-transitive-edges
+  [os-map]
+  (loop [result os-map]
+    (let [next-result (step-by-predicate result)]
+      (if (= next-result result)
+        result
+        (recur next-result)))))
+
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos :as graph} tag s p o]
-  (let [o->s-map (mid-level-map-fn graph)
-        result-index (loop [result (o->s-map (idx p))]
-                       (let [next-result (step-by-predicate result)]
-                         ;; note: consider a faster comparison
-                         (if (= next-result result)
-                           result
-                           (recur next-result))))]
-    (for [s' (keys result-index) o' (result-index s')]
+  (let [o->s-map-fn (mid-level-map-fn graph)
+        o->s-map (o->s-map-fn (idx p))
+        result-index (get-transitive-edges o->s-map)
+        result-index (if (= :star tag)
+                       (add-zero-step o->s-map result-index)
+                       result-index)]
+    (for [[o' ss'] result-index s' ss']
       [s' o'])))
+
+;; finds all transitive paths that end at a node
+(defmethod get-transitive-from-index [ ? :v :v]
+  [{idx :pos :as graph} tag s p o]
+  (let [o->s-map ((mid-level-map-fn graph) (idx p))
+        trans-closure (get-transitive-edges o->s-map)
+        nodes (trans-closure o)]
+    (zero-step tag [o] (map vector nodes))))
+
+;; follows a predicate transitively from a node
+(defmethod get-transitive-from-index [:v :v  ?]
+  [{idx :pos :as graph} tag s p o]
+  (let [o->s-map ((mid-level-map-fn graph) (idx p))
+        trans-closure (get-transitive-edges o->s-map)
+        nodes (for [[o' ss] trans-closure :when (contains? ss s)] [o'])]
+    (zero-step tag [s] nodes)))
+
 
 ;; every node that can reach every node
 ;; expensive and pointless, so throw exception
