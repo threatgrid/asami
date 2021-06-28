@@ -38,7 +38,9 @@
          :resolve-pattern (partial graph/resolve-pattern graph)))
 
 (defn shallow-cache-1
-  "Builds a cached version of a function that only contains a small number of cached items"
+  "Builds a cached version of an arity-1 function that contains only a small number of cached items.
+  size: the number of results to cache.
+  f: The arity-1 function to cache results for."
   [size f]
   (let [cache (atom (lru-cache-factory {} :threshold size))]
     (fn [arg]
