@@ -270,7 +270,7 @@ and multigraph implementations."
 (def transitive-cache-depth "Defines how many elements to keep in the transitive cache" 2)
 
 (def get-transitive-edges
-  (internal/shallow-cache-1 transitive-cache-depth get-transitive-edges))
+  (internal/shallow-cache-1 transitive-cache-depth get-transitive-edges*))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
