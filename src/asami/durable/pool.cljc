@@ -10,7 +10,7 @@
               [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
               [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id
                                                      CountedBlocks get-block-count]]
-              [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]
+              [asami.cache :refer [lookup hit miss lru-cache-factory]]
               #?(:clj [asami.durable.flat-file :as flat-file])))
 
 ;; (set! *warn-on-reflection* true)

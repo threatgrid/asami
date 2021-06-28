@@ -10,7 +10,7 @@
                                                    allocate-block! get-block get-block-size
                                                    write-block copy-to-tx get-block-count]]
             [asami.durable.common :refer [Transaction Closeable Forceable close delete! rewind! commit! force! long-size]]
-            [asami.durable.cache :refer [lookup hit miss lru-cache-factory]]))
+            [asami.cache :refer [lookup hit miss lru-cache-factory]]))
 
 ;; (set! *warn-on-reflection* true)
 

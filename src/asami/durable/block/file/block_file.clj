@@ -6,7 +6,7 @@
             [asami.durable.block.block-api :refer [CountedBlocks BlockManager copy-over! copy-block! allocate-block! get-id get-block-count]]
             [asami.durable.block.bufferblock :refer [create-block]]
             [asami.durable.block.file.voodoo :as voodoo]
-            [asami.durable.cache :refer [lookup hit miss lru-cache-factory]])
+            [asami.cache :refer [lookup hit miss lru-cache-factory]])
   (:import [java.io RandomAccessFile File]
            [java.nio ByteBuffer IntBuffer LongBuffer MappedByteBuffer]
            [java.nio.channels FileChannel FileChannel$MapMode]
