@@ -183,7 +183,7 @@
   [var-index :- VarIndex
    arg :- s/Any]
   (when (and (vartest? arg)
-             (not (get var-index arg)))
+             (not (var-index arg)))
     arg))
 
 (def Fcn (s/pred #(or (fn? %) (var? %))))
@@ -206,7 +206,7 @@
    part]
   (or
    (cond
-     (vartest? op) (retrieve-op (nth (first part) (get var-index op)) var-index part) ;; assuming operation is constant
+     (vartest? op) (retrieve-op (nth (first part) (var-index op)) var-index part) ;; assuming operation is constant
      (fn? op) op
      (symbol? op) (or (get *env* op) (resolve-op op))
      (string? op) (resolve-op (symbol op))
@@ -223,12 +223,12 @@
         var-index (index-vars (:cols m))
         arg-indexes (map-indexed
                      (fn [i arg]
-                       (if-let [j (get var-index arg)]
+                       (if-let [j (var-index arg)]
                          j
                          (constantly (nth args i))))
                      args)
         filter-fn (if (vartest? op)
-                    (if-let [op-idx (get var-index op)]
+                    (if-let [op-idx (var-index op)]
                       (fn [a]
                         (let [callable-op (retrieve-op (nth a op-idx) var-index part)]
                           (apply callable-op (map (fn [f] (if (fn? f) (f) (nth a f))) arg-indexes))))
@@ -252,10 +252,10 @@
   (let [cols (vec (:cols (meta part)))
         new-cols (conj cols bnd-var)
         var-index (index-vars cols)
-        arg-indexes (keep-indexed #(when-not (zero? %1) (get var-index %2 (- %1))) expr)
+        arg-indexes (keep-indexed #(when-not (zero? %1) (var-index %2 (- %1))) expr)
         expr (vec expr)
         binding-fn (if (vartest? op)
-                     (if-let [op-idx (get var-index op)]
+                     (if-let [op-idx (var-index op)]
                        (fn [row]
                          (let [o (retrieve-op (nth row op-idx) var-index part)]
                            (concat row
@@ -737,7 +737,7 @@
           (if (planner/wildcard? v)
             (col-fn (dfn result))
             (let [var-index (index-vars (:cols (meta result)))
-                  col (get var-index v)
+                  col (var-index v)
                   col-data (map #(nth % col) result)]
               (col-fn (dfn col-data)))))
 
@@ -756,7 +756,7 @@
                                  (col-fn (dfn result)))
                                (fn [result]
                                  (let [var-index (index-vars (:cols (meta result)))
-                                       col (get var-index v)
+                                       col (var-index v)
                                        col-data (map #(nth % col) result)]
                                    (col-fn (dfn col-data)))))]
               (map single-agg partial-results))
