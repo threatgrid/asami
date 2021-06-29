@@ -1,5 +1,18 @@
 # Change Log
 
+## [2.1.1] - 2021-06-28
+### Added
+- Added `asami.core/export-str`. This is a shortcut to convert a data export to a string, suitable for `clojure.core/spit`, since the default will write this as a LazySeq label.
+- `asami.core/import-data` now accepts an `opts` argument, the same way that `edn` readers do. This is used when reading from `edn` text.
+
+### Changed
+- Single-end bindings on transitive constraints applied to memory graphs are now using the unbound form internally to gain log(n) complexity.
+- Cleanups to internal code.
+
+### Fixed
+- In memory transitive attribute constraints have been fixed for the case of an unbound constraint for a given attribute.
+- Boolean values saved to disk no longer create errors when reading back `false`.
+
 ## [2.1.0] - 2021-06-22
 ### Added
 - Transactions include resource usage, so resources (files) can be cleaned up after failure.
@@ -247,7 +260,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.0...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.1...HEAD
+[2.1.1]: https://github.com/threatgrid/asami/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/threatgrid/asami/compare/2.0.6...2.1.0
 [2.0.6]: https://github.com/threatgrid/asami/compare/2.0.5...2.0.6
 [2.0.5]: https://github.com/threatgrid/asami/compare/2.0.4...2.0.5
