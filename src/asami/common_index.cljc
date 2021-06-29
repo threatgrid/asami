@@ -3,6 +3,7 @@ and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
   (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple broad-node-type?]]
+            [asami.internal :as internal]
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
@@ -230,7 +231,7 @@ and multigraph implementations."
   a new edge where the object is the subject of an existing edge.
   A single 'step' may traverse multiple edges, if new edges are added during iteration which
   contain objects that have yet to be processed.
-  Takes a map of object nodes to sets of subject nodes that they are connected to by the desired predicate"
+  resolution: a map of object nodes to sets of subject nodes that they are connected to by the desired predicate"
   [resolution]
   ;; for each object node...
   (loop [[o & os] (keys resolution) result resolution]
@@ -258,13 +259,21 @@ and multigraph implementations."
                    ((fn [x] (reduce #(update %1 %2 sconj %2) x ss)))))
              index os-map))
 
-(defn get-transitive-edges
+(defn get-transitive-edges*
+  "Retrieves a mapping of all objects to subjects that can be transitively connected
+  by a predicate that was used to retrieve the os-map.
+  os-map: map of objects to subject for existing edges in the graph for a given predicate."
   [os-map]
   (loop [result os-map]
     (let [next-result (step-by-predicate result)]
       (if (= next-result result)
-        result
+        (or result {})
         (recur next-result)))))
+
+(def transitive-cache-depth "Defines how many elements to keep in the transitive cache" 2)
+
+(def get-transitive-edges
+  (internal/shallow-cache-1 transitive-cache-depth get-transitive-edges*))
 
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]

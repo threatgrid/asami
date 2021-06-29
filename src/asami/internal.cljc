@@ -1,7 +1,8 @@
 (ns ^{:doc "Common internal elements of storage"
       :author "Paula Gearon"}
     asami.internal
-  (:require [asami.graph :as graph])
+  (:require [asami.graph :as graph]
+            [asami.cache :refer [lookup hit miss lru-cache-factory]])
   #?(:clj (:import [java.util Date])))
 
 #?(:clj (set! *warn-on-reflection* true))
@@ -35,3 +36,18 @@
   [graph]
   (assoc project-args
          :resolve-pattern (partial graph/resolve-pattern graph)))
+
+(defn shallow-cache-1
+  "Builds a cached version of an arity-1 function that contains only a small number of cached items.
+  size: the number of results to cache.
+  f: The arity-1 function to cache results for."
+  [size f]
+  (let [cache (atom (lru-cache-factory {} :threshold size))]
+    (fn [arg]
+      (if-let [ret (lookup @cache arg)]
+        (do
+          (swap! cache hit arg)
+          ret)
+        (let [ret (f arg)]
+          (swap! cache miss arg ret)
+          ret)))))
