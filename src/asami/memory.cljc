@@ -37,7 +37,7 @@
              (< 0 c) (recur low mid)))))))
 
 
-(declare as-of* as-of-t* since* since-t* graph* entity* next-tx* db* transact-update* transact-data*)
+(declare as-of* as-of-t* as-of-time* since* since-t* graph* entity* next-tx* db* transact-update* transact-data*)
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
@@ -47,6 +47,7 @@
 
   (as-of [this t] (as-of* this t))
   (as-of-t [this] (as-of-t* this))
+  (as-of-time [this] (as-of-time* this))
   (since [this t] (since* this t))
   (since-t [this] (since-t* this))
   (graph [this] (graph* this))
@@ -114,6 +115,11 @@
   "Returns the as-of point for a database, or nil if none"
   [{history :history :as db} :- DatabaseType]
   (and history (count history)))
+
+(s/defn as-of-time* :- s/Int
+  "Returns the timestamp for a database"
+  [{:keys [timestamp]} :- DatabaseType]
+  timestamp)
 
 (s/defn since* :- (s/maybe DatabaseType)
   "Returns the value of the database since some point t, exclusive.
