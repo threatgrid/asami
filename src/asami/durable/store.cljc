@@ -144,6 +144,7 @@
   storage/Database
   (as-of [this t-val] (as-of* this t-val))
   (as-of-t [this] t)
+  (as-of-time [this] timestamp)
   (since [this t-val] (since* this t-val))
   (since-t [this] t)
   (graph [this] bgraph)

@@ -128,6 +128,7 @@
 (def db storage/db)
 (def as-of storage/as-of)
 (def as-of-t storage/as-of-t)
+(def as-of-time storage/as-of-time)
 (def since storage/since)
 (def since-t storage/since-t)
 (def graph storage/graph)
