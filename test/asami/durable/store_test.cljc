@@ -196,6 +196,7 @@
             db1 (as-of db3 ts2-time--)
             r1 (fn [[e a v]] (set (resolve-triple (graph db1) e a v)))
             r2 (fn [[e a v]] (set (resolve-triple (graph db2) e a v)))]
+        (is (= (as-of-t db3) (:t db3)))
         (is (= #{[:name "Persephone Smith"]
                  [:age 25]
                  [:friend :c]}
