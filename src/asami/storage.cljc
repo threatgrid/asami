@@ -20,6 +20,7 @@
 (defprotocol Database
   (as-of [this t] "Retrieves a database as of a given moment, inclusive")
   (as-of-t [this] "Returns the t point for a database")
+  (as-of-time [this] "Returns the timestamp associated with a database")
   (since [this t] "Retrieves a database since a given moment, exclusive")
   (since-t [this] "Returns the since point for a database")
   (graph [this] "Returns the internal graph for the database")

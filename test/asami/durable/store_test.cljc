@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.store-test
   (:require [asami.durable.store :refer [db-exists? create-database]]
-            [asami.storage :refer [db delete-database transact-data as-of as-of-t since since-t graph entity]]
+            [asami.storage :refer [db delete-database transact-data as-of as-of-t as-of-time since since-t graph entity]]
             [asami.graph :refer [resolve-triple]]
             [asami.internal :refer [instant]]
             [asami.durable.common :as common]
@@ -196,6 +196,8 @@
             db1 (as-of db3 ts2-time--)
             r1 (fn [[e a v]] (set (resolve-triple (graph db1) e a v)))
             r2 (fn [[e a v]] (set (resolve-triple (graph db2) e a v)))]
+        (is (= (as-of-t db3) (:t db3)))
+        (is (= (as-of-time db3) (:timestamp db3)))
         (is (= #{[:name "Persephone Smith"]
                  [:age 25]
                  [:friend :c]}
@@ -303,7 +305,7 @@
           db1 (as-of db3 ts2-time--)
           r1 (fn [[e a v]] (set (resolve-triple (graph db1) e a v)))
           r2 (fn [[e a v]] (set (resolve-triple (graph db2) e a v)))]
-      
+
 
       (is (= #{[:name "Persephone Smith"]
                [:age 25]
@@ -352,7 +354,7 @@
       (is (= #{[:a]
                [:b]}
              (r2 '[?e :age 24])))
-      
+
       (is (empty? (r2 '[?e :age 23])))
       (is (= #{[]}
              (r2 '[:b :age 24])))
@@ -378,7 +380,7 @@
       (is (= #{[:a]
                [:b]}
              (r1 '[?e :age 23])))
-      
+
       (is (= #{[]}
              (r1 '[:b :age 23])))
       (is (empty? (r1 '[:b :age 24])))
