@@ -30,31 +30,32 @@
 
 (defmethod get-from-index [:v :v  ?]
   [{idx :spot dp :pool} s p o]
-  (map (partial v2 dp) (find-tuples idx [s p])))
+  (map #(v2 dp %) (find-tuples idx [s p])))
 
 (defmethod get-from-index [:v  ? :v]
   [{idx :ospt dp :pool} s p o]
-  (map (partial v2 dp) (find-tuples idx [o s])))
+  (map #(v2 dp %) (find-tuples idx [o s])))
 
 (defmethod get-from-index [:v  ?  ?]
   [{idx :spot dp :pool} s p o]
-  (map (partial v12 dp) (find-tuples idx [s])))
+  (map #(v12 dp %) (find-tuples idx [s])))
 
 (defmethod get-from-index [ ? :v :v]
   [{idx :post dp :pool} s p o]
-  (map (partial v2 dp) (find-tuples idx [p o])))
+  (map #(v2 dp %) (find-tuples idx [p o])))
 
 (defmethod get-from-index [ ? :v  ?]
   [{idx :post dp :pool} s p o]
-  (map (partial v21 dp) (find-tuples idx [p])))
+  (map #(v21 dp %) (find-tuples idx [p])))
 
 (defmethod get-from-index [ ?  ? :v]
   [{idx :ospt dp :pool} s p o]
-  (map (partial v12 dp) (find-tuples idx [o])))
+  (map #(v12 dp %) (find-tuples idx [o])))
 
 (defmethod get-from-index [ ?  ?  ?]
   [{idx :spot dp :pool} s p o]
-  (map #(mapv (partial find-object dp) (take 3 %))
+  ;; use an unrolled map of find-object to speed up extraction
+  (map (fn [[s p o _]] [(find-object dp s) (find-object dp p) (find-object dp o)])
        (find-tuples idx [])))
 
 (defn zero-step
@@ -116,7 +117,7 @@
         subjects when starting at an object, and objects when starting at a subject.
   rproject: A function for projecting the final result as a vector in the expected order for the operation."
   [idx pool tag x tproject ypos rproject]
-  (let [f-obj (partial find-object pool)
+  (let [f-obj #(find-object pool %)
         x-val (f-obj x)
         starred (= :star tag) ;; was the transitive operation * or +
         tuples (map tproject (find-tuples idx [x]))
@@ -181,9 +182,10 @@
                      (map project-after-first (find-tuples idx [n])))
         node-type? (fn [n] (or (decoder/encapsulated-node? n)
                                (broad-node-type? (find-object pool n))))
-        [path] (common-index/get-path-between idx edges-from node-type? tag s o)]
+        [path] (common-index/get-path-between idx edges-from node-type? tag s o)
+        find-in-pool #(find-object pool %)]
     (if path
-      (vector (map (partial mapv (partial find-object pool)) path))
+      (vector (map #(mapv find-in-pool %) path))
       [])))
 
 ;; every node that can reach every node
