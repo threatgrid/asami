@@ -2,7 +2,9 @@
       :author "Paula Gearon"}
     asami.durable.pool-test
   (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
+            [clojure.java.io :as io]
             [clojure.string :as s]
+            [asami.durable.common-utils :as common-utils]
             [asami.durable.common :refer [close find-object find-id write! at
                                           get-object]]  ;; TODO remove
             [asami.durable.pool :refer [create-pool id-offset-long]]
@@ -21,7 +23,7 @@
                  (doseq [file (into [] (.listFiles f))]
                    (remove file)))
                (.delete f))]
-       (remove (File. s)))))
+       (remove (common-utils/get-directory s)))))
 
 (deftest test-creation
   (let [pool (create-pool "empty-test")]

@@ -6,6 +6,7 @@
             [asami.internal :as i :refer [now instant? long-time]]
             [asami.durable.common :as common
              :refer [append-tx! commit! get-tx latest tx-count find-tx close delete!]]
+            [asami.durable.common-utils :as common-utils]
             [asami.durable.macros :as m :include-macros true]
             [asami.durable.pool :as pool]
             [asami.durable.tuples :as tuples]
@@ -17,6 +18,7 @@
             #?(:clj [asami.durable.flat-file :as flat-file])
             #?(:clj [clojure.java.io :as io]))
   #?(:clj (:import [java.util.concurrent.locks Lock ReentrantLock]
+                   [java.io File]
                    [java.nio.channels FileLock])))
 
 #?(:clj (set! *warn-on-reflection* true))
@@ -170,8 +172,8 @@
   (reset! grapha nil)
   (close tx-manager)
   (delete! tx-manager)
-  #?(:clj (when-let [d (io/file name)]
-            (.delete d))
+  #?(:clj (when-let [d (common-utils/get-directory name)]
+            (.delete ^File d))
      :cljs true))
 
 (s/defn release*

@@ -5,6 +5,7 @@
             [asami.durable.graph :refer [graph-at new-merged-block-graph]]
             [asami.durable.store :refer [unpack-tx tx-record-size]]
             [asami.durable.common :refer [latest close get-tx-data commit!]]
+            [asami.durable.common-utils :as common-utils]
             #?(:clj [asami.durable.flat-file :as flat-file])
             [asami.durable.test-utils :as util :include-macros true]
             #?(:clj [clojure.java.io :as io])
@@ -17,14 +18,16 @@
 (defn group-exists
   "Checks if a group of a given name exists"
   [n]
-  #?(:clj (.isDirectory (io/file n)) :cljs false))
+  #?(:clj (let [d (common-utils/get-directory n false)]
+            (.isDirectory d))
+     :cljs false))
 
 (defn remove-group
   "Removes the group resource"
   [n]
-  #?(:clj (do
-            (.delete (io/file n "tx.dat"))
-            (.delete (io/file n)))
+  #?(:clj (let [d (common-utils/get-directory n false)]
+            (.delete (io/file d "tx.dat"))
+            (.delete d))
      :cljs true))
 
 (defn make-graph

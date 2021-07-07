@@ -7,6 +7,7 @@
                                           FlatStore write-object! get-object force!
                                           TxStore Closeable Forceable get-tx tx-count long-size
                                           FlatRecords]]
+            [asami.durable.common-utils :as common-utils]
             [asami.durable.encoder :as encoder]
             [asami.durable.decoder :as decoder])
   (:import [java.io RandomAccessFile File]
@@ -284,25 +285,16 @@
   (delete! [this]
     (.delete ^File f)))
 
-(def ^:const current-dir ".")
-(def ^:const parent-dir "..")
-
 (defn- file-store
   "Creates and initializes an append-only file and a paged reader."
   [name fname size]
-  (let [[root & path-elements] (string/split name (re-pattern File/separator))]
-    (when (or (= parent-dir root) (some #{current-dir parent-dir} path-elements))
-      (throw (ex-info "Illegal path present in database name" {:database name})))
-    (let [clean-path (cons root (remove empty? path-elements))
-          clean-name (string/join File/separatorChar clean-path)
-          d (io/file clean-name)
-          _ (.mkdirs d)
-          f (io/file clean-name fname)
-          raf (RandomAccessFile. f "rw")
-          file-length (.length raf)]
-      (when-not (zero? file-length)
-        (.seek raf file-length))
-      [raf f (paged-file raf size)])))
+  (let [directory (common-utils/get-directory name)
+        f (io/file directory fname)
+        raf (RandomAccessFile. f "rw")
+        file-length (.length raf)]
+    (when-not (zero? file-length)
+      (.seek raf file-length))
+    [raf f (paged-file raf size)]))
 
 (defn flat-store
   "Creates a flat file store. This wraps an append-only file and a paged reader."
@@ -332,6 +324,6 @@
 (defn store-exists?
   "Checks if the resources for a file have been created already"
   [group-name name]
-  (let [d (io/file group-name)
-        f (io/file group-name name)]
+  (let [d (common-utils/get-directory group-name false)
+        f (io/file d name)]
     (and (.exists d) (.exists f))))
