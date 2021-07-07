@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.durable.pool-test
   (:require [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]
-            [clojure.java.io :as io]
+            #?(:clj [clojure.java.io :as io])
             [clojure.string :as s]
             [asami.durable.common-utils :as common-utils]
             [asami.durable.common :refer [close find-object find-id write! at
