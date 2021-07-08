@@ -1,51 +1,92 @@
 (ns ^{:doc "Entry point for CLI"
       :author "Paula Gearon"}
   asami.main
-  (:require [clojure.string :as s]
-            [clojure.edn :as edn]
+  (:require [asami.core :as asami]
+            [asami.graph :as graph]
             [cheshire.core :as json]
+            [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.pprint :refer [pprint]]
-            [asami.core :as asami]
-            [asami.graph :as graph])
+            [clojure.string :as s])
+  (:import (java.io PushbackReader))
   (:gen-class))
 
-(def reader-opts {:readers (assoc graph/node-reader 'a/r re-pattern)})
+(def reader-opts
+  {:eof (reify)
+   :readers (assoc graph/node-reader 'a/r re-pattern)})
+
+(def default-opts
+  {:interactive? false
+   :query "-"})
 
 (defn process-args
   [args]
-  (loop [result {:query "-"} [a & [arg & rargs :as rem] :as args] args]
+  (loop [opts default-opts
+         [a & [arg & rargs :as rem] :as args] args]
     (if-not (seq args)
-      result
-      (let [[r more] (cond
-                       (#{"-e" "-q"} a) [(assoc result :query arg) rargs]
-                       (= a "-f") [(assoc result :file arg) rargs]
-                       (#{"-?" "--help"} a) [(assoc result :help true) rem]
-                       (s/starts-with? a "asami:") [(assoc result :url a) rem])]
+      opts
+      (let [[r more] (case a
+                       ("-e" "-q")
+                       [(assoc opts :query arg) rargs]
+
+                       "-f"
+                       [(assoc opts :file arg) rargs]
+
+                       ("-?" "--help")
+                       [(assoc opts :help true) rem]
+
+                       ("--interactive")
+                       [(assoc opts :interactive? true) rem]
+
+                       ;; else
+                       (if (s/starts-with? a "asami:")
+                         [(assoc opts :url a) rem]))]
         (recur r more)))))
 
 (defn read-data-file
   [f]
-  (let [text (slurp (if (= f "-") *in* f))]
-    (if (s/ends-with? f ".json")
-      (json/parse-string text)
+  (if (s/ends-with? f ".json")
+    (json/parse-string (slurp f))
+    (let [text (slurp (if (= f "-") *in* f))]
       (edn/read-string reader-opts text))))
 
 (defn load-data-file
   [conn f]
   (:db-after @(asami/transact conn {:tx-data (read-data-file f)})))
 
-(defn read-queries
-  [q]
-  (let [text (s/trim (if (= q "-") (slurp *in*) q))
-        mtext (s/split text #";")
-        all (mapv (fn [text]
-                    (let [txt (if (= \: (first (s/trim text))) (str "[" text "]") text)]
-                      (edn/read-string reader-opts txt)))
-                  mtext)]
-    (if (= 1 (count all))
-      (let [[qv] all]
-        (if (vector? (first qv)) qv all))
-      all)))
+(def ^:const query-separator
+  (int \;))
+
+(defn read-queries [^String q]
+  (let [ipt (if (= q "-") *in* (.getBytes q))
+        pbr (PushbackReader. (io/reader ipt))
+        eof (:eof reader-opts)]
+    (loop [queries []]
+      (let [c (.read pbr)]
+        (cond
+          (or (Character/isWhitespace c)
+              (= c query-separator))
+          (recur queries)
+
+          (= c -1)
+          queries
+
+          :else
+          (let [query (edn/read reader-opts (doto pbr (.unread c)))]
+            (cond
+              (identical? query eof)
+              queries
+
+              (keyword? query)
+              (recur (conj queries [query]))
+
+              ;; Many queries
+              (and (vector? query) (every? vector? query))
+              (recur (into queries query))
+
+              ;; One query
+              :else
+              (recur (conj queries query)))))))))
 
 (defn print-usage
   []
@@ -61,19 +102,42 @@
   (println "  internal nodes -  #a/n \"node-id\"")
   (println "  regex          -  #a/r \"[Tt]his is a (regex|regular expression)\""))
 
+(defn derive-database [{:keys [file url]}]
+  (let [conn (asami/connect url)]
+    (if file
+      (load-data-file conn file)
+      (asami/db conn))))
+
+(defn execute-queries [{:keys [query] :as options}]
+  (let [db (derive-database options)]
+    (doseq [query (read-queries query)]
+      (pprint (asami/q query db)))))
+
+(defn interactive [options]
+  (let [db (derive-database options)
+        pbr (PushbackReader. (io/reader *in*))
+        eof (:eof reader-opts)]
+    (loop []
+      (print "?- ")
+      (flush)
+      (let [query (edn/read reader-opts pbr)]
+        (when-not (identical? query eof)
+          (pprint (asami/q query db))
+          (recur))))))
+
 (defn -main
   [& args]
-  (let [{:keys [query file url help]} (process-args args)]
+  (let [{:keys [help interactive? url] :as options} (process-args args)]
     (when help
       (print-usage)
       (System/exit 0))
+
     (when-not url
       (println "Database URL must be specified")
       (System/exit 1))
-    (let [conn (asami/connect url)
-          db (if file
-               (load-data-file conn file)
-               (asami/db conn))]
-      (doseq [query (read-queries query)]
-        (pprint (asami/q query db)))
-      (System/exit 0))))
+
+    (if interactive?
+      (interactive options)
+      (execute-queries options))
+
+    (System/exit 0)))
