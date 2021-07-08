@@ -22,22 +22,14 @@
 (defn process-args
   [args]
   (loop [opts default-opts
-         [a & [arg & rargs :as rem] :as args] args]
+         [a & [arg & rargs :as rem]] args]
     (if-not (seq args)
       opts
       (let [[r more] (case a
-                       ("-e" "-q")
-                       [(assoc opts :query arg) rargs]
-
-                       "-f"
-                       [(assoc opts :file arg) rargs]
-
-                       ("-?" "--help")
-                       [(assoc opts :help true) rem]
-
-                       ("--interactive")
-                       [(assoc opts :interactive? true) rem]
-
+                       ("-e" "-q") [(assoc opts :query arg) rargs]
+                       "-f" [(assoc opts :file arg) rargs]
+                       ("-?" "--help") [(assoc opts :help true) rem]
+                       ("--interactive") [(assoc opts :interactive? true) rem]
                        ;; else
                        (if (s/starts-with? a "asami:")
                          [(assoc opts :url a) rem]))]
