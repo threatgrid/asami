@@ -53,6 +53,12 @@
       (load-data-file conn file)
       (asami/db conn))))
 
+(defn derive-stream [{:keys [interactive? query]}]
+  (let [input (if (or (= query "-") interactive?)
+                *in*
+                (.getBytes ^String query))]
+    (PushbackReader. (io/reader input))))
+
 (def ^:const query-separator
   (int \;))
 
@@ -80,7 +86,7 @@
             :else
             [query]))))))
 
-(defn repl [stream db {:keys [prompt]}]
+(defn repl [stream db prompt]
   (let [prompt-fn (if (some? prompt)
                     (fn [] (print prompt) (flush))
                     (constantly nil))]
@@ -94,17 +100,6 @@
               (catch Exception e
                 (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e)))))
           (recur))))))
-
-(defn execute-queries [{:keys [query] :as options}]
-  (let [db (derive-database options)
-        ipt (if (= query "-") *in* (.getBytes ^String query))
-        stream (PushbackReader. (io/reader ipt))]
-    (repl stream db {:prompt nil})))
-
-(defn interactive [options]
-  (let [db (derive-database options)
-        stream (PushbackReader. (io/reader *in*))]
-    (repl stream db {:prompt "?- "})))
 
 (defn print-usage
   []
@@ -131,8 +126,9 @@
       (println "Database URL must be specified")
       (System/exit 1))
 
-    (if interactive?
-      (interactive options)
-      (execute-queries options))
+    (let [db (derive-database options)
+          stream (derive-stream options)
+          prompt (if interactive? "?- ")]
+      (repl stream db prompt))
 
     (System/exit 0)))
