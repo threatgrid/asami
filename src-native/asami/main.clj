@@ -14,6 +14,9 @@
 (def eof
   (reify))
 
+(defn eof? [x]
+  (identical? x eof))
+
 (def reader-opts
   {:eof eof
    :readers (assoc graph/node-reader 'a/r re-pattern)})
