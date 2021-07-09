@@ -15,24 +15,19 @@
   {:eof (reify)
    :readers (assoc graph/node-reader 'a/r re-pattern)})
 
-(def default-opts
-  {:interactive? false
-   :query "-"})
-
 (defn process-args
   [args]
-  (loop [opts default-opts
-         [a & [arg & rargs :as rem]] args]
+  (loop [result {:interactive? false
+                 :query "-"}
+         [a & [arg & rargs :as rem] :as args] args]
     (if-not (seq args)
-      opts
-      (let [[r more] (case a
-                       ("-e" "-q") [(assoc opts :query arg) rargs]
-                       "-f" [(assoc opts :file arg) rargs]
-                       ("-?" "--help") [(assoc opts :help true) rem]
-                       ("--interactive") [(assoc opts :interactive? true) rem]
-                       ;; else
-                       (if (s/starts-with? a "asami:")
-                         [(assoc opts :url a) rem]))]
+      result
+      (let [[r more] (cond
+                       (#{"-e" "-q"} a) [(assoc result :query arg) rargs]
+                       (= a "-f") [(assoc result :file arg) rargs]
+                       (#{"-?" "--help"} a) [(assoc result :help true) rem]
+                       (= a "--interactive") [(assoc result :interactive? true) rem]
+                       (s/starts-with? a "asami:") [(assoc result :url a) rem])]
         (recur r more)))))
 
 (defn read-data-file
@@ -114,7 +109,10 @@
       (flush)
       (let [query (edn/read reader-opts pbr)]
         (when-not (identical? query eof)
-          (pprint (asami/q query db))
+          (try
+            (pprint (asami/q query db))
+            (catch Exception e
+              (println "Error:" (ex-message e))))
           (recur))))))
 
 (defn -main
