@@ -80,31 +80,31 @@
             :else
             [query]))))))
 
-(defn execute-queries [{:keys [query] :as options}]
-  (let [db (derive-database options)
-        ipt (if (= query "-") *in* (.getBytes ^String query))
-        pbr (PushbackReader. (io/reader ipt))]
+(defn repl [stream db {:keys [prompt]}]
+  (let [prompt-fn (if (some? prompt)
+                    (fn [] (print prompt) (flush))
+                    (constantly nil))]
     (loop []
-      (let [queries (read-queries pbr)]
-        (when-not (eof? queries)
-          (doseq [query queries]
-            (pprint (asami/q query db)))
-          (recur))))))
-
-(defn interactive [options]
-  (let [db (derive-database options)
-        pbr (PushbackReader. (io/reader *in*))]
-    (loop []
-      (print "?- ")
-      (flush)
-      (let [queries (read-queries pbr)]
+      (prompt-fn)
+      (let [queries (read-queries stream)]
         (when-not (eof? queries)
           (doseq [query queries]
             (try
               (pprint (asami/q query db))
               (catch Exception e
-                (println "Error:" (ex-message e)))))
+                (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e)))))
           (recur))))))
+
+(defn execute-queries [{:keys [query] :as options}]
+  (let [db (derive-database options)
+        ipt (if (= query "-") *in* (.getBytes ^String query))
+        stream (PushbackReader. (io/reader ipt))]
+    (repl stream db {:prompt nil})))
+
+(defn interactive [options]
+  (let [db (derive-database options)
+        stream (PushbackReader. (io/reader *in*))]
+    (repl stream db {:prompt "?- "})))
 
 (defn print-usage
   []
