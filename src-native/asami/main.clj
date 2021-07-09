@@ -11,8 +11,11 @@
   (:import (java.io PushbackReader))
   (:gen-class))
 
+(def eof
+  (reify))
+
 (def reader-opts
-  {:eof (reify)
+  {:eof eof
    :readers (assoc graph/node-reader 'a/r re-pattern)})
 
 (defn process-args
@@ -44,36 +47,32 @@
 (def ^:const query-separator
   (int \;))
 
-(defn read-queries [^String q]
-  (let [ipt (if (= q "-") *in* (.getBytes q))
-        pbr (PushbackReader. (io/reader ipt))
-        eof (:eof reader-opts)]
-    (loop [queries []]
-      (let [c (.read pbr)]
-        (cond
-          (or (Character/isWhitespace c)
-              (= c query-separator))
-          (recur queries)
+(defn read-queries [^PushbackReader stream]
+  (loop [queries []]
+    (let [c (.read stream)]
+      (cond
+        (or (Character/isWhitespace c) (= c query-separator))
+        (recur queries)
 
-          (= c -1)
-          queries
+        (= c -1)
+        queries
 
-          :else
-          (let [query (edn/read reader-opts (doto pbr (.unread c)))]
-            (cond
-              (identical? query eof)
-              queries
+        :else
+        (let [query (edn/read reader-opts (doto stream (.unread c)))]
+          (cond
+            (identical? query eof)
+            queries
 
-              (keyword? query)
-              (recur (conj queries [query]))
+            (keyword? query)
+            (recur (conj queries [query]))
 
-              ;; Many queries
-              (and (vector? query) (every? vector? query))
-              (recur (into queries query))
+            ;; Many queries
+            (and (vector? query) (every? vector? query))
+            (recur (into queries query))
 
-              ;; One query
-              :else
-              (recur (conj queries query)))))))))
+            ;; One query
+            :else
+            (recur (conj queries query))))))))
 
 (defn print-usage
   []
@@ -96,14 +95,15 @@
       (asami/db conn))))
 
 (defn execute-queries [{:keys [query] :as options}]
-  (let [db (derive-database options)]
-    (doseq [query (read-queries query)]
+  (let [db (derive-database options)
+        ipt (if (= query "-") *in* (.getBytes query))
+        pbr (PushbackReader. (io/reader ipt))]
+    (doseq [query (read-queries pbr)]
       (pprint (asami/q query db)))))
 
 (defn interactive [options]
   (let [db (derive-database options)
-        pbr (PushbackReader. (io/reader *in*))
-        eof (:eof reader-opts)]
+        pbr (PushbackReader. (io/reader *in*))]
     (loop []
       (print "?- ")
       (flush)
