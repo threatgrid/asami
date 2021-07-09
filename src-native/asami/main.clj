@@ -57,38 +57,39 @@
   (int \;))
 
 (defn read-queries [^PushbackReader stream]
-  (loop [queries []]
+  (loop []
     (let [c (.read stream)]
       (cond
         (or (Character/isWhitespace c) (= c query-separator))
-        (recur queries)
+        (recur)
 
         (= c -1)
-        queries
+        eof
 
         :else
         (let [query (edn/read reader-opts (doto stream (.unread c)))]
           (cond
-            (identical? query eof)
-            queries
+            (eof? query) eof
 
             (keyword? query)
-            (recur (conj queries [query]))
+            [query]
 
-            ;; Many queries
             (and (vector? query) (every? vector? query))
-            (recur (into queries query))
+            query
 
-            ;; One query
             :else
-            (recur (conj queries query))))))))
+            [query]))))))
 
 (defn execute-queries [{:keys [query] :as options}]
   (let [db (derive-database options)
         ipt (if (= query "-") *in* (.getBytes ^String query))
         pbr (PushbackReader. (io/reader ipt))]
-    (doseq [query (read-queries pbr)]
-      (pprint (asami/q query db)))))
+    (loop []
+      (let [queries (read-queries pbr)]
+        (when-not (eof? queries)
+          (doseq [query queries]
+            (pprint (asami/q query db)))
+          (recur))))))
 
 (defn interactive [options]
   (let [db (derive-database options)
@@ -96,12 +97,13 @@
     (loop []
       (print "?- ")
       (flush)
-      (let [query (edn/read reader-opts pbr)]
-        (when-not (identical? query eof)
-          (try
-            (pprint (asami/q query db))
-            (catch Exception e
-              (println "Error:" (ex-message e))))
+      (let [queries (read-queries pbr)]
+        (when-not (eof? queries)
+          (doseq [query queries]
+            (try
+              (pprint (asami/q query db))
+              (catch Exception e
+                (println "Error:" (ex-message e)))))
           (recur))))))
 
 (defn print-usage
