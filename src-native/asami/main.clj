@@ -44,6 +44,12 @@
   [conn f]
   (:db-after @(asami/transact conn {:tx-data (read-data-file f)})))
 
+(defn derive-database [{:keys [file url]}]
+  (let [conn (asami/connect url)]
+    (if file
+      (load-data-file conn file)
+      (asami/db conn))))
+
 (def ^:const query-separator
   (int \;))
 
@@ -74,29 +80,9 @@
             :else
             (recur (conj queries query))))))))
 
-(defn print-usage
-  []
-  (println "Usage: asami URL [-f filename] [-e query] [--help | -?]\n")
-  (println "-? | --help: This help")
-  (println "URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
-  (println "-f filename: loads the filename into the database. A filename of \"-\" will use stdin.")
-  (println "             Data defaults to EDN. Filenames ending in .json are treated as JSON.")
-  (println "-e query: executes a query. \"-\" (the default) will read from stdin instead of a command line argument.")
-  (println "          Multiple queries can be specified as edn (vector of query vectors) or ; separated.")
-  (println)
-  (println "Available EDN readers:")
-  (println "  internal nodes -  #a/n \"node-id\"")
-  (println "  regex          -  #a/r \"[Tt]his is a (regex|regular expression)\""))
-
-(defn derive-database [{:keys [file url]}]
-  (let [conn (asami/connect url)]
-    (if file
-      (load-data-file conn file)
-      (asami/db conn))))
-
 (defn execute-queries [{:keys [query] :as options}]
   (let [db (derive-database options)
-        ipt (if (= query "-") *in* (.getBytes query))
+        ipt (if (= query "-") *in* (.getBytes ^String query))
         pbr (PushbackReader. (io/reader ipt))]
     (doseq [query (read-queries pbr)]
       (pprint (asami/q query db)))))
@@ -114,6 +100,20 @@
             (catch Exception e
               (println "Error:" (ex-message e))))
           (recur))))))
+
+(defn print-usage
+  []
+  (println "Usage: asami URL [-f filename] [-e query] [--help | -?]\n")
+  (println "-? | --help: This help")
+  (println "URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
+  (println "-f filename: loads the filename into the database. A filename of \"-\" will use stdin.")
+  (println "             Data defaults to EDN. Filenames ending in .json are treated as JSON.")
+  (println "-e query: executes a query. \"-\" (the default) will read from stdin instead of a command line argument.")
+  (println "          Multiple queries can be specified as edn (vector of query vectors) or ; separated.")
+  (println)
+  (println "Available EDN readers:")
+  (println "  internal nodes -  #a/n \"node-id\"")
+  (println "  regex          -  #a/r \"[Tt]his is a (regex|regular expression)\""))
 
 (defn -main
   [& args]
