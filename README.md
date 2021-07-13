@@ -290,7 +290,7 @@ If functions are provided to Loom, then they can be used to provide labels for c
 ```
 
 ## Command Line Tool
-A command line tool is available to load data into an Asami graph and query it. This uses GraalVM CE 21.1.0 or later.
+A command line tool is available to load data into an Asami graph and query it. This requires [GraalVM CE 21.1.0](https://www.graalvm.org/) or later, and the [`native-image`](https://www.graalvm.org/reference-manual/native-image/#install-native-image) executable.
 Leiningen needs to see GraalVM on the classpath first, so if there are problems with building, check to see if this is the case.
 
 To build from sources:
