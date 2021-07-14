@@ -5,7 +5,7 @@
                                    simplify-algebra]]
             [asami.query]  ;; required, as this defines the HasVars protocol for objects
             [asami.graph :refer [Graph resolve-triple]]
-            [zuko.projection :refer [matching-vars]]
+            [asami.projection :refer [matching-vars]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])

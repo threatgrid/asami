@@ -1,20 +1,17 @@
 (ns ^{:doc "Implements query operations based on data accessible through the Graph protocol."
       :author "Paula Gearon"}
     asami.query
-    (:require [zuko.schema :refer [EPVPattern FilterPattern Pattern
-                                   Results Value Var
-                                   EvalPattern eval-pattern?
-                                   epv-pattern? filter-pattern?
-                                   op-pattern? vartest?]]
-              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
-              [asami.graph :as gr]
+    (:require [asami.graph :as gr]
               [asami.internal :as internal]
-              [zuko.sandbox :as sandbox]
-              [zuko.projection :as projection]
-              [zuko.util :refer [fn-for]]
+              [asami.planner :as planner :refer [Bindings PatternOrBindings Aggregate HasVars get-vars]]
+              [asami.projection :as projection :refer [EPVPattern Results Value Var epv-pattern? vartest?]]
               [zuko.logging :as log :include-macros true]
-              [schema.core :as s :include-macros true]
+              [zuko.sandbox :as sandbox]
+              [zuko.schema :refer [FilterPattern Pattern EvalPattern eval-pattern?
+                                   filter-pattern? op-pattern?]]
+              [zuko.util :refer [fn-for]]
               [clojure.set :as set]
+              [schema.core :as s :include-macros true]
               #?(:clj  [clojure.edn :as edn]
                  :cljs [cljs.reader :as edn])))
 

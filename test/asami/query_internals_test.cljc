@@ -8,9 +8,9 @@
             [asami.graph :refer [Graph resolve-triple graph-transact]]
             [asami.index :refer [empty-graph]]
             [asami.internal :as internal]
+            [asami.projection :refer [matching-vars project]]
             [zuko.util :as u]
             [zuko.schema :refer [vartest?]]
-            [zuko.projection :refer [matching-vars project]]
             [schema.core :as s]
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
