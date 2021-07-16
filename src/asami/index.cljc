@@ -8,23 +8,26 @@
             [zuko.logging :as log :include-macros true]
             [schema.core :as s :include-macros true]))
 
-(s/defn index-add :- {s/Any {s/Any #{s/Any}}}
+(def Index {s/Any {s/Any {s/Any {(s/required-key :t) s/Int}}}})
+
+(s/defn index-add :- Index
   "Add elements to a 3-level index"
-  [idx :- {s/Any {s/Any #{s/Any}}}
+  [idx :- Index
    a :- s/Any
    b :- s/Any
-   c :- s/Any]
+   c :- s/Any
+   t :- s/Int]
   (if-let [idxb (get idx a)]
     (if-let [idxc (get idxb b)]
       (if (get idxc c)
         idx
-        (assoc idx a (assoc idxb b (conj idxc c))))
-      (assoc idx a (assoc idxb b #{c})))
-    (assoc idx a {b #{c}})))
+        (assoc idx a (assoc idxb b (assoc idxc c {:t t}))))
+      (assoc idx a (assoc idxb b {c {:t t}})))
+    (assoc idx a {b {c {:t t}}})))
 
-(s/defn index-delete :- (s/maybe {s/Any {s/Any #{s/Any}}})
+(s/defn index-delete :- (s/maybe Index)
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
-  [idx :- {s/Any {s/Any #{s/Any}}}
+  [idx :- Index 
    a :- s/Any
    b :- s/Any
    c :- s/Any]
@@ -43,14 +46,14 @@
 
 ;; Extracts the required index (idx), and looks up the requested fields.
 ;; If an embedded index is pulled out, then this is referred to as edx.
-(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (if (some-> idx (get s) (get p) (get o)) [[]] []))
-(defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (some-> idx (get s) (get p))))
-(defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (some-> idx (get o) (get s))))
-(defmethod get-from-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)] (for [p (keys edx) o (edx p)] [p o])))
-(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (some-> idx (get p) (get o))))
-(defmethod get-from-index [ ? :v  ?] [{idx :pos} s p o] (let [edx (idx p)] (for [o (keys edx) s (edx o)] [s o])))
-(defmethod get-from-index [ ?  ? :v] [{idx :osp} s p o] (let [edx (idx o)] (for [s (keys edx) p (edx s)] [s p])))
-(defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o ((idx s) p)] [s p o]))
+(defmethod get-from-index [:v :v :v] [{idx :spo} s p o] (if (some-> idx (get s) (get p) (get o) keys) [[]] []))
+(defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (some-> idx (get s) (get p) keys)))
+(defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (some-> idx (get o) (get s) keys)))
+(defmethod get-from-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)] (for [p (keys edx) o ((comp keys edx) p)] [p o])))
+(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (some-> idx (get p) (get o) (keys))))
+(defmethod get-from-index [ ? :v  ?] [{idx :pos} s p o] (let [edx (idx p)] (for [o (keys edx) s ((comp keys edx) o)] [s o])))
+(defmethod get-from-index [ ?  ? :v] [{idx :osp} s p o] (let [edx (idx o)] (for [s (keys edx) p ((comp keys edx) s)] [s p])))
+(defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o (keys ((idx s) p))] [s p o]))
 
 
 
@@ -81,14 +84,14 @@
     (graph-add this subj pred obj gr/*default-tx-id*))
   (graph-add [this subj pred obj tx]
     (log/trace "insert " [subj pred obj tx])
-    (let [new-spo (index-add spo subj pred obj)]
+    (let [new-spo (index-add spo subj pred obj tx)]
       (if (identical? spo new-spo)
         (do
           (log/trace "statement already existed")
           this)
         (assoc this :spo new-spo
-               :pos (index-add pos pred obj subj)
-               :osp (index-add osp obj subj pred)))))
+               :pos (index-add pos pred obj subj tx)
+               :osp (index-add osp obj subj pred tx)))))
   (graph-delete [this subj pred obj]
     (log/trace "delete " [subj pred obj])
     (if-let [idx (index-delete spo subj pred obj)]
