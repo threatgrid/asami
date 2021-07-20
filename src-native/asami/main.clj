@@ -12,7 +12,7 @@
   (:gen-class))
 
 (def eof
-  (reify))
+  (Object.))
 
 (defn eof? [x]
   (identical? x eof))
