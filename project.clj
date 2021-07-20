@@ -23,7 +23,10 @@
                                           "--initialize-at-build-time" "--no-server"
                                           "-jar" "./target/${:uberjar-name:-${:name}-${:version}-standalone.jar}"
                                           "-H:Name=./target/${:name}"
-                                          "-H:TraceClassInitialization=\"java.io.FilePermission\""]}}}
+                                          "-H:TraceClassInitialization=\"java.io.FilePermission\""]}}
+             :test-native {:source-paths ["src" "src-native" "test-native"]
+                           :test-paths ["test-native"]
+                           :dependencies [[cheshire "5.10.0"]]}}
   :cljsbuild {:builds {:dev {:source-paths ["src"]
                              :compiler {:output-to "out/asami/core.js"
                                         :optimizations :simple

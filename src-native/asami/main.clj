@@ -59,57 +59,41 @@
                 (.getBytes ^String query))]
     (PushbackReader. (io/reader input))))
 
-(def ^:const query-separator
-  (int \;))
-
-(defn read-queries [^PushbackReader stream]
-  (loop []
-    (let [c (.read stream)]
-      (cond
-        (or (Character/isWhitespace c) (= c query-separator))
-        (recur)
-
-        (= c -1)
-        eof
-
-        :else
-        (let [query (edn/read reader-opts (doto stream (.unread c)))]
-          (cond
-            (eof? query) eof
-
-            (keyword? query)
-            [query]
-
-            (and (vector? query) (every? vector? query))
-            query
-
-            :else
-            [query]))))))
-
 (defn repl [stream db prompt]
   (let [prompt-fn (if (some? prompt)
                     (fn [] (print prompt) (flush))
                     (constantly nil))]
     (loop []
       (prompt-fn)
-      (let [queries (read-queries stream)]
-        (when-not (eof? queries)
-          (doseq [query queries]
-            (try
-              (pprint (asami/q query db))
-              (catch Exception e
-                (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e)))))
-          (recur))))))
+      (let [query (try (edn/read reader-opts stream) (catch Exception e e))]
+        (cond
+          (instance? Exception query)
+          (do (printf "Error: %s\n" (ex-message query))
+              (recur))
+
+          (eof? query)
+          nil
+
+          :else
+          (do (try
+                (pprint (asami/q query db))
+                (catch Exception e
+                  (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e))))
+              (recur)))))))
 
 (defn print-usage
   []
-  (println "Usage: asami URL [-f filename] [-e query] [--help | -?]\n")
-  (println "-? | --help: This help")
-  (println "URL: the URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
-  (println "-f filename: loads the filename into the database. A filename of \"-\" will use stdin.")
-  (println "             Data defaults to EDN. Filenames ending in .json are treated as JSON.")
-  (println "-e query: executes a query. \"-\" (the default) will read from stdin instead of a command line argument.")
-  (println "          Multiple queries can be specified as edn (vector of query vectors) or ; separated.")
+  (println "Usage: asami URL [-f filename] [-e query] [--help | -?] [--interactive]\n")
+  (println)
+  (println "URL: The URL of the database to use. Must start with asami:mem://, asami:multi:// or asami:local://")
+  (println)
+  (println "Options:")
+  (println "  -?,  --help  This help")
+  (println)
+  (println "  -f FILENAME  Loads the file FILENAME into the database. A FILENAME of \"-\" will use STDIN.")
+  (println "               Data defaults to EDN. A FILENAME ending in .json is treated as JSON.")
+  (println "  -e QUERIES   Executes queries in the string QUERIES. QUERIES are specified as EDN and, thus, multiple queries may be separated with the usual EDN whitespace characters.")
+  (println "               When this option is not provided, queries will read from STDIN instead of a command line argument.")
   (println)
   (println "Available EDN readers:")
   (println "  internal nodes -  #a/n \"node-id\"")
