@@ -68,7 +68,7 @@ and multigraph implementations."
 (defn check-for-transitive
   "Tests if a predicate is transitive.
   Returns a plain version of the predicate, along with a value to indicate if the predicate is transitive.
-  This value is nil for a plan predicate, or else is a keyword to indicate the kind of transitivity."
+  This value is nil for a plain predicate, or else is a keyword to indicate the kind of transitivity."
   [pred]
   (let [{trans? :trans :as meta-pred} (meta pred)
         not-trans? (and (contains? meta-pred :trans) (not trans?))
