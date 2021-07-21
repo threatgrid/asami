@@ -33,7 +33,7 @@
    c :- s/Any]
   (if-let [idx2 (idx a)]
     (if-let [idx3 (idx2 b)]
-      (let [new-idx3 (disj idx3 c)]
+      (let [new-idx3 (dissoc idx3 c)]
         (if-not (identical? new-idx3 idx3)
           (let [new-idx2 (if (seq new-idx3) (assoc idx2 b new-idx3) (dissoc idx2 b))
                 new-idx (if (seq new-idx2) (assoc idx a new-idx2) (dissoc idx a))]
