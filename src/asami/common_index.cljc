@@ -276,8 +276,8 @@ and multigraph implementations."
   (internal/shallow-cache-1 transitive-cache-depth get-transitive-edges*))
 
 (defn create-o->smap
-  "produces a map from objects to subjects for existing edges in the graph
-  for a given predicate"
+  "Produces a map from objects to subjects for existing edges in the graph
+  for a given predicate."
   [{idx :pos :as graph} p]
   ((mid-level-map-fn graph) (idx p)))
 
