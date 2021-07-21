@@ -275,11 +275,16 @@ and multigraph implementations."
 (def get-transitive-edges
   (internal/shallow-cache-1 transitive-cache-depth get-transitive-edges*))
 
+(defn create-o->smap
+  "produces a map from objects to subjects for existing edges in the graph
+  for a given predicate"
+  [{idx :pos :as graph} p]
+  ((mid-level-map-fn graph) (idx p)))
+
 ;; every node that can reach every node with just a predicate
 (defmethod get-transitive-from-index [ ? :v  ?]
   [{idx :pos :as graph} tag s p o]
-  (let [o->s-map-fn (mid-level-map-fn graph)
-        o->s-map (o->s-map-fn (idx p))
+  (let [o->s-map (create-o->smap graph p)
         result-index (get-transitive-edges o->s-map)
         result-index (if (= :star tag)
                        (add-zero-step o->s-map result-index)
@@ -290,7 +295,7 @@ and multigraph implementations."
 ;; finds all transitive paths that end at a node
 (defmethod get-transitive-from-index [ ? :v :v]
   [{idx :pos :as graph} tag s p o]
-  (let [o->s-map ((mid-level-map-fn graph) (idx p))
+  (let [o->s-map (create-o->smap graph p)
         trans-closure (get-transitive-edges o->s-map)
         nodes (trans-closure o)]
     (zero-step tag [o] (map vector nodes))))
@@ -298,7 +303,7 @@ and multigraph implementations."
 ;; follows a predicate transitively from a node
 (defmethod get-transitive-from-index [:v :v  ?]
   [{idx :pos :as graph} tag s p o]
-  (let [o->s-map ((mid-level-map-fn graph) (idx p))
+  (let [o->s-map (create-o->smap graph p)
         trans-closure (get-transitive-edges o->s-map)
         nodes (for [[o' ss] trans-closure :when (contains? ss s)] [o'])]
     (zero-step tag [s] nodes)))
