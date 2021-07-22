@@ -551,6 +551,8 @@
 
 (def query-keys #{:find :in :with :where})
 
+(def extended-query-keys (into query-keys [:all :distinct]))
+
 (s/defn query-map
   "Parses a query into it's main components.
    Queries can be a sequence, a map, or an EDN string. These are based on Datomic-style queries.
@@ -582,8 +584,7 @@
 
 (s/defn query-validator
   [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
-  (let [extended-query-keys (into query-keys [:all :distinct])
-        unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq) 
+  (let [unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq)
         non-seq-wheres (seq (remove sequential? where))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
