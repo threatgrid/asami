@@ -363,4 +363,35 @@
       (is (vartest? p))
       (is (vartest? v)))))
 
+(deftest query-validator-test
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                        (q/query-validator {})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                        (q/query-validator {:find []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                        (q/query-validator {:where []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                        (q/query-validator {:find [], :where []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                        (q/query-validator {})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                        (q/query-validator {:find []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                        (q/query-validator {:where []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                        (q/query-validator {:find [], :where []})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Invalid ':where' statements:"
+                        (q/query-validator {:find [], :where [1]})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: \(:when\)"
+                        (q/query-validator '{:when true}))))
+
 #?(:cljs (run-tests))
