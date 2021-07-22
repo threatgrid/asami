@@ -8,25 +8,28 @@
             [zuko.logging :as log :include-macros true]
             [schema.core :as s :include-macros true]))
 
-(def Index {s/Any {s/Any {s/Any {(s/required-key :t) s/Int}}}})
+(def Index {s/Any {s/Any {s/Any {(s/required-key :t) s/Int ;transaction id
+                                 (s/required-key :id) s/Int}}}}) ;statement id
 
 (s/defn index-add :- Index
-  "Add elements to a 3-level index"
+  "Add elements to a 4-level index.
+   If triple already exists, returns given index unchanged."
   [idx :- Index
    a :- s/Any
    b :- s/Any
    c :- s/Any
-   t :- s/Int]
+   t :- s/Int
+   id :- s/Int]
   (if-let [idxb (get idx a)]
     (if-let [idxc (get idxb b)]
       (if (get idxc c)
         idx
-        (assoc idx a (assoc idxb b (assoc idxc c {:t t}))))
-      (assoc idx a (assoc idxb b {c {:t t}})))
-    (assoc idx a {b {c {:t t}}})))
+        (assoc idx a (assoc idxb b (assoc idxc c {:t t :id id}))))
+      (assoc idx a (assoc idxb b {c {:t t :id id}})))
+    (assoc idx a {b {c {:t t :id id}}})))
 
 (s/defn index-delete :- (s/maybe Index)
-  "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
+  "Remove elements from a 4-level index. Returns the new index, or nil if there is no change."
   [idx :- Index 
    a :- s/Any
    b :- s/Any
@@ -83,15 +86,17 @@
   (graph-add [this subj pred obj]
     (graph-add this subj pred obj gr/*default-tx-id*))
   (graph-add [this subj pred obj tx]
-    (log/trace "insert " [subj pred obj tx])
-    (let [new-spo (index-add spo subj pred obj tx)]
+    (log/trace "insert: " [subj pred obj tx])
+    (let [id (or (:next-stmt-id this) 1)
+          new-spo (index-add spo subj pred obj tx id)]
       (if (identical? spo new-spo)
         (do
           (log/trace "statement already existed")
           this)
         (assoc this :spo new-spo
-               :pos (index-add pos pred obj subj tx)
-               :osp (index-add osp obj subj pred tx)))))
+               :pos (index-add pos pred obj subj tx id)
+               :osp (index-add osp obj subj pred tx id)
+               :next-stmt-id (inc id)))))
   (graph-delete [this subj pred obj]
     (log/trace "delete " [subj pred obj])
     (if-let [idx (index-delete spo subj pred obj)]
@@ -129,4 +134,3 @@
   (find-triple [this [e a v]] (resolve-triple this e a v)))
 
 (def empty-graph (->GraphIndexed {} {} {}))
-
