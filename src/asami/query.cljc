@@ -583,7 +583,7 @@
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
 (s/defn query-validator
-  [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
+  [{:keys [find in where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
   (let [unknown-keys (remove extended-query-keys (keys query))
         non-seq-wheres (remove sequential? where)
         err-text (cond-> nil
