@@ -584,7 +584,7 @@
 
 (s/defn query-validator
   [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
-  (let [unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq)
+  (let [unknown-keys (->> (keys query) (remove extended-query-keys) seq)
         non-seq-wheres (seq (remove sequential? where))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
