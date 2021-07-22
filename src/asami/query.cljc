@@ -584,13 +584,13 @@
 
 (s/defn query-validator
   [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
-  (let [unknown-keys (->> (keys query) (remove extended-query-keys) seq)
-        non-seq-wheres (seq (remove sequential? where))
+  (let [unknown-keys (remove extended-query-keys (keys query))
+        non-seq-wheres (remove sequential? where)
         err-text (cond-> nil
-                   unknown-keys (newl "Unknown clauses: " unknown-keys)
+                   (seq unknown-keys) (newl "Unknown clauses: " unknown-keys)
                    (empty? find) (newl "Missing ':find' clause")
                    (empty? where) (newl "Missing ':where' clause")
-                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres))]
+                   (seq non-seq-wheres) (newl "Invalid ':where' statements: " non-seq-wheres))]
     (if err-text
       (throw (ex-info err-text {:query query}))
       query)))
