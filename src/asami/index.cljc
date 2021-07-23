@@ -53,7 +53,7 @@
 (defmethod get-from-index [:v :v  ?] [{idx :spo} s p o] (map vector (some-> idx (get s) (get p) keys)))
 (defmethod get-from-index [:v  ? :v] [{idx :osp} s p o] (map vector (some-> idx (get o) (get s) keys)))
 (defmethod get-from-index [:v  ?  ?] [{idx :spo} s p o] (let [edx (idx s)] (for [p (keys edx) o ((comp keys edx) p)] [p o])))
-(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (some-> idx (get p) (get o) (keys))))
+(defmethod get-from-index [ ? :v :v] [{idx :pos} s p o] (map vector (some-> idx (get p) (get o) keys)))
 (defmethod get-from-index [ ? :v  ?] [{idx :pos} s p o] (let [edx (idx p)] (for [o (keys edx) s ((comp keys edx) o)] [s o])))
 (defmethod get-from-index [ ?  ? :v] [{idx :osp} s p o] (let [edx (idx o)] (for [s (keys edx) p ((comp keys edx) s)] [s p])))
 (defmethod get-from-index [ ?  ?  ?] [{idx :spo} s p o] (for [s (keys idx) p (keys (idx s)) o (keys ((idx s) p))] [s p o]))
@@ -74,12 +74,12 @@
 
 (declare empty-graph)
 
-(defrecord GraphIndexed [spo pos osp]
+(defrecord GraphIndexed [spo pos osp next-stmt-id]
   NestedIndex
   (lowest-level-fn [this] keys)
   (lowest-level-sets-fn [this] (partial map (comp set keys)))
   (lowest-level-set-fn [this] (comp set keys))
-  (mid-level-map-fn [this]  #(into {} (map (fn [[k v]] [k (set (keys v))]) %1)))
+  (mid-level-map-fn [this]  #(into {} (map (fn [[k v]] [k (set (keys v))]) %)))
 
   Graph
   (new-graph [this] empty-graph)
@@ -133,4 +133,4 @@
   (node-type? [_ _ n] (gr/node-type? n))
   (find-triple [this [e a v]] (resolve-triple this e a v)))
 
-(def empty-graph (->GraphIndexed {} {} {}))
+(def empty-graph (->GraphIndexed {} {} {} nil))
