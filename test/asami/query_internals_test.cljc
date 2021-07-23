@@ -392,6 +392,12 @@
                         (q/query-validator {:find [], :where [1]})))
 
   (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: \(:when\)"
-                        (q/query-validator '{:when true}))))
+                        (q/query-validator '{:when true})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                        (q/query-validator '{:find [?a] :where [[?x ?y ?z]]})))
+
+  (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                        (q/query-validator '{:find [?a] :where [[(?x ?y ?z)]]}))))
 
 #?(:cljs (run-tests))

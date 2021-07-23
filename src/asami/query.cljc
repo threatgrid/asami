@@ -582,15 +582,27 @@
    & remaining]
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
+;; Temporary scaffolding while implementing check for unbound
+;; variables in :find.
+(defn safe-get-vars
+  {:private true}
+  [x]
+  (try (get-vars x)
+       (catch #?(:clj Exception, :cljs js/Object) _
+         #{})))
+
 (s/defn query-validator
   [{:keys [find in where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
   (let [unknown-keys (seq (remove extended-query-keys (keys query)))
         non-seq-wheres (seq (remove sequential? where))
+        unbound-find-vars (set/difference (safe-get-vars find)
+                                          (transduce (map safe-get-vars) set/union (safe-get-vars in) where))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
                    (empty? find) (newl "Missing ':find' clause")
                    (empty? where) (newl "Missing ':where' clause")
-                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres))]
+                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres)
+                   (seq unbound-find-vars) (newl "Unbound variables in ':find' clause: " unbound-find-vars))]
     (if err-text
       (throw (ex-info err-text {:query query}))
       query)))
