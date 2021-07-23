@@ -22,8 +22,11 @@
    [:b :p3 :z]
    [:c :p4 :t]])
 
-(defn assert-data [g d]
-  (reduce (fn [g [s p o]] (graph-add g s p o 1)) g d))
+(defn assert-data
+  ([g d]
+   (assert-data g d 1))
+  ([g d tx]
+   (reduce (fn [g [s p o]] (graph-add g s p o tx)) g d)))
 
 (defn unordered-resolve
   [g pattern]
@@ -80,4 +83,27 @@
     (is (= 8 r9))))
 
 #?(:cljs (run-tests))
+
+(deftest test-txn-values
+  (let [g (-> empty-graph
+              (assert-data (take 2 data) 1)
+              (assert-data (drop 2 data) 2))
+        last-stmt-id (count data)]
+    (is (= (inc last-stmt-id) (:next-stmt-id g)))
+    ;; TODO use actual queries instead once they're supported
+    (is (= 1 (get-in g [:spo :a :p1 :y :t])))
+    (is (= 1 (get-in g [:osp :y :a :p1 :t])))
+    (is (= 1 (get-in g [:pos :p1 :y :a :t])))
+
+    (is (= 2 (get-in g [:spo :c :p4 :t :t])))
+    (is (= 2 (get-in g [:osp :t :c :p4 :t])))
+    (is (= 2 (get-in g [:pos :p4 :t :c :t])))
+
+    (is (= 1 (get-in g [:spo :a :p1 :x :id])))
+    (is (= 1 (get-in g [:osp :x :a :p1 :id])))
+    (is (= 1 (get-in g [:pos :p1 :x :a :id])))
+
+    (is (= last-stmt-id (get-in g [:spo :c :p4 :t :id])))
+    (is (= last-stmt-id (get-in g [:osp :t :c :p4 :id])))
+    (is (= last-stmt-id (get-in g [:pos :p4 :t :c :id])))))
 

@@ -5,7 +5,7 @@
             [asami.graph :refer [Graph graph-add resolve-pattern]]
             [asami.index :refer [empty-graph]]
             [asami.multi-graph :refer [empty-multi-graph]]
-            [asami.common-index :refer [step-by-predicate]]
+            [asami.common-index :refer [step-by-predicate create-o->smap]]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true])
             #?(:clj  [clojure.test :refer [is use-fixtures testing]]
@@ -385,7 +385,8 @@
 (deftest test-network-closure
   (let [g (assert-data empty-graph regions)
         non-trans (unordered-resolve g '[?a :n ?b])
-        step1 (step-by-predicate (:n (:pos g)))
+        o->smap (create-o->smap g :n)
+        step1 (step-by-predicate o->smap)
         step2 (step-by-predicate step1)
         step3 (step-by-predicate step2)
         r1 (unordered-resolve g '[?a :n+ ?b])
@@ -393,7 +394,7 @@
         locations (-> #{} (into (map first regions)) (into (map #(nth % 2) regions)))
         zeros (map (fn [a] [a a]) locations)]
     (is (= non-trans (set (map (fn [[a _ b]] [a b]) regions))))
-    (is (= non-trans (spairs (:n (:pos g)))))
+    (is (= non-trans (spairs o->smap)))
     
     (is (every? (spairs step1) non-trans))
     (is (every? (spairs step2) (spairs step1)))
