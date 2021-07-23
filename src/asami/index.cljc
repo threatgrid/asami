@@ -18,8 +18,8 @@
    a :- s/Any
    b :- s/Any
    c :- s/Any
-   t :- s/Int
-   id :- s/Int]
+   id :- s/Int
+   t :- s/Int]
   (if-let [idxb (get idx a)]
     (if-let [idxc (get idxb b)]
       (if (get idxc c)
@@ -88,14 +88,14 @@
   (graph-add [this subj pred obj tx]
     (log/trace "insert: " [subj pred obj tx])
     (let [id (or (:next-stmt-id this) 1)
-          new-spo (index-add spo subj pred obj tx id)]
+          new-spo (index-add spo subj pred obj id tx)]
       (if (identical? spo new-spo)
         (do
           (log/trace "statement already existed")
           this)
         (assoc this :spo new-spo
-               :pos (index-add pos pred obj subj tx id)
-               :osp (index-add osp obj subj pred tx id)
+               :pos (index-add pos pred obj subj id tx)
+               :osp (index-add osp obj subj pred id tx)
                :next-stmt-id (inc id)))))
   (graph-delete [this subj pred obj]
     (log/trace "delete " [subj pred obj])
