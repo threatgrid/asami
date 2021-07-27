@@ -582,21 +582,19 @@
    & remaining]
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
-;; Temporary scaffolding while implementing check for unbound
-;; variables in :find.
 (defn safe-get-vars
+  "Like `get-vars` but will not throw an exception. This is used in
+  `query-validator` where bad patterns are anticipated."
   {:private true}
   [x]
-  (try (get-vars x)
-       (catch #?(:clj Exception, :cljs js/Object) _
-         #{})))
+  (transduce (filter vartest?) conj #{} (tree-seq coll? seq x)))
 
 (s/defn query-validator
   [{:keys [find in where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
   (let [unknown-keys (seq (remove extended-query-keys (keys query)))
         non-seq-wheres (seq (remove sequential? where))
         unbound-find-vars (set/difference (safe-get-vars find)
-                                          (transduce (map safe-get-vars) set/union (safe-get-vars in) where))
+                                          (set/union (safe-get-vars in) (safe-get-vars where)))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
                    (empty? find) (newl "Missing ':find' clause")
