@@ -583,8 +583,9 @@
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
 (defn safe-get-vars
-  "Like `get-vars` but will not throw an exception. This is used in
-  `query-validator` where bad patterns are anticipated."
+  "Like `get-vars` but will not throw an exception, and will always
+  return a set. This is used in `query-validator` where bad patterns
+  are anticipated."
   {:private true}
   [x]
   (transduce (comp (filter vartest?) (map plain-var)) conj #{} (tree-seq coll? seq x)))
