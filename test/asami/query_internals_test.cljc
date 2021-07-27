@@ -364,40 +364,60 @@
       (is (vartest? v)))))
 
 (deftest query-validator-test
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
-                        (q/query-validator {})))
+  (testing "valid queries"
+    ;; This example represents the uncommon, but legal, scenario
+    ;; wherein some variables appearing in the :find clause are only
+    ;; present in the :in clause. Consider the following.
+    ;;
+    ;;     (defn my-query [param]
+    ;;       (asami.core/q '{:find [,,, ?param ,,,]
+    ;;                       :in [$ ?param] ,,,}
+    ;;                     db
+    ;;                     param))
+    ;;
+    ;; In this case, a user may rely on substitution rather than
+    ;; inserting the value of param in a post processing step, etc.
+    (is (= '{:find [?x ?y], :in [$ ?x], :where [[?y ?z]]}
+           (q/query-validator '{:find [?x ?y] :in [$ ?x] :where [[?y ?z]]}))))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
-                        (q/query-validator {:find []})))
+  (testing "invalid queries"
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
-                        (q/query-validator {:where []})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:find []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
-                        (q/query-validator {:find [], :where []})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:where []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
-                        (q/query-validator {})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:find [], :where []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
-                        (q/query-validator {:find []})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
-                        (q/query-validator {:where []})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:find []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
-                        (q/query-validator {:find [], :where []})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:where []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Invalid ':where' statements:"
-                        (q/query-validator {:find [], :where [1]})))
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:find [], :where []})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: \(:when\)"
-                        (q/query-validator '{:when true})))
+    (is (thrown-with-msg? ExceptionInfo #"Invalid ':where' statements:"
+                          (q/query-validator {:find [], :where [1]})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
-                        (q/query-validator '{:find [?a] :where [[?x ?y ?z]]})))
+    (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: \(:when\)"
+                          (q/query-validator '{:when true})))
 
-  (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
-                        (q/query-validator '{:find [?a] :where [[(?x ?y ?z)]]}))))
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :where [[?x ?y ?z]]})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :in [?x] :where [[?y ?z]]})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :where [[(?x ?y ?z)]]})))))
 
 #?(:cljs (run-tests))
