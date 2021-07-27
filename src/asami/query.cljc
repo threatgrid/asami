@@ -587,7 +587,7 @@
   `query-validator` where bad patterns are anticipated."
   {:private true}
   [x]
-  (transduce (filter vartest?) conj #{} (tree-seq coll? seq x)))
+  (transduce (comp (filter vartest?) (map plain-var)) conj #{} (tree-seq coll? seq x)))
 
 (s/defn query-validator
   [{:keys [find in where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
