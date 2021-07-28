@@ -403,23 +403,24 @@
 (deftest test-multi-update
   (let [graph
         #asami.multi_graph.MultiGraph{:spo #:tg{:node-27367
-                                                 {:db/ident #:tg{:node-27367 {:count 1 :tx 0}},
-                                                  :tg/entity {true {:count 1 :tx 0}},
-                                                  :value {"01468b1d3e089985a4ed255b6594d24863cfd94a647329c631e4f4e52759f8a9" {:count 1 :tx 0}},
-                                                  :type {"sha256" {:count 1 :tx 0}},
-                                                  :id {"4f390192" {:count 1 :tx 0}}}},
+                                                {:db/ident #:tg{:node-27367 {:count 1 :t 0 :id 1}},
+                                                 :tg/entity {true {:count 1 :t 0 :id 2}},
+                                                 :value {"01468b1d3e089985a4ed255b6594d24863cfd94a647329c631e4f4e52759f8a9" {:count 1 :t 0 :id 1}},
+                                                 :type {"sha256" {:count 1 :t 0 :id 3}},
+                                                 :id {"4f390192" {:count 1 :t 0 :id 4}}}},
                                       :pos {:db/ident
-                                            #:tg{:node-27367 #:tg{:node-27367 {:count 1 :tx 0}}},
-                                            :tg/entity {true #:tg{:node-27367 {:count 1 :tx 0}}},
-                                            :value {"01468b1d3e089985a4ed255b6594d24863cfd94a647329c631e4f4e52759f8a9" #:tg{:node-27367 {:count 1 :tx 0}}},
-                                            :type {"sha256" #:tg{:node-27367 {:count 1 :tx 0}}},
-                                            :id {"4f390192" #:tg{:node-27367 {:count 1 :tx 0}}}},
-                                      :osp {:tg/node-27367 #:tg{:node-27367 #:db{:ident {:count 1 :tx 0}}},
-                                            true #:tg{:node-27367 #:tg{:entity {:count 1 :tx 0}}},
+                                            #:tg{:node-27367 #:tg{:node-27367 {:count 1 :t 0 :id 5}}},
+                                            :tg/entity {true #:tg{:node-27367 {:count 1 :t 0 :id 6}}},
+                                            :value {"01468b1d3e089985a4ed255b6594d24863cfd94a647329c631e4f4e52759f8a9" #:tg{:node-27367 {:count 1 :t 0 :id 1}}},
+                                            :type {"sha256" #:tg{:node-27367 {:count 1 :t 0 :id 7}}},
+                                            :id {"4f390192" #:tg{:node-27367 {:count 1 :t 0 :id 8}}}},
+                                      :osp {:tg/node-27367 #:tg{:node-27367 #:db{:ident {:count 1 :t 0 :id 9}}},
+                                            true #:tg{:node-27367 #:tg{:entity {:count 1 :t 0 :id 10}}},
                                             "01468b1d3e089985a4ed255b6594d24863cfd94a647329c631e4f4e52759f8a9"
-                                            #:tg{:node-27367 {:value {:count 1 :tx 0}}},
-                                            "sha256" #:tg{:node-27367 {:type {:count 1 :tx 0}}},
-                                            "4f390192" #:tg{:node-27367 {:id {:count 1 :tx 0}}}}}
+                                            #:tg{:node-27367 {:value {:count 1 :t 0 :id 11}}},
+                                            "sha256" #:tg{:node-27367 {:type {:count 1 :t 0 :id 12}}},
+                                            "4f390192" #:tg{:node-27367 {:id {:count 1 :t 0 :id 13}}}}
+                                      :next-stmt-id 14}
         id "verdict:AMP File Reputation:4f390192"
         m {:type "verdict",
            :disposition 2,
