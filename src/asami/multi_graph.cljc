@@ -18,7 +18,8 @@ allow rules to successfully use this graph type."
    {s/Any
     {s/Any
      {(s/required-key :count) s/Num
-      (s/required-key :tx) s/Num
+      (s/required-key :t) s/Int
+      (s/required-key :id) s/Int
       s/Keyword s/Any}}}})
 
 (s/defn multi-add :- IndexStructure
@@ -27,14 +28,15 @@ allow rules to successfully use this graph type."
    a :- s/Any
    b :- s/Any
    c :- s/Any
-   tx :- s/Any]
+   tx :- s/Int
+   id :- s/Int]
   (if-let [idxb (get idx a)]
     (if-let [idxc (get idxb b)]
       (if-let [entry (get idxc c)]
         (assoc idx a (assoc idxb b (assoc idxc c (update entry :count *insert-op*))))
-        (assoc idx a (assoc idxb b (assoc idxc c {:count (*insert-op* 0) :tx tx}))))
-      (assoc idx a (assoc idxb b {c {:count (*insert-op* 0) :tx tx}})))
-    (assoc idx a {b {c {:count (*insert-op* 0) :tx tx}}})))
+        (assoc idx a (assoc idxb b (assoc idxc c {:count (*insert-op* 0) :t tx :id id}))))
+      (assoc idx a (assoc idxb b {c {:count (*insert-op* 0) :t tx :id id}})))
+    (assoc idx a {b {c {:count (*insert-op* 0) :t tx :id id}}})))
 
 (s/defn multi-delete :- (s/maybe IndexStructure)
   "Remove elements from a 3-level index. Returns the new index, or nil if there is no change."
@@ -107,7 +109,7 @@ allow rules to successfully use this graph type."
 
 (declare empty-multi-graph)
 
-(defrecord MultiGraph [spo pos osp]
+(defrecord MultiGraph [spo pos osp next-stmt-id]
   NestedIndex
   (lowest-level-fn [this] keys)
   (lowest-level-set-fn [this] (comp set keys))
@@ -120,10 +122,12 @@ allow rules to successfully use this graph type."
     (graph-add this subj pred obj gr/*default-tx-id*))
   (graph-add [this subj pred obj tx]
     (log/trace "insert " [subj pred obj tx])
-    (assoc this
-           :spo (multi-add spo subj pred obj tx)
-           :pos (multi-add pos pred obj subj tx)
-           :osp (multi-add osp obj subj pred tx)))
+    (let [id (or (:next-stmt-id this) 1)]
+      (assoc this
+             :spo (multi-add spo subj pred obj tx id)
+             :pos (multi-add pos pred obj subj tx id)
+             :osp (multi-add osp obj subj pred tx id)
+             :next-stmt-id (inc id))))
   (graph-delete [this subj pred obj]
     (log/trace "delete " [subj pred obj])
     (if-let [idx (multi-delete spo subj pred obj)]
@@ -167,4 +171,4 @@ allow rules to successfully use this graph type."
    (binding [*insert-op* inc]
      (graph-add graph subj pred obj tx))))
 
-(def empty-multi-graph (->MultiGraph {} {} {}))
+(def empty-multi-graph (->MultiGraph {} {} {} nil))
