@@ -364,13 +364,11 @@
       (is (vartest? v)))))
 
 (deftest test-column-renaming
-  (let [find '[?x :data :as ?z ?y]
-        bindings q/empty-bindings
-        where '[[?e :x ?x] [?e :y ?y]]
-        graph (assert-data empty-graph [[1 :x 0] [1 :y 0]])
-        project-fn (partial project internal/project-args)
-        results (project-fn find (q/join-patterns graph where bindings {:query-plan false}))]
-    (is (= '{:cols [?x ?z ?y]}
-           (meta results)))))
+  (is (= '{:cols [?x ?z ?y]}
+         (meta (q/query-entry '{:find [?x :data :as ?z ?y]
+                                :where [[?x _ ?y]]}
+                              empty-graph
+                              [(assert-data empty-graph [[1 :y 2]])]
+                              false)))))
 
 #?(:cljs (run-tests))
