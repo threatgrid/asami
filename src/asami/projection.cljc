@@ -203,7 +203,8 @@
           (throw (ex-info (str "Projection variables not found in the selected data: " missing)
                           {:missing missing :data columns})))))))
 
-(s/defn derive-pattern-and-columns :- [[s/Any] [s/Any]]
+(s/defn derive-pattern-and-columns :- (s/pair [s/Any] :pattern
+                                              [s/Any] :columns)
   "Given a pattern (possibly with usage of the :as syntax), return a
   pair of a pattern without usage of the :as syntax and renamed
   columns as described by the :as syntax.
