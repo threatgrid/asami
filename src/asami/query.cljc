@@ -551,6 +551,8 @@
 
 (def query-keys #{:find :in :with :where})
 
+(def extended-query-keys (into query-keys [:all :distinct]))
+
 (s/defn query-map
   "Parses a query into it's main components.
    Queries can be a sequence, a map, or an EDN string. These are based on Datomic-style queries.
@@ -580,16 +582,26 @@
    & remaining]
   (if s (apply str s "\n" remaining) (apply str remaining)))
 
+(defn safe-get-vars
+  "Like `get-vars` but will not throw an exception, and will always
+  return a set. This is used in `query-validator` where bad patterns
+  are anticipated."
+  {:private true}
+  [x]
+  (transduce (comp (filter vartest?) (map plain-var)) conj #{} (tree-seq coll? seq x)))
+
 (s/defn query-validator
-  [{:keys [find in with where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
-  (let [extended-query-keys (into query-keys [:all :distinct])
-        unknown-keys (->> (keys query) (remove (conj extended-query-keys)) seq) 
+  [{:keys [find in where] :as query} :- {s/Keyword (s/cond-pre s/Bool [s/Any])}]
+  (let [unknown-keys (seq (remove extended-query-keys (keys query)))
         non-seq-wheres (seq (remove sequential? where))
+        unbound-find-vars (set/difference (safe-get-vars find)
+                                          (set/union (safe-get-vars in) (safe-get-vars where)))
         err-text (cond-> nil
                    unknown-keys (newl "Unknown clauses: " unknown-keys)
                    (empty? find) (newl "Missing ':find' clause")
                    (empty? where) (newl "Missing ':where' clause")
-                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres))]
+                   non-seq-wheres (newl "Invalid ':where' statements: " non-seq-wheres)
+                   (seq unbound-find-vars) (newl "Unbound variables in ':find' clause: " unbound-find-vars))]
     (if err-text
       (throw (ex-info err-text {:query query}))
       query)))
