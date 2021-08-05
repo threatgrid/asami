@@ -218,7 +218,7 @@
          new-pattern []
          renamed-columns []]
     (if (seq pattern)
-      (let [[x y z :as xs] (take 3 pattern)
+      (let [[x y z] pattern
             new-pattern (conj new-pattern x)]
         (if (= :as y)
           (recur (drop 3 pattern)
