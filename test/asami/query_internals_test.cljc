@@ -363,4 +363,16 @@
       (is (vartest? p))
       (is (vartest? v)))))
 
+(deftest test-column-renaming
+  (let [results (q/query-entry '{:find [?x :data :as ?z ?y]
+                                :where [[?x _ ?y]]}
+                              empty-graph
+                              [(assert-data empty-graph [[1 :y 2]])]
+                              false)]
+    (is (= '{:cols [?x ?z ?y]}
+           (meta results)))
+
+    (is (= [[1 :data 2]]
+           results))))
+
 #?(:cljs (run-tests))

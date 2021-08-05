@@ -203,6 +203,32 @@
           (throw (ex-info (str "Projection variables not found in the selected data: " missing)
                           {:missing missing :data columns})))))))
 
+(s/defn derive-pattern-and-columns :- (s/pair [s/Any] :pattern
+                                              [s/Any] :columns)
+  "Given a pattern (possibly with usage of the :as syntax), return a
+  pair of a pattern without usage of the :as syntax and renamed
+  columns as described by the :as syntax.
+
+  Example:
+
+    (derive-pattern-and-columns '[?x :data :as ?z ?y])
+    ;; => [[?x :data ?y] [?x ?z ?y]]"
+  [pattern]
+  (loop [pattern pattern
+         new-pattern []
+         renamed-columns []]
+    (if (seq pattern)
+      (let [[x y z] pattern
+            new-pattern (conj new-pattern x)]
+        (if (= :as y)
+          (recur (drop 3 pattern)
+                 new-pattern
+                 (conj renamed-columns (or z x)))
+          (recur (rest pattern)
+                 new-pattern
+                 (conj renamed-columns x))))
+      [new-pattern renamed-columns])))
+
 (s/defn project-results :- Results
   "Converts each row from a result, into just the requested columns, as per the patterns arg.
    Any specified value in the patterns will be copied into that position in the projection.
@@ -216,12 +242,12 @@
    pattern :- [s/Any]
    columns :- [Var]
    data :- Results]
-  (let [full-pattern (vec pattern)
+  (let [[full-pattern pattern-columns] (derive-pattern-and-columns pattern)
         pattern->data (offset-mappings full-pattern columns data)
         nodes (new-nodes pattern->data)]
     (with-meta
       (map #(project-row store-fns full-pattern nodes pattern->data %) data)
-      {:cols full-pattern})))
+      {:cols pattern-columns})))
 
 (s/defn project :- s/Any
   "Converts data from results, into just the requested columns, as per the patterns arg.
