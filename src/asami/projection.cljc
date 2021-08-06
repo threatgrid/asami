@@ -214,17 +214,22 @@
     (derive-pattern-and-columns '[?x :data :as ?z ?y])
     ;; => [[?x :data ?y] [?x ?z ?y]]"
   [pattern]
-  (loop [pattern pattern
+  (loop [rest-pattern pattern
          new-pattern []
          renamed-columns []]
-    (if (seq pattern)
-      (let [[x y z] pattern
+    (if (seq rest-pattern)
+      (let [[x y z] rest-pattern
             new-pattern (conj new-pattern x)]
         (if (= :as y)
-          (recur (drop 3 pattern)
-                 new-pattern
-                 (conj renamed-columns (or z x)))
-          (recur (rest pattern)
+          (if (symbol? z)
+            (recur (drop 3 rest-pattern)
+                   new-pattern
+                   (conj renamed-columns z))
+            (throw (ex-info "Illegal alias" {:alias z
+                                             :column x
+                                             :pattern pattern
+                                             :subpattern [x y z]})))
+          (recur (next rest-pattern)
                  new-pattern
                  (conj renamed-columns x))))
       [new-pattern renamed-columns])))

@@ -1,7 +1,8 @@
 (ns asami.projection-test
   (:require [asami.projection :as projection]
             #?(:clj [clojure.test :as t]
-               :cljs [cljs.test :as t :include-macros true])))
+               :cljs [cljs.test :as t :include-macros true]))
+  #?(:clj (:import (clojure.lang ExceptionInfo))))
 
 (t/deftest derive-pattern-and-columns-test
   (t/is (= '[[] []]
@@ -10,9 +11,8 @@
   (t/is (= '[[?x] [?x]]
            (projection/derive-pattern-and-columns '[?x])))
 
-  ;; Dangling :as is ignored.
-  (t/is (= '[[:data] [:data]]
-           (projection/derive-pattern-and-columns '[:data :as])))
+  (t/is (thrown-with-msg? ExceptionInfo #"Illegal alias"
+                          (projection/derive-pattern-and-columns '[:data :as])))
 
   (t/is (= '[[:data] [:data]]
            (projection/derive-pattern-and-columns '[:data])))
