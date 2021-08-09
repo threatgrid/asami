@@ -50,4 +50,4 @@
       (t/is (= [[6 4 3] [12 10 9]] (projection/project {} selection mdata))))))
 
 
-#?(:cljs (run-tests))
+#?(:cljs (t/run-tests))
