@@ -1,5 +1,14 @@
 # Change Log
 
+## [2.1.2] - 2021-08-18
+### Added
+- Queries now test that projected variables in the `:find` clause appear in the `:where` clause.
+- In memory graphs now how transaction IDs (not yet exposed in public APIs).
+
+### Fixed
+- User plans now using the correct return type, so complex queries don't cause errors while testing.
+- Multiple bindings in the `:in` clause will now combine correctly during testing.
+
 ## [2.1.1] - 2021-06-28
 ### Added
 - Added `asami.core/export-str`. This is a shortcut to convert a data export to a string, suitable for `clojure.core/spit`, since the default will write this as a LazySeq label.
@@ -260,7 +269,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.1...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.2...HEAD
+[2.1.2]: https://github.com/threatgrid/asami/compare/2.1.1...2.1.2
 [2.1.1]: https://github.com/threatgrid/asami/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/threatgrid/asami/compare/2.0.6...2.1.0
 [2.0.6]: https://github.com/threatgrid/asami/compare/2.0.5...2.0.6
