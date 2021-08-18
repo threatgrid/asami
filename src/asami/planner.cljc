@@ -553,7 +553,7 @@
 (s/defn user-plan :- [CountablePattern]
   "Returns the original order of patterns specified by the user. No optimization is attempted."
   [graph
-   patterns :- [PatternOrBindings]
+   patterns :- [CountablePattern]
    options]
   patterns)
 
