@@ -406,7 +406,7 @@
       (throw (ex-info "Outer product between bindings should have distinct names" {:duplicate-names n})))
     (with-meta
       (for [row-l leftb row-r rightb]
-        (concat row-l row-r))
+        (vec (concat row-l row-r)))
       {:cols (into namesl namesr)})))
 
 (s/defn symb?

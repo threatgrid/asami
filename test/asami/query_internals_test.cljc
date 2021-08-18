@@ -141,6 +141,7 @@
       (is (= [[5]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 6]] bds2))
+      (is (vector? (first bds2)))
       (is (= '[?a ?b] (:cols (meta bds2))))
       (is (= [[5]] bds3))
       (is (= '[?a] (:cols (meta bds3))))))
