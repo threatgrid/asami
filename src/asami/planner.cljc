@@ -550,10 +550,10 @@
    options]
   (plan-path graph patterns options))
 
-(s/defn user-plan :- [CountablePattern]
+(s/defn user-plan :- [PatternOrBindings]
   "Returns the original order of patterns specified by the user. No optimization is attempted."
   [graph
-   patterns :- [CountablePattern]
+   patterns :- [PatternOrBindings]
    options]
   patterns)
 
