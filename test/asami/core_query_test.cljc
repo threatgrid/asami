@@ -284,7 +284,13 @@
                 st)
           r4 (q '[:find ?observable
                   :where (or [?observable :value "ilo.pl"]
-                             [?observable :value "nonexistent"])] st)]
+                             [?observable :value "nonexistent"])]
+                st)
+          r5 (q '{:find [?id]
+                  :where
+                  [(or [?observable :value ?value]
+                       [?sighting :id ?id])]}
+                st)]
       (is (= #{[ver1 "domain" "cisco.com"]
                [sight1 "ip" "72.163.4.161"]}
              (set r1)))
@@ -294,7 +300,12 @@
       (is (= #{["verdict-1" "domain" "cisco.com"]
                ["sighting-1" "ip" "72.163.4.161"]}
              (set r3)))
-      (is (= [[o3]] r4)))))
+      (is (= [[o3]] r4))
+      (is (= #{[nil]
+               ["verdict-1"]
+               ["sighting-1"]
+               ["other-1"]}
+             (set r5))))))
 
 
 (let [b1 (nn)

@@ -210,12 +210,7 @@
                       {:cols '[?e]})
         r1 (disjunction graph part-result '(or [?e :px ?v] [?e :py ?v]))]
     (is (= '[?e ?v] (:cols (meta r1))))
-    (is (= [[:a :m] [:b :o] [:a :n] [:c :p]] r1))
-    (is (thrown-with-msg?
-         ExceptionInfo
-         #"Alternate sides of OR clauses may not contain different vars"
-         (disjunction graph part-result '(or [?e :px ?v] [?e :py ?w]))))))
-
+    (is (= [[:a :m] [:b :o] [:a :n] [:c :p]] r1))))
 
 (deftest test-result-label
   "Tests the result-label function, which renames aggregates to addressable labels"
@@ -301,7 +296,7 @@
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn (partial project internal/project-args)
+          project-fn internal/project-args #_(partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn {})]
       (is (= '[?a ?b ?count-c] (:cols (meta r))))
@@ -312,7 +307,7 @@
           with []
           where '[[?a :p ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn (partial project internal/project-args)
+          project-fn internal/project-args #_(partial project internal/project-args)
 
           r (aggregate-query find bindings with where graph project-fn {})]
       (is (= '[?count-c] (:cols (meta r))))

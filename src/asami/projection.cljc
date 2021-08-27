@@ -62,26 +62,22 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (s/defn project-row :- [s/Any]
-  "Creates a new EPVPattern from an existing one, based on existing bindings.
-   Uses the mapping to copy from columns in 'row' to overwrite variables in 'pattern'.
-   'pattern' must be a vector.
-   The index mappings have already been found and are in the 'mapping' argument"
-  [{:keys [new-node node-label] :as store-fns}
-   wide-pattern :- [s/Any]
+  "Creates a new EPVPattern from an existing one, based on existing
+   bindings. Uses the mapping to copy from columns in 'row' to
+   overwrite variables in 'pattern'. 'pattern' must be a vector.
+
+   The index mappings have already been found and are in the 'mapping'
+   argument."
+  [wide-pattern :- [s/Any]
    nodes :- (s/maybe [s/Num])
    mapping :- {s/Num s/Num}
    row :- [Value]]
-  (let [get-node (memoize (fn [_] (new-node)))
-        node-statements (mapcat (fn [i]
-                                  (let [node (get-node i)]
-                                    [node :db/ident (node-label node)]))
-                                nodes)
-        update-pattern (fn [p [t f]]
-                         (let [v (if (neg? f) (get-node f) (nth row f))]
-                           (assoc p t v)))]
-    (vec
-      (concat node-statements
-        (reduce update-pattern wide-pattern mapping)))))
+  (reduce
+   (fn [p [t f]]
+     (let [v (when (nat-int? f) (nth row f))]
+       (assoc p t v)))
+   wide-pattern
+   mapping))
 
 (s/defn matching-vars :- {s/Num s/Num}
   "Returns pairs of indexes into seqs where the vars match.
@@ -212,15 +208,14 @@
               [h1=merry h3=pippin h2=frodo]]
   leads to: [[h1=frodo :friend h2=gandalf]
              [h1=merry :friend h2=frodo]]"
-  [{:keys [new-node node-label] :as store-fns}
-   pattern :- [s/Any]
+  [pattern :- [s/Any]
    columns :- [Var]
    data :- Results]
   (let [full-pattern (vec pattern)
         pattern->data (offset-mappings full-pattern columns data)
         nodes (new-nodes pattern->data)]
     (with-meta
-      (map #(project-row store-fns full-pattern nodes pattern->data %) data)
+      (map #(project-row full-pattern nodes pattern->data %) data)
       {:cols full-pattern})))
 
 (s/defn project :- s/Any
@@ -234,8 +229,7 @@
    from each row of data and a sequence of those values is returned.
    - If the pattern is a vector of multiple vars, then only the first row of data is processed
    and a single vector containing all of the requested results is returned. "
-  [{:keys [new-node node-label] :as store-fns}
-   [v :as pattern] :- [s/Any]
+  [[v :as pattern] :- [s/Any]
    data :- Results]
   (let [length (count pattern)
         columns (:cols (meta data))]
@@ -244,5 +238,5 @@
       (and (= 1 length) (vector? v)) (if (and (= 2 (count v)) (= '... (nth v 1)))
                                        (project-collection (first v) columns data)
                                        (project-tuple v columns data))
-      :default (project-results store-fns pattern columns data))))
+      :default (project-results pattern columns data))))
 

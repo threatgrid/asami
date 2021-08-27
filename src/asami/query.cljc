@@ -330,16 +330,23 @@
    part :- Results
    [_ & patterns]]  ;; Discard the first element, since it is just the OR operator
   (let [spread (map #(left-join % part graph) patterns)
-        cols (:cols (meta (first spread)))]
-    (doseq [s (rest spread)]
-      (when (not= (:cols (meta s)) cols)
-        (throw (ex-info
-                "Alternate sides of OR clauses may not contain different vars"
-                (zipmap patterns (map (comp :cols meta) spread))))))
+        cols (:cols (meta (first spread)))
+        final-cols (into [] (comp (map (comp :cols meta)) distinct) spread)]
     (with-meta
       ;; Does distinct create a scaling issue?
-      (*select-distinct* (sequence cat spread))
-      {:cols cols})))
+      (*select-distinct*
+       (mapcat (fn [results]
+                 ;; Compare the cols of result with final-cols
+                 (let [result-cols (:cols (meta results))]
+                   (if (= result-cols final-cols)
+                     results
+                     (let [] ;; TODO
+                       (map (fn [result]
+
+                              )
+                            results))))))
+       spread)
+      {:cols final-cols})))
 
 (s/defn conjunction
   "Iterates over the arguments to perform a left-join on each"
@@ -369,8 +376,8 @@
 (def operators
   {'not {:left-join minus}
    'NOT {:left-join minus}
-   'or {:left-join disjunction}
-   'OR {:left-join disjunction}
+   'or {:left-join #'disjunction}
+   'OR {:left-join #'disjunction}
    'and {:left-join conjunction}
    'AND {:left-join conjunction}
    'optional {:left-join optional}
@@ -890,7 +897,7 @@
         options (-> (apply hash-map options) (assoc :query-plan plan?))
         [bindings default-graph] (create-bindings in inputs)
         graph (or default-graph empty-graph)
-        project-fn (partial projection/project internal/project-args)]
+        project-fn projection/project]
     (if (seq (filter planner/aggregate-form? find))
       (aggregate-query find bindings with where graph project-fn options)
       (binding [*select-distinct* (if all identity distinct)]
