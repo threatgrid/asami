@@ -323,30 +323,47 @@
        part)
       col-meta)))
 
+(defn index
+  {:private true}
+  [xs]
+  (zipmap xs (range)))
+
 (s/defn disjunction
   "Implements an OR operation by repeating a join across each arm of the operation,
    and concatenating the results"
   [graph
    part :- Results
-   [_ & patterns]]  ;; Discard the first element, since it is just the OR operator
+   [_ & patterns]] ;; Discard the first element, since it is just the OR operator
   (let [spread (map #(left-join % part graph) patterns)
-        cols (:cols (meta (first spread)))
-        final-cols (into [] (comp (map (comp :cols meta)) distinct) spread)]
+        ;; Column information of each sequence of results.
+        spread-cols (into [] (map (comp :cols meta)) spread)
+        ;; Combine all distinct column information from left to right
+        ;; to produce new column information for the result set.
+        result-cols (into [] (comp cat (distinct)) spread-cols)]
     (with-meta
       ;; Does distinct create a scaling issue?
       (*select-distinct*
-       (mapcat (fn [results]
-                 ;; Compare the cols of result with final-cols
-                 (let [result-cols (:cols (meta results))]
-                   (if (= result-cols final-cols)
-                     results
-                     (let [] ;; TODO
-                       (map (fn [result]
-
-                              )
-                            results))))))
-       spread)
-      {:cols final-cols})))
+       ;; For each result sequence, results, of spread with columns
+       ;; that are not equal to result-cols, reorganize the elements
+       ;; of results such that they align with result-cols.
+       (sequence 
+        (comp (map (fn [results cols]
+                     (if (= cols result-cols)
+                       results
+                       (let [cols-index (index cols)
+                             ;; Build a function which maps each
+                             ;; element of a result to its location in
+                             ;; result-cols.
+                             reorganize (apply juxt (map (fn [col]
+                                                           (if-some [i (get cols-index col)]
+                                                             (fn [result] (nth result i))
+                                                             (constantly nil)))
+                                                         result-cols))]
+                         (map reorganize results)))))
+              cat)
+        spread
+        spread-cols))
+      {:cols result-cols})))
 
 (s/defn conjunction
   "Iterates over the arguments to perform a left-join on each"
