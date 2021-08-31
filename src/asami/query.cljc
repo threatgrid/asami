@@ -395,8 +395,8 @@
 (def operators
   {'not {:left-join minus}
    'NOT {:left-join minus}
-   'or {:left-join #'disjunction}
-   'OR {:left-join #'disjunction}
+   'or {:left-join disjunction}
+   'OR {:left-join disjunction}
    'and {:left-join conjunction}
    'AND {:left-join conjunction}
    'optional {:left-join optional}
