@@ -296,7 +296,7 @@
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn internal/project-args #_(partial project internal/project-args)
+          project-fn internal/project-args
 
           r (aggregate-query find bindings with where graph project-fn {})]
       (is (= '[?a ?b ?count-c] (:cols (meta r))))
@@ -307,7 +307,7 @@
           with []
           where '[[?a :p ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn internal/project-args #_(partial project internal/project-args)
+          project-fn internal/project-args
 
           r (aggregate-query find bindings with where graph project-fn {})]
       (is (= '[?count-c] (:cols (meta r))))
