@@ -915,9 +915,8 @@
                            [[(first inputs)] (rest inputs)])
         options (-> (apply hash-map options) (assoc :query-plan plan?))
         [bindings default-graph] (create-bindings in inputs)
-        graph (or default-graph empty-graph)
-        project-fn projection/project]
+        graph (or default-graph empty-graph)]
     (if (seq (filter planner/aggregate-form? find))
-      (aggregate-query find bindings with where graph project-fn options)
+      (aggregate-query find bindings with where graph projection/project options)
       (binding [*select-distinct* (if all identity distinct)]
-        (execute-query find where bindings graph project-fn options)))))
+        (execute-query find where bindings graph projection/project options)))))
