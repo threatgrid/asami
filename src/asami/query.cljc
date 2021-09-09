@@ -323,23 +323,49 @@
        part)
       col-meta)))
 
+(defn index
+  {:private true}
+  [xs]
+  (zipmap xs (range)))
+
 (s/defn disjunction
   "Implements an OR operation by repeating a join across each arm of the operation,
    and concatenating the results"
   [graph
    part :- Results
-   [_ & patterns]]  ;; Discard the first element, since it is just the OR operator
+   [_ & patterns]] ;; Discard the first element, since it is just the OR operator
   (let [spread (map #(left-join % part graph) patterns)
-        cols (:cols (meta (first spread)))]
-    (doseq [s (rest spread)]
-      (when (not= (:cols (meta s)) cols)
-        (throw (ex-info
-                "Alternate sides of OR clauses may not contain different vars"
-                (zipmap patterns (map (comp :cols meta) spread))))))
+        ;; Column information of each sequence of results.
+        spread-cols (into [] (map (comp :cols meta)) spread)
+        ;; Combine all distinct column information from left to right
+        ;; to produce new column information for the result set.
+        result-cols (into [] (comp cat (distinct)) spread-cols)]
     (with-meta
       ;; Does distinct create a scaling issue?
-      (*select-distinct* (sequence cat spread))
-      {:cols cols})))
+      (*select-distinct*
+       ;; For each result sequence `results` of `spread` with columns
+       ;; that are not equal to result-cols, reorganize the elements
+       ;; of `results` such that they align with `result-cols`.
+       (sequence 
+        (comp (map (fn [results cols]
+                     (if (= cols result-cols)
+                       results
+                       (let [cols-index (index cols)
+                             ;; Build a function which maps each
+                             ;; element of a `result` to its location in
+                             ;; `result-cols`.
+                             ;; For any column that appears in `result-cols`
+                             ;; but not the `results`, pad with a `nil`.
+                             reorganize (apply juxt (map (fn [col]
+                                                           (if-some [i (get cols-index col)]
+                                                             (fn [result] (nth result i))
+                                                             (constantly nil)))
+                                                         result-cols))]
+                         (map reorganize results)))))
+              cat)
+        spread
+        spread-cols))
+      {:cols result-cols})))
 
 (s/defn conjunction
   "Iterates over the arguments to perform a left-join on each"
@@ -889,9 +915,8 @@
                            [[(first inputs)] (rest inputs)])
         options (-> (apply hash-map options) (assoc :query-plan plan?))
         [bindings default-graph] (create-bindings in inputs)
-        graph (or default-graph empty-graph)
-        project-fn (partial projection/project internal/project-args)]
+        graph (or default-graph empty-graph)]
     (if (seq (filter planner/aggregate-form? find))
-      (aggregate-query find bindings with where graph project-fn options)
+      (aggregate-query find bindings with where graph projection/project options)
       (binding [*select-distinct* (if all identity distinct)]
-        (execute-query find where bindings graph project-fn options)))))
+        (execute-query find where bindings graph projection/project options)))))
