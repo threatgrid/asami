@@ -1,5 +1,9 @@
 # Change Log
 
+## [2.1.3] - 2021-09-10
+### Added
+- OR expressions no longer require the same variable bindings for each sub-expression
+
 ## [2.1.2] - 2021-08-18
 ### Added
 - Queries now test that projected variables in the `:find` clause appear in the `:where` clause.
@@ -269,7 +273,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.2...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.3...HEAD
+[2.1.3]: https://github.com/threatgrid/asami/compare/2.1.2...2.1.3
 [2.1.2]: https://github.com/threatgrid/asami/compare/2.1.1...2.1.2
 [2.1.1]: https://github.com/threatgrid/asami/compare/2.1.0...2.1.1
 [2.1.0]: https://github.com/threatgrid/asami/compare/2.0.6...2.1.0
