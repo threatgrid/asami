@@ -8,8 +8,11 @@
             [clojure.java.io :as io]
             [clojure.pprint :refer [pprint]]
             [clojure.string :as s])
-  (:import (java.io PushbackReader))
+  (:import [java.io PushbackReader]
+           [java.nio CharBuffer])
   (:gen-class))
+
+(set! *warn-on-reflection* true)
 
 (def eof
   (Object.))
@@ -53,33 +56,65 @@
       (load-data-file conn file)
       (asami/db conn))))
 
+(gen-class
+  :name "asami.PBR"
+  :extends java.io.PushbackReader
+  :prefix "pbr-"
+  :exposes-methods {read readSuper})
+
+(defn pbr-read
+  [this]
+  (let [c (.readSuper ^asami.PBR this)]
+    (if (= (int \;) c)
+      0
+      c)))
+
 (defn derive-stream [{:keys [interactive? query]}]
   (let [input (if (or (= query "-") interactive?)
                 *in*
                 (.getBytes ^String query))]
-    (PushbackReader. (io/reader input))))
+    (asami.PBR. (io/reader input))))
+
+(defn separator? [s]
+  (= (symbol "\0") s))
 
 (defn repl [stream db prompt]
   (let [prompt-fn (if (some? prompt)
                     (fn [] (print prompt) (flush))
-                    (constantly nil))]
-    (loop []
-      (prompt-fn)
+                    (constantly nil))
+        execute (fn [query]
+                  (try
+                    (pprint (asami/q query db))
+                    (catch Exception e
+                      (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e)))))]
+    (loop [q nil]
+      (when-not q (prompt-fn))
       (let [query (try (edn/read reader-opts stream) (catch Exception e e))]
         (cond
           (instance? Exception query)
           (do (printf "Error: %s\n" (ex-message query))
-              (recur))
+              (println "Type: " (type query))
+              (.printStackTrace ^Exception query)
+              ; (recur nil)
+              nil
+              )
 
           (eof? query)
-          nil
+          (when q
+            (execute q)
+            nil)
+
+          (separator? query) 
+          (do (execute q)
+              (recur nil))
 
           :else
-          (do (try
-                (pprint (asami/q query db))
-                (catch Exception e
-                  (printf "Error executing query %s: %s\n" (pr-str query) (ex-message e))))
-              (recur)))))))
+          (if q    ;; check if a query is being accumulated
+            (recur (conj q query))  ;; add to the accumulated query
+            (if (or (sequential? query) (map? query))  ;; a complete query structure
+              (do (execute query)
+                  (recur nil))
+              (recur [query]))))))))  ;; otherwise, start accumulating a new query
 
 (defn print-usage
   []
@@ -112,7 +147,9 @@
 
     (let [db (derive-database options)
           stream (derive-stream options)
-          prompt (if interactive? "?- ")]
+          prompt (when interactive?
+                   (println "Queries may be multi-line. Unwrapped queries must be terminated with ;")
+                   "?- ")]
       (repl stream db prompt))
 
     (System/exit 0)))
