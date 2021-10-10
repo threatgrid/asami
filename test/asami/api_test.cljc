@@ -706,6 +706,24 @@
       (delete-database db-io)
       (delete-database db-new))))
 
+(deftest test-database-delete
+  (testing "Are deleted memory databases cleared"
+    (let [db-name "asami:mem://test-del"
+          conn (connect db-name)
+          {d :db-after} @(transact conn {:tx-data io-entities})
+          r (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d))]
+      (is (= 13 (count r)))
+
+      (delete-database db-name)
+
+      (let [d2 (db conn)
+            r2 (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d2))
+            r3 (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] conn))
+            r-old (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d))]
+        (is (empty? r2))
+        (is (empty? r3))
+        (is (= 13 (count r-old)))))))
+
 (deftest test-update-unowned
   (testing "Doing an update on an attribute that references a top level entity"
     (let [c (connect "asami:mem://testupdate")

@@ -37,7 +37,8 @@
              (< 0 c) (recur low mid)))))))
 
 
-(declare as-of* as-of-t* as-of-time* since* since-t* graph* entity* next-tx* db* transact-update* transact-data*)
+(declare as-of* as-of-t* as-of-time* since* since-t* graph* entity*
+         next-tx* db* delete-database* transact-update* transact-data*)
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
@@ -63,7 +64,7 @@
   (get-name [this] name)
   (next-tx [this] (next-tx* this))
   (db [this] (db* this))
-  (delete-database [this] true) ;; no-op for memory databases
+  (delete-database [this] (delete-database* this))
   (release [this]) ;; no-op for memory databases
   (transact-update [this update-fn] (transact-update* this update-fn))
   (transact-data [this updates! asserts retracts] (transact-data* this updates! asserts retracts))
@@ -72,7 +73,6 @@
 
 (def empty-graph mem/empty-graph)
 (def empty-multi-graph multi/empty-multi-graph)
-
 
 (s/defn new-connection :- ConnectionType
   "Creates a memory Connection object"
@@ -89,6 +89,13 @@
   "Retrieves the most recent value of the database for reading."
   [connection :- ConnectionType]
   (:db @(:state connection)))
+
+(s/defn delete-database* :- s/Bool
+  "Reverts the state of a connection to an empty database, resetting the initialization time."
+  [{:keys [state] :as connection} :- ConnectionType]
+  (let [db (->MemoryDatabase (-> state deref :history first :graph) [] (now) 0)]
+    (reset! state {:db db :history [db]})
+    true))
 
 (s/defn as-database :- DatabaseType
   "Creates a Database around an existing Graph.
