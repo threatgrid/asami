@@ -61,7 +61,7 @@
    database was created, false if it already exists."
   [uri :- s/Str]
   (boolean
-   (if-not (@connections uri)
+   (when-not (@connections uri)
      (swap! connections assoc uri (connection-for uri)))))
 
 (s/defn connect :- ConnectionType
@@ -124,6 +124,17 @@
      (swap! connections assoc uri c)
      c)))
 
+(defn check-attachment
+  "Checks if a connection is attached to the connections map.
+   If not, then connect. Returns the connection if previously connected,
+   false if it needed to be reconnected."
+  [connection]
+  (let [url (storage/get-url connection)]
+    (or (@connections url)
+      (do
+        (swap! connections assoc url connection)
+        false))))
+
 (def db storage/db)
 (def as-of storage/as-of)
 (def as-of-t storage/as-of-t)
@@ -179,6 +190,10 @@
   :tempids      mapping of the temporary IDs in entities to the allocated nodes"
   [{:keys [name state] :as connection} :- ConnectionType
    {:keys [tx-data tx-triples executor update-fn] :as tx-info} :- TransactData]
+
+  ;; Detached databases need to be reattached when transacted into
+  (check-attachment connection)
+
   (let [op (if update-fn
              (fn []
                (let [[db-before db-after] (storage/transact-update connection update-fn)]

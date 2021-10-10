@@ -1,7 +1,7 @@
 (ns asami.api-test
   "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact
-                                entity as-of since import-data export-data delete-database]]
+  (:require [asami.core :as a :refer [q show-plan create-database connect db transact
+                                      entity as-of since import-data export-data delete-database]]
             [asami.index :as i]
             [asami.graph :as graph]
             [asami.multi-graph :as m]
@@ -722,7 +722,14 @@
             r-old (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d))]
         (is (empty? r2))
         (is (empty? r3))
-        (is (= 13 (count r-old)))))))
+        (is (= 13 (count r-old))))
+
+      (is (nil? (get @a/connections db-name)))
+      (let [{dx :db-after} @(transact conn {:tx-triples [[:mem/node-1 :property "value"]
+                                                         [:mem/node-2 :property "other"]]})
+            rx (q '[:find ?e ?a ?v :where [?e ?a ?v]] dx)]
+        (is (identical? conn (get @a/connections db-name)))
+        (is (= 2 (count rx)))))))
 
 (deftest test-update-unowned
   (testing "Doing an update on an attribute that references a top level entity"

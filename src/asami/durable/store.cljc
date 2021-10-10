@@ -237,10 +237,14 @@
                        (let [[asserts retracts] (generator-fn graph)]
                          (graph/graph-transact graph tx-id asserts retracts updates!))))))
 
+(s/defn get-url* :- s/Str
+  [{:keys [name]} :- ConnectionType]
+  (str "asami:local://" name))
 
 (defrecord DurableConnection [name tx-manager grapha nodea lock]
   storage/Connection
   (get-name [this] name)
+  (get-url [this] (get-url* this))
   (next-tx [this] (common/tx-count tx-manager))
   (db [this] (db* this))
   (delete-database [this] (delete-database* this))
