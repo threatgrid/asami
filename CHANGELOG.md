@@ -1,5 +1,13 @@
 # Change Log
 
+## [2.2.0] - 2021-10-10
+### Added
+- `transact-async` has been added. On the JVM this will return a future that has not yet been completed. There is currently no difference between `transact` and `transact-async` for ClojureScript.
+
+## Changed
+- Transaction results now includes datoms that reflect the changes to the database, and not the changes requested of the database.
+- Calling `delete-database` on an in-memory database URL will clear any open connections of data. If data is transacted into the connection, it will be reattached to the database registry as if it had been freshly opened.
+
 ## [2.1.3] - 2021-09-10
 ### Added
 - OR expressions no longer require the same variable bindings for each sub-expression
@@ -273,7 +281,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.1.3...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/threatgrid/asami/compare/2.1.3...2.2.0
 [2.1.3]: https://github.com/threatgrid/asami/compare/2.1.2...2.1.3
 [2.1.2]: https://github.com/threatgrid/asami/compare/2.1.1...2.1.2
 [2.1.1]: https://github.com/threatgrid/asami/compare/2.1.0...2.1.1

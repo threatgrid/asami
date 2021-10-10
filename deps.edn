@@ -1,9 +1,13 @@
 {:deps
- {org.clojure/clojurescript {:mvn/version "1.10.844"}
+ {org.clojure/clojurescript {:mvn/version "1.10.879"}
   org.clojure/clojure {:mvn/version "1.10.3"}
   prismatic/schema {:mvn/version "1.1.12"} 
-  org.clojure/core.cache {:mvn/version "1.0.207"}
+  org.clojure/core.cache {:mvn/version "1.0.217"}
   org.clojars.quoll/zuko {:mvn/version "0.6.5"}
   org.clojure/data.priority-map {:mvn/version "1.0.0"}
   cheshire/cheshire {:mvn/version "5.10.0"}
-  tailrecursion/cljs-priority-map {:mvn/version "1.2.1"}}}
+  tailrecursion/cljs-priority-map {:mvn/version "1.2.1"}
+  criterium/criterium {:mvn/version "0.4.6"}
+  time-literals/time-literals {:mvn/version "0.1.5"}
+  tick/tick {:mvn/version "0.4.24-alpha"}}
+ }
