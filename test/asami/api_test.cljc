@@ -1,7 +1,7 @@
 (ns asami.api-test
   "Tests the public query functionality"
-  (:require [asami.core :refer [q show-plan create-database connect db transact
-                                entity as-of since import-data export-data delete-database]]
+  (:require [asami.core :as a :refer [q show-plan create-database connect db transact
+                                      entity as-of since import-data export-data delete-database]]
             [asami.index :as i]
             [asami.graph :as graph]
             [asami.multi-graph :as m]
@@ -164,7 +164,7 @@
     (is (= 2 (count (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r)))))
     (let [r2 @(transact c {:tx-data [[:db/retract :mem/node-1 :property "value"]
                                      [:db/retract :mem/node-1 :property "missing"]]})]
-      (is (= 2 (count (:tx-data r2))))
+      (is (= 1 (count (:tx-data r2))))
       (is (= [[:mem/node-2 :property "other"]]
              (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2)))))))
 
@@ -250,7 +250,8 @@
         {:keys [tempids tx-data] :as r} @(transact c [data])
         one (tempids -1)
         d (db c)]
-    (is (= 20 (count tx-data)))
+    ;; nil is contained twice, so 19 statements, rather than the 20 inserted
+    (is (= 19 (count tx-data)))
     (is (= 2 (count (filter #(and (= :tg/first (nth % 1)) (= :tg/nil (nth % 2))) tx-data))))
     (is (= {:name  "Home"
             :address nil
@@ -704,6 +705,31 @@
              (is (every? graph/node-type? (map first r2))))))
       (delete-database db-io)
       (delete-database db-new))))
+
+(deftest test-database-delete
+  (testing "Are deleted memory databases cleared"
+    (let [db-name "asami:mem://test-del"
+          conn (connect db-name)
+          {d :db-after} @(transact conn {:tx-data io-entities})
+          r (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d))]
+      (is (= 13 (count r)))
+
+      (delete-database db-name)
+
+      (let [d2 (db conn)
+            r2 (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d2))
+            r3 (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] conn))
+            r-old (set (q '[:find ?e ?a ?v :where [?e ?a ?v]] d))]
+        (is (empty? r2))
+        (is (empty? r3))
+        (is (= 13 (count r-old))))
+
+      (is (nil? (get @a/connections db-name)))
+      (let [{dx :db-after} @(transact conn {:tx-triples [[:mem/node-1 :property "value"]
+                                                         [:mem/node-2 :property "other"]]})
+            rx (q '[:find ?e ?a ?v :where [?e ?a ?v]] dx)]
+        (is (identical? conn (get @a/connections db-name)))
+        (is (= 2 (count rx)))))))
 
 (deftest test-update-unowned
   (testing "Doing an update on an attribute that references a top level entity"

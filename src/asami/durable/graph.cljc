@@ -70,7 +70,9 @@
         ;; The statement already existed. The pools SHOULD be identical, but check in case they're not
         (if (identical? pool new-pool)
           this
-          (assoc this :pool new-pool)))))
+          (do
+            (log/warn "A statement existed that used an element not found in the data pool")
+            (assoc this :pool new-pool))))))
 
   (graph-delete
     [this subj pred obj]
@@ -91,9 +93,11 @@
 
   (graph-transact
     [this tx-id assertions retractions]
-    (as-> this graph
-      (reduce (fn [acc [s p o]] (graph/graph-delete acc s p o)) graph retractions)
-      (reduce (fn [acc [s p o]] (graph/graph-add acc s p o tx-id)) graph assertions)))
+    (common-index/graph-transact this tx-id assertions retractions (volatile! [[] [] {}])))
+
+  (graph-transact
+    [this tx-id assertions retractions generated-data]
+    (common-index/graph-transact this tx-id assertions retractions generated-data))
 
   (graph-diff
     [this other]

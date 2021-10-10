@@ -2,13 +2,37 @@
 and multigraph implementations."
       :author "Paula Gearon"}
     asami.common-index
-  (:require [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple broad-node-type?]]
+  (:require [asami.datom :as datom :refer [->Datom]]
+            [asami.graph :refer [Graph graph-add graph-delete graph-diff resolve-triple count-triple broad-node-type?]]
             [asami.internal :as internal]
             [zuko.schema :as st]
             [clojure.set :as set]
             #?(:clj  [schema.core :as s]
                :cljs [schema.core :as s :include-macros true]))
   #?(:clj (:import [clojure.lang ITransientCollection])))
+
+
+(defn graph-transact
+  "Common graph transaction operation"
+  [graph tx-id assertions retractions generated-data]
+  (let [[a r] @generated-data
+        asserts (transient a)
+        retracts (transient r)
+        new-graph (as-> graph gr
+                    (reduce (fn [acc [s p o]]
+                              (let [ad (graph-delete acc s p o)]
+                                (when-not (identical? ad acc)
+                                  (conj! retracts (->Datom s p o tx-id false)))
+                                ad))
+                            gr retractions)
+                    (reduce (fn [acc [s p o]]
+                              (let [aa (graph-add acc s p o tx-id)]
+                                (when-not (identical? aa acc)
+                                  (conj! asserts (->Datom s p o tx-id true)))
+                                aa))
+                            gr assertions))]
+    (vreset! generated-data [(persistent! asserts) (persistent! retracts)])
+    new-graph))
 
 (defprotocol NestedIndex
   (lowest-level-fn [this] "Returns a function for handling the lowest index level retrieval")

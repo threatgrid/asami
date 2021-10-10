@@ -1,14 +1,13 @@
 (ns ^{:doc "A storage implementation over in-memory indexing."
       :author "Paula Gearon"}
     asami.memory
-    (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+    (:require [asami.storage :as storage :refer [ConnectionType DatabaseType UpdateData]]
               [asami.internal :refer [now instant?]]
               [asami.index :as mem]
               [asami.multi-graph :as multi]
-              [asami.graph :as gr]
+              [asami.graph :as gr :refer [GraphType]]
               [asami.query :as query]
               [zuko.schema :refer [Triple]]
-              [asami.entities.general :as entity :refer [GraphType]]
               [asami.entities.reader :as reader]
               [schema.core :as s :include-macros true]))
 
@@ -37,7 +36,8 @@
              (< 0 c) (recur low mid)))))))
 
 
-(declare as-of* as-of-t* as-of-time* since* since-t* graph* entity* next-tx* db* transact-update* transact-data*)
+(declare as-of* as-of-t* as-of-time* since* since-t* graph* entity*
+         get-url* next-tx* db* delete-database* transact-update* transact-data*)
 
 ;; graph is the wrapped graph
 ;; history is a seq of Databases, excluding this one
@@ -61,18 +61,18 @@
 (defrecord MemoryConnection [name state]
   storage/Connection
   (get-name [this] name)
+  (get-url [this] (get-url* this))
   (next-tx [this] (next-tx* this))
   (db [this] (db* this))
-  (delete-database [this] true) ;; no-op for memory databases
+  (delete-database [this] (delete-database* this))
   (release [this]) ;; no-op for memory databases
   (transact-update [this update-fn] (transact-update* this update-fn))
-  (transact-data [this asserts retracts] (transact-data* this asserts retracts))
-  (transact-data [this generator-fn] (transact-data* this generator-fn)))
+  (transact-data [this updates! asserts retracts] (transact-data* this updates! asserts retracts))
+  (transact-data [this updates! generator-fn] (transact-data* this updates! generator-fn)))
 
 
 (def empty-graph mem/empty-graph)
 (def empty-multi-graph multi/empty-multi-graph)
-
 
 (s/defn new-connection :- ConnectionType
   "Creates a memory Connection object"
@@ -80,6 +80,15 @@
    gr :- GraphType]
   (let [db (->MemoryDatabase gr [] (now) 0)]
     (->MemoryConnection name (atom {:db db :history [db]}))))
+
+(s/defn get-url* :- s/Str
+  [{:keys [name state]} :- ConnectionType]
+  (let [first-graph (-> state deref :history first :graph)
+        gtype (condp = first-graph
+                empty-graph "mem"
+                empty-multi-graph "multi"
+                (throw (ex-info (str "Unknown graph type:" (type first-graph)) {:graph first-graph})))]
+    (str "asami:" gtype "://" name)))
 
 (s/defn next-tx* :- s/Num
   [connection :- ConnectionType]
@@ -89,6 +98,13 @@
   "Retrieves the most recent value of the database for reading."
   [connection :- ConnectionType]
   (:db @(:state connection)))
+
+(s/defn delete-database* :- s/Bool
+  "Reverts the state of a connection to an empty database, resetting the initialization time."
+  [{:keys [state] :as connection} :- ConnectionType]
+  (let [db (->MemoryDatabase (-> state deref :history first :graph) [] (now) 0)]
+    (reset! state {:db db :history [db]})
+    true))
 
 (s/defn as-database :- DatabaseType
   "Creates a Database around an existing Graph.
@@ -174,15 +190,17 @@
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
    Updates the connection to the new graph."
   ([conn :- ConnectionType
+    updates! :- UpdateData
     asserts :- [Triple]   ;; triples to insert
     retracts :- [Triple]] ;; triples to remove
-   (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts))))
+   (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts updates!))))
   ([conn :- ConnectionType
+    updates! :- UpdateData
     generator-fn]
    (transact-update* conn
                      (fn [graph tx-id]
                        (let [[asserts retracts] (generator-fn graph)]
-                         (gr/graph-transact graph tx-id asserts retracts))))))
+                         (gr/graph-transact graph tx-id asserts retracts updates!))))))
 
 
 (s/defn entity* :- (s/maybe {s/Any s/Any})
