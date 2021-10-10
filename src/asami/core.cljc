@@ -5,7 +5,6 @@
               [asami.memory :as memory]
               #?(:clj [asami.durable.store :as durable])  ;; TODO: make this available to CLJS when ready
               [asami.query :as query]
-              [asami.datom :as datom :refer [->Datom]]
               [asami.graph :as gr]
               [asami.entities :as entities]
               [asami.entities.general :refer [GraphType]]
@@ -148,13 +147,13 @@
                      (s/optional-key :update-fn) (s/pred fn?)}
                     [s/Any]))
 
-(s/defn transact
+(s/defn transact-async
   ;; returns a deref'able object that derefs to:
   ;; {:db-before DatabaseType
   ;;  :db-after DatabaseType
   ;;  :tx-data [datom/DatomType]
   ;;  :tempids {s/Any s/Any}}
-  "Updates a database. This is currently synchronous, but returns a future or delay for compatibility with Datomic.
+  "Updates a database.
    connection: The connection to the database to be updated.
    tx-info: This is either a seq of items to be transacted, or a map.
             If this is a map, then a :tx-data value will contain the same type of seq that tx-info may have.
@@ -186,14 +185,7 @@
                  {:db-before db-before
                   :db-after db-after}))
              (fn []
-               (let [tx-id (storage/next-tx connection)
-                     as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
-                     ;; function to convert assertions and retractions into a seq of datoms
-                     build-datoms (fn [assertions retractions]
-                                    (concat
-                                     (map (partial as-datom false) retractions)
-                                     (map (partial as-datom true) assertions)))
-                     current-db (storage/db connection)
+               (let [current-db (storage/db connection)
                      ;; single maps should not be passed in, but if they are then wrap them
                      seq-wrapper (fn [x] (if (map? x) [x] x))
                      ;; volatiles to capture data for the user
@@ -219,13 +211,67 @@
                      [triples retracts] (deref generated-data)]
                  {:db-before db-before
                   :db-after db-after
-                  :tx-data (build-datoms triples retracts)
+                  :tx-data (concat retracts triples)
                   :tempids @vtempids})))]
     #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))
                                            (or executor clojure.lang.Agent/soloExecutor))
        :cljs (let [d (delay (op))]
                (force d)
                d))))
+
+;; set a generous default transaction timeout of 100 seconds 
+#?(:clj (def ^:const default-tx-timeout 100000))
+
+#?(:clj
+   (defn get-timeout
+     "Retrieves the timeout value to use in ms"
+     []
+     (or (System/getProperty "asami.txTimeoutMsec")
+         (System/getProperty "datomic.txTimeoutMsec")
+         default-tx-timeout)))
+
+#?(:clj
+   (s/defn transact
+     "This returns a completed future with the data from a transaction.
+      See the documentation for transact-async for full details on arguments.
+      If the transaction times out, the call to transact will throw an ExceptionInfo exception.
+      The default is 100 seconds
+
+      The result derefs to a map of:
+       :db-before database value before the transaction
+       :db-after database value after the transaction
+       :tx-data a sequence of the transacted datom operations
+       :tempids a map of temporary id values and the db identifiers that were allocated for them}"
+     ;; returns a deref'able object that derefs to:
+     ;; {:db-before DatabaseType
+     ;;  :db-after DatabaseType
+     ;;  :tx-data [datom/DatomType]
+     ;;  :tempids {s/Any s/Any}}
+     [connection :- ConnectionType
+      tx-info :- TransactData]
+     (let [transact-future (transact-async connection tx-info)
+           timeout (get-timeout)]
+       (when (= ::timeout (deref transact-future timeout ::timeout))
+         (throw (ex-info "Transaction timeout" {:timeout timeout})))
+       transact-future))
+
+   :cljs
+   (s/defn transact
+     "This is a thin wrapper around the transact-async function.
+      TODO: convert this to a promise-based approach for the async implementation
+      See the documentation for transact-async for full details on arguments.
+      returns a deref'able object that derefs to a map of:
+       :db-before database value before the transaction
+       :db-after database value after the transaction
+       :tx-data a sequence of the transacted datom operations
+       :tempids a map of temporary id values and the db identifiers that were allocated for them}"
+     ;; {:db-before DatabaseType
+     ;;  :db-after DatabaseType
+     ;;  :tx-data [datom/DatomType]
+     ;;  :tempids {s/Any s/Any}}
+     [connection :- ConnectionType
+      tx-info :- TransactData]
+     (transact-async connection tx-info)))
 
 (defn- graphs-of
   "Converts Database objects to the graph that they wrap. Other arguments are returned unmodified."
