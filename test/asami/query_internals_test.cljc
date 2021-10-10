@@ -141,6 +141,7 @@
       (is (= [[5]] bds))
       (is (= '[?a] (:cols (meta bds))))
       (is (= [[5 6]] bds2))
+      (is (vector? (first bds2)))
       (is (= '[?a ?b] (:cols (meta bds2))))
       (is (= [[5]] bds3))
       (is (= '[?a] (:cols (meta bds3))))))
@@ -210,12 +211,7 @@
                       {:cols '[?e]})
         r1 (disjunction graph part-result '(or [?e :px ?v] [?e :py ?v]))]
     (is (= '[?e ?v] (:cols (meta r1))))
-    (is (= [[:a :m] [:b :o] [:a :n] [:c :p]] r1))
-    (is (thrown-with-msg?
-         ExceptionInfo
-         #"Alternate sides of OR clauses may not contain different vars"
-         (disjunction graph part-result '(or [?e :px ?v] [?e :py ?w]))))))
-
+    (is (= [[:a :m] [:b :o] [:a :n] [:c :p]] r1))))
 
 (deftest test-result-label
   "Tests the result-label function, which renames aggregates to addressable labels"
@@ -301,9 +297,8 @@
           with []
           where '[[?a :p ?b] [?a :p2 ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn (partial project internal/project-args)
 
-          r (aggregate-query find bindings with where graph project-fn {})]
+          r (aggregate-query find bindings with where graph internal/project-args {})]
       (is (= '[?a ?b ?count-c] (:cols (meta r))))
       (is (= [[:a "first" 3] [:b "second" 5]] r)))
 
@@ -312,9 +307,8 @@
           with []
           where '[[?a :p ?c]]
           graph (assert-data empty-graph agg-data)
-          project-fn (partial project internal/project-args)
 
-          r (aggregate-query find bindings with where graph project-fn {})]
+          r (aggregate-query find bindings with where graph internal/project-args {})]
       (is (= '[?count-c] (:cols (meta r))))
       (is (= [[2]] r)))))
 
@@ -362,5 +356,62 @@
       (is (= '?e e))
       (is (vartest? p))
       (is (vartest? v)))))
+
+(deftest query-validator-test
+  (testing "valid queries"
+    ;; This example represents the uncommon, but legal, scenario
+    ;; wherein some variables appearing in the :find clause are only
+    ;; present in the :in clause. Consider the following.
+    ;;
+    ;;     (defn my-query [param]
+    ;;       (asami.core/q '{:find [,,, ?param ,,,]
+    ;;                       :in [$ ?param] ,,,}
+    ;;                     db
+    ;;                     param))
+    ;;
+    ;; In this case, a user may rely on substitution rather than
+    ;; inserting the value of param in a post processing step, etc.
+    (is (= '{:find [?x ?y], :in [$ ?x], :where [[?y ?z]]}
+           (q/query-validator '{:find [?x ?y] :in [$ ?x] :where [[?y ?z]]}))))
+
+  (testing "invalid queries"
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:find []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:where []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':find' clause"
+                          (q/query-validator {:find [], :where []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:find []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:where []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Missing ':where' clause"
+                          (q/query-validator {:find [], :where []})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Invalid ':where' statements:"
+                          (q/query-validator {:find [], :where [1]})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unknown clauses: \(:when\)"
+                          (q/query-validator '{:when true})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :where [[?x ?y ?z]]})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :in [?x] :where [[?y ?z]]})))
+
+    (is (thrown-with-msg? ExceptionInfo #"Unbound variables in ':find' clause: #\{\?a\}"
+                          (q/query-validator '{:find [?a] :where [[(?x ?y ?z)]]})))))
 
 #?(:cljs (run-tests))

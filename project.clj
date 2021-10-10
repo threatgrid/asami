@@ -1,4 +1,4 @@
-(defproject org.clojars.quoll/asami "2.1.1"
+(defproject org.clojars.quoll/asami "2.1.3"
   :description "An in memory graph store for Clojure and ClojureScript"
   :url "http://github.com/threatgrid/asami"
   :license {:name "Eclipse Public License"
@@ -23,7 +23,10 @@
                                           "--initialize-at-build-time" "--no-server"
                                           "-jar" "./target/${:uberjar-name:-${:name}-${:version}-standalone.jar}"
                                           "-H:Name=./target/${:name}"
-                                          "-H:TraceClassInitialization=\"java.io.FilePermission\""]}}}
+                                          "-H:TraceClassInitialization=\"java.io.FilePermission\""]}}
+             :test-native {:source-paths ["src" "src-native" "test-native"]
+                           :test-paths ["test-native"]
+                           :dependencies [[cheshire "5.10.0"]]}}
   :cljsbuild {:builds {:dev {:source-paths ["src"]
                              :compiler {:output-to "out/asami/core.js"
                                         :optimizations :simple

@@ -32,7 +32,7 @@ Asami can be made available to clojure by adding the following to a `deps.edn` f
 ```clojure
 {
   :deps {
-    org.clojars.quoll/asami {:mvn/version "2.1.1"}
+    org.clojars.quoll/asami {:mvn/version "2.1.3"}
   }
 }
 ```
@@ -41,7 +41,7 @@ This makes Asami available to a repl that is launched with the `clj` or `clojure
 
 Alternatively, Asami can be added for the Leiningen build tool by adding this to the `:dependencies` section of the `project.clj` file:
 ```clojure
-[org.clojars.quoll/asami "2.1.1"]
+[org.clojars.quoll/asami "2.1.3"]
 ```
 
 ### Important Note for databases before 2.1.0
@@ -330,6 +330,8 @@ The command will also work on `local` stores, which means that they can be loade
 ## License
 
 Copyright © 2016-2021 Cisco
+
+Portions of src/asami/cache.cljc are Copyright © Rich Hickey
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
