@@ -9,6 +9,7 @@
             #?(:clj [clojure.java.io :as io])
             [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]]))
 
+(defn updates [] (volatile! [[] []]))
 
 (deftest test-create
   (let [db-name "empty-db"]
@@ -31,7 +32,7 @@
 (deftest test-simple-data
   (let [dbname "simple-db"
         conn (create-database dbname)
-        [_ db1] (transact-data conn demo-data nil)
+        [_ db1] (transact-data conn (updates) demo-data nil)
         db2 (db conn)
         r1 (fn [[e a v]] (set (resolve-triple (graph db1) e a v)))
         r2 (fn [[e a v]] (set (resolve-triple (graph db2) e a v)))]
@@ -108,7 +109,7 @@
 (deftest test-phased-data
   (let [dbname "ph-testdata-db"
         conn (create-database dbname)
-        [_ db1] (transact-data conn demo-data nil)
+        [_ db1] (transact-data conn (updates) demo-data nil)
         resolve (fn [[e a v]] (set (resolve-triple (graph db1) e a v)))
         t1 (:t db1)]
     (is (= #{[:name "Persephone Konstantopoulos"]
@@ -134,7 +135,7 @@
     (is (empty? (resolve '[:b :age 24])))
     (is (= (set demo-data) (resolve '[?e ?a ?v])))
 
-    (let [_ (transact-data conn update-data remove-data)
+    (let [_ (transact-data conn (updates) update-data remove-data)
           db2 (db conn)
           ts2 (:timestamp db2)
           r2 (fn [[e a v]] (set (resolve-triple (graph db2) e a v)))
@@ -188,7 +189,7 @@
       (is (= (set demo-data) (r1 '[?e ?a ?v])))
 
 
-      (let [_ (transact-data conn update-data2 remove-data2)
+      (let [_ (transact-data conn (updates) update-data2 remove-data2)
             db3 (db conn)
             r3 (fn [[e a v]] (set (resolve-triple (graph db3) e a v)))
             ts2-time-- (instant (dec ts2))
@@ -286,11 +287,11 @@
 (deftest test-saved-data
   (let [dbname "saved-testdata-db"
         conn (create-database dbname)
-        _ (transact-data conn demo-data nil)
+        _ (transact-data conn (updates) demo-data nil)
         _ (sleep 10)
-        [_ db2] (transact-data conn update-data remove-data)
+        [_ db2] (transact-data conn (updates) update-data remove-data)
         ts2 (:timestamp db2)
-        _ (transact-data conn update-data2 remove-data2)]
+        _ (transact-data conn (updates) update-data2 remove-data2)]
 
     (common/close @(:grapha conn))
     (common/close (:tx-manager conn))
@@ -407,7 +408,7 @@
 (deftest test-entity-data
   (let [dbname "entity-db"
         conn (create-database dbname)
-        [_ db1] (transact-data conn entity-data nil)]
+        [_ db1] (transact-data conn (updates) entity-data nil)]
     (is (= {:name "Persephone Konstantopoulos"
             :age 23
             :friends [{:name "Anastasia Christodoulopoulos" :age 23}

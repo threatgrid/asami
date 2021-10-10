@@ -164,7 +164,7 @@
     (is (= 2 (count (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r)))))
     (let [r2 @(transact c {:tx-data [[:db/retract :mem/node-1 :property "value"]
                                      [:db/retract :mem/node-1 :property "missing"]]})]
-      (is (= 2 (count (:tx-data r2))))
+      (is (= 1 (count (:tx-data r2))))
       (is (= [[:mem/node-2 :property "other"]]
              (q '[:find ?e ?a ?v :where [?e ?a ?v]] (:db-after r2)))))))
 
@@ -250,7 +250,8 @@
         {:keys [tempids tx-data] :as r} @(transact c [data])
         one (tempids -1)
         d (db c)]
-    (is (= 20 (count tx-data)))
+    ;; nil is contained twice, so 19 statements, rather than the 20 inserted
+    (is (= 19 (count tx-data)))
     (is (= 2 (count (filter #(and (= :tg/first (nth % 1)) (= :tg/nil (nth % 2))) tx-data))))
     (is (= {:name  "Home"
             :address nil
