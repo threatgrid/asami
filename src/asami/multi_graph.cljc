@@ -136,9 +136,9 @@ allow rules to successfully use this graph type."
         (log/trace "statement did not exist")
         this)))
   (graph-transact [this tx-id assertions retractions]
-    (as-> this graph
-      (reduce (fn [acc [s p o]] (graph-delete acc s p o)) graph retractions)
-      (reduce (fn [acc [s p o]] (graph-add acc s p o tx-id)) graph assertions)))
+    (common/graph-transact this tx-id assertions retractions (volatile! [[] [] {}])))
+  (graph-transact [this tx-id assertions retractions generated-data]
+    (common/graph-transact this tx-id assertions retractions generated-data))
   (graph-diff [this other]
     (when-not (= (type this) (type other))
       (throw (ex-info "Unable to compare diffs between graphs of different types" {:this this :other other})))
