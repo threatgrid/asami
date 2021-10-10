@@ -188,30 +188,39 @@
              (fn []
                (let [tx-id (storage/next-tx connection)
                      as-datom (fn [assert? [e a v]] (->Datom e a v tx-id assert?))
+                     ;; function to convert assertions and retractions into a seq of datoms
+                     build-datoms (fn [assertions retractions]
+                                    (concat
+                                     (map (partial as-datom false) retractions)
+                                     (map (partial as-datom true) assertions)))
                      current-db (storage/db connection)
                      ;; single maps should not be passed in, but if they are then wrap them
                      seq-wrapper (fn [x] (if (map? x) [x] x))
-                     ;; a volatile to capture data for the user
-                     generated-data (volatile! [tx-triples nil {}])
+                     ;; volatiles to capture data for the user
+                     ;; This is to avoid passing parameters to functions that users may want to call directly
+                     ;; and especially to avoid the difficulty of asking users to of return multiple structures
+                     vtempids (volatile! {}) ;; volatile to capture the tempid map from built-triples
+                     generated-data (volatile! [[] []]) ;; volatile to capture the asserted and retracted data in a transaction
                      [db-before db-after] (if tx-triples
                                             ;; simple assertion of triples
-                                            (storage/transact-data connection (seq-wrapper tx-triples) nil)
+                                            (storage/transact-data connection generated-data (seq-wrapper tx-triples) nil)
                                             ;; a seq of statements and/or entities
-                                            ;; this generates triples and retractions inside a transaction
-                                            ;; capture this data to return to the user
+                                            ;; convert these to assertions/retractions and send to transaction
+                                            ;; also, capture tempids that are generated during conversion
                                             (storage/transact-data connection
+                                                                   generated-data
                                                                    (fn [graph]
                                                                      ;; building triples returns a tuple of assertions, retractions, tempids
-                                                                     (vreset! generated-data
-                                                                              (entities/build-triples graph (seq-wrapper (or tx-data tx-info)))))))
+                                                                     (let [[_ _ tempids :as result]
+                                                                           (entities/build-triples graph (seq-wrapper (or tx-data tx-info)))]
+                                                                       (vreset! vtempids tempids)
+                                                                       result))))
                      ;; pull out the info captured during the transaction
-                     [triples retracts tempids] (deref generated-data)]
+                     [triples retracts] (deref generated-data)]
                  {:db-before db-before
                   :db-after db-after
-                  :tx-data (concat
-                            (map (partial as-datom false) retracts)
-                            (map (partial as-datom true) triples))
-                  :tempids tempids})))]
+                  :tx-data (build-datoms triples retracts)
+                  :tempids @vtempids})))]
     #?(:clj (CompletableFuture/supplyAsync (reify Supplier (get [_] (op)))
                                            (or executor clojure.lang.Agent/soloExecutor))
        :cljs (let [d (delay (op))]

@@ -1,7 +1,7 @@
 (ns ^{:doc "A storage implementation over in-memory indexing."
       :author "Paula Gearon"}
     asami.memory
-    (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+    (:require [asami.storage :as storage :refer [ConnectionType DatabaseType UpdateData]]
               [asami.internal :refer [now instant?]]
               [asami.index :as mem]
               [asami.multi-graph :as multi]
@@ -66,8 +66,8 @@
   (delete-database [this] true) ;; no-op for memory databases
   (release [this]) ;; no-op for memory databases
   (transact-update [this update-fn] (transact-update* this update-fn))
-  (transact-data [this asserts retracts] (transact-data* this asserts retracts))
-  (transact-data [this generator-fn] (transact-data* this generator-fn)))
+  (transact-data [this updates! asserts retracts] (transact-data* this updates! asserts retracts))
+  (transact-data [this updates! generator-fn] (transact-data* this updates! generator-fn)))
 
 
 (def empty-graph mem/empty-graph)
@@ -174,15 +174,17 @@
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
    Updates the connection to the new graph."
   ([conn :- ConnectionType
+    updates! :- UpdateData
     asserts :- [Triple]   ;; triples to insert
     retracts :- [Triple]] ;; triples to remove
-   (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts))))
+   (transact-update* conn (fn [graph tx-id] (gr/graph-transact graph tx-id asserts retracts updates!))))
   ([conn :- ConnectionType
+    updates! :- UpdateData
     generator-fn]
    (transact-update* conn
                      (fn [graph tx-id]
                        (let [[asserts retracts] (generator-fn graph)]
-                         (gr/graph-transact graph tx-id asserts retracts))))))
+                         (gr/graph-transact graph tx-id asserts retracts updates!))))))
 
 
 (s/defn entity* :- (s/maybe {s/Any s/Any})

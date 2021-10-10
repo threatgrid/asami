@@ -10,6 +10,27 @@ and multigraph implementations."
                :cljs [schema.core :as s :include-macros true]))
   #?(:clj (:import [clojure.lang ITransientCollection])))
 
+
+(defn graph-transact
+  "Common graph transaction operation"
+  [graph tx-id assertions retractions generated-data]
+  (let [[a r] @generated-data
+        asserts (transient a)
+        retracts (transient r)
+        new-graph (as-> graph gr
+                    (reduce (fn [acc [s p o :as triple]]
+                              (let [ad (graph-delete acc s p o)]
+                                (when-not (identical? ad acc) (conj! retracts triple))
+                                ad))
+                            gr retractions)
+                    (reduce (fn [acc [s p o :as triple]]
+                              (let [aa (graph-add acc s p o tx-id)]
+                                (when-not (identical? aa acc) (conj! asserts triple))
+                                aa))
+                            gr assertions))]
+    (vreset! generated-data [(persistent! asserts) (persistent! retracts)])
+    new-graph))
+
 (defprotocol NestedIndex
   (lowest-level-fn [this] "Returns a function for handling the lowest index level retrieval")
   (lowest-level-sets-fn [this] "Returns a function retrieving all lowest level values as sets")

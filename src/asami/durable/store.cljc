@@ -1,7 +1,7 @@
 (ns ^{:doc "The implements the Block storage version of a Graph/Database/Connection"
       :author "Paula Gearon"}
     asami.durable.store
-  (:require [asami.storage :as storage :refer [ConnectionType DatabaseType]]
+  (:require [asami.storage :as storage :refer [ConnectionType DatabaseType UpdateData]]
             [asami.graph :as graph]
             [asami.internal :as i :refer [now instant? long-time]]
             [asami.durable.common :as common
@@ -225,15 +225,17 @@
   "Removes a series of tuples from the latest graph, and asserts new tuples into the graph.
    Updates the connection to the new graph."
   ([conn :- ConnectionType
+    updates! :- UpdateData
     asserts :- [Triple]   ;; triples to insert
     retracts :- [Triple]] ;; triples to remove
-   (transact-update* conn (fn [graph tx-id] (graph/graph-transact graph tx-id asserts retracts))))
+   (transact-update* conn (fn [graph tx-id] (graph/graph-transact graph tx-id asserts retracts updates!))))
   ([conn :- ConnectionType
+    updates! :- UpdateData
     generator-fn]
    (transact-update* conn
                      (fn [graph tx-id]
                        (let [[asserts retracts] (generator-fn graph)]
-                         (graph/graph-transact graph tx-id asserts retracts))))))
+                         (graph/graph-transact graph tx-id asserts retracts updates!))))))
 
 
 (defrecord DurableConnection [name tx-manager grapha nodea lock]
@@ -244,8 +246,8 @@
   (delete-database [this] (delete-database* this))
   (release [this] (release* this))
   (transact-update [this update-fn] (transact-update* this update-fn))
-  (transact-data [this asserts retracts] (transact-data* this asserts retracts))
-  (transact-data [this generator-fn] (transact-data* this generator-fn))
+  (transact-data [this updates! asserts retracts] (transact-data* this updates! asserts retracts))
+  (transact-data [this updates! generator-fn] (transact-data* this updates! generator-fn))
   common/Lockable
   (lock! [this] #?(:clj (.lock ^Lock lock)))
   (unlock! [this] #?(:clj (.unlock ^Lock lock))))
