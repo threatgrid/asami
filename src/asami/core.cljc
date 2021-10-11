@@ -129,11 +129,14 @@
    If not, then connect. Returns the connection if previously connected,
    false if it needed to be reconnected."
   [connection]
-  (let [url (storage/get-url connection)]
-    (or (@connections url)
+  (let [url (storage/get-url connection)
+        c (@connections url)]
+    (if (nil? c)
       (do
         (swap! connections assoc url connection)
-        false))))
+        false)
+      (when-not (identical? c connection)
+        (throw (ex-info "Updating a detached connection" {:url url}))))))
 
 (def db storage/db)
 (def as-of storage/as-of)

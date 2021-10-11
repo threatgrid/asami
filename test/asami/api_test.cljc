@@ -725,11 +725,24 @@
         (is (= 13 (count r-old))))
 
       (is (nil? (get @a/connections db-name)))
-      (let [{dx :db-after} @(transact conn {:tx-triples [[:mem/node-1 :property "value"]
-                                                         [:mem/node-2 :property "other"]]})
-            rx (q '[:find ?e ?a ?v :where [?e ?a ?v]] dx)]
-        (is (identical? conn (get @a/connections db-name)))
-        (is (= 2 (count rx)))))))
+      (let [conn2 (connect db-name)
+            {dx2 :db-after} @(transact conn2 {:tx-triples [[:mem/node-1 :property "a"]
+                                                           [:mem/node-2 :property "b"]
+                                                           [:mem/node-3 :property "c"]]})
+            rx2 (q '[:find ?e ?a ?v :where [?e ?a ?v]] dx2)]
+        ;; updating the old connection after retrieving a new one will fail
+        (is (thrown-with-msg? ExceptionInfo #"Updating a detached connection"
+                              @(transact conn {:tx-triples [[:mem/node-4 :property "value"]
+                                                            [:mem/node-5 :property "other"]]})))
+
+        (delete-database db-name)
+        (is (nil? (get @a/connections db-name)))
+        ;; does transacting into a detached database work?
+        (let [{dx2 :db-after} @(transact conn2 {:tx-triples [[:mem/node-6 :property "d"]]})
+              rx2 (q '[:find ?e ?a ?v :where [?e ?a ?v]] dx2)]
+          ;; is it now reattached?
+          (is (identical? conn2 (get @a/connections db-name)))
+          (is (= 1 (count rx2))))))))
 
 (deftest test-update-unowned
   (testing "Doing an update on an attribute that references a top level entity"
