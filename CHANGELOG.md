@@ -1,5 +1,9 @@
 # Change Log
 
+## [2.2.1] - 2021-10-16
+### Fixed
+- Accepting java.time.Instant objects on the `since` and `as-of` database functions.
+
 ## [2.2.0] - 2021-10-10
 ### Added
 - `transact-async` has been added. On the JVM this will return a future that has not yet been completed. There is currently no difference between `transact` and `transact-async` for ClojureScript.
@@ -281,7 +285,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.0...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.1...HEAD
+[2.2.1]: https://github.com/threatgrid/asami/compare/2.2.0...2.2.1
 [2.2.0]: https://github.com/threatgrid/asami/compare/2.1.3...2.2.0
 [2.1.3]: https://github.com/threatgrid/asami/compare/2.1.2...2.1.3
 [2.1.2]: https://github.com/threatgrid/asami/compare/2.1.1...2.1.2
