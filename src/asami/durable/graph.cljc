@@ -2,7 +2,6 @@
       :author "Paula Gearon"}
     asami.durable.graph
     (:require [asami.graph :as graph]
-              [asami.internal :refer [now instant? long-time]]
               [asami.common-index :as common-index :refer [?]]
               [asami.durable.common :as common :refer [TxData Transaction Closeable
                                                        find-tuples tuples-at write-new-tx-tuple!

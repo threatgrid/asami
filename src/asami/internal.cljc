@@ -3,9 +3,32 @@
     asami.internal
   (:require [asami.graph :as graph]
             [asami.cache :refer [lookup hit miss lru-cache-factory]])
-  #?(:clj (:import [java.util Date])))
+  #?(:clj (:import [java.util Date]
+                   [java.time Instant])))
 
 #?(:clj (set! *warn-on-reflection* true))
+
+(defprotocol TimeType
+  (instant? [this] "Indicates if this object is a time type that supports an instant")
+  (long-time [this] "Returns a long value as the number of milliseconds since the epoch")
+  (to-timestamp [this] "Converts to a common time type. Useful for comparison"))
+
+(extend-protocol TimeType
+  #?(:clj Date :cljs js/Date)
+  (instant? [_] true)
+  (long-time [this] (.getTime this))
+  (to-timestamp [this] this)
+
+  #?@(:clj
+      [Instant
+       (instant? [_] true)
+       (long-time [this] (.toEpochMilli this))
+       (to-timestamp [this] (Date. (.toEpochMilli this)))])
+
+  #?(:clj Object :cljs default)
+  (instant? [_] false)
+  (long-time [this] (throw (ex-info (str "Unable to convert " (type this) " to a time") {:object this})))
+  (to-timestamp [this] (throw (ex-info (str "Unable to convert " (type this) " to a time") {:object this}))))
 
 (defn now
   "Creates an object to represent the current time"
@@ -13,21 +36,10 @@
   #?(:clj (Date.)
      :cljs (js/Date.)))
 
-(defn instant?
-  "Tests if a value is a timestamp"
-  [t]
-  (= #?(:clj Date :cljs js/Date) (type t)))
-
 (defn instant
   "Creates an instant from a long millisecond value"
   [^long ms]
   #?(:clj (Date. ms) :cljs (js/Date. ms)))
-
-(defn long-time
-  "Converts a timestamp to a long value as the number of milliseconds"
-  #?(:clj [^java.util.Date t]
-     :cljs [t])
-  (.getTime t))  ;; this is an identical operation in both Java and Javascript
 
 (def project-args {:new-node graph/new-node
                    :node-label graph/node-label})

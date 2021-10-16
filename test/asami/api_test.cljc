@@ -12,7 +12,13 @@
                :cljs [clojure.test :refer-macros [is run-tests use-fixtures testing]])
             #?(:clj  [schema.test :as st :refer [deftest]]
                :cljs [schema.test :as st :refer-macros [deftest]]))
-  #?(:clj (:import [clojure.lang ExceptionInfo])))
+  #?(:clj (:import [clojure.lang ExceptionInfo]
+                   [java.time Instant])))
+
+(defn other-now
+  "Create a different kind of instant object on the JVM"
+  []
+  #?(:clj (Instant/now) :cljs (now)))
 
 (deftest test-create
   (let [c1 (create-database "asami:mem://babaco")
@@ -304,7 +310,7 @@
         _ (sleep 100)
         c (connect "asami:mem://test5")
         _ (sleep 100)
-        t1 (now)
+        t1 (other-now)
         maksim {:db/id -1
                 :db/ident :maksim
                 :name  "Maksim"
@@ -323,7 +329,7 @@
         _ (sleep 100)
         _ @(transact c [anna])
         _ (sleep 100)
-        t3 (now)
+        t3 (other-now)
         latest-db (db c)
         db0 (as-of latest-db t0)  ;; before
         db1 (as-of latest-db t1)  ;; empty

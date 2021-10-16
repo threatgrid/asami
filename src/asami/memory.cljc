@@ -2,7 +2,7 @@
       :author "Paula Gearon"}
     asami.memory
     (:require [asami.storage :as storage :refer [ConnectionType DatabaseType UpdateData]]
-              [asami.internal :refer [now instant?]]
+              [asami.internal :refer [now instant? to-timestamp]]
               [asami.index :as mem]
               [asami.multi-graph :as multi]
               [asami.graph :as gr :refer [GraphType]]
@@ -119,10 +119,11 @@
   [{:keys [graph history timestamp] :as db} :- DatabaseType
    t :- (s/cond-pre s/Int (s/pred instant?))]
   (cond
-    (instant? t) (if (>= (compare t timestamp) 0)
-                   db
-                   (nth history
-                        (find-index history t #(compare (:timestamp %1) %2))))
+    (instant? t) (let [ts (to-timestamp t)]
+                   (if (>= (compare ts timestamp) 0)
+                     db
+                     (nth history
+                          (find-index history ts #(compare (:timestamp %1) %2)))))
     (int? t) (if (>= t (count history))
                db
                (nth history (min (max t 0) (dec (count history)))))))
@@ -143,13 +144,14 @@
   [{:keys [graph history timestamp] :as db} :- DatabaseType
    t :- (s/cond-pre s/Int (s/pred instant?))]
   (cond
-    (instant? t) (cond
-                   (> (compare t timestamp) 0) nil
-                   (< (compare t (:timestamp (first history))) 0) (first history)
-                   :default (let [tx (inc (find-index history t #(compare (:timestamp %1) %2)))]
-                              (if (= tx (count history))
-                                db
-                                (nth history tx))))
+    (instant? t) (let [ts (to-timestamp t)]
+                   (cond
+                     (> (compare ts timestamp) 0) nil
+                     (< (compare ts (:timestamp (first history))) 0) (first history)
+                     :default (let [tx (inc (find-index history ts #(compare (:timestamp %1) %2)))]
+                                (if (= tx (count history))
+                                  db
+                                  (nth history tx)))))
     (int? t) (cond (>= t (count history)) nil
                    (= (count history) (inc t)) db
                    :default (nth history (min (max (inc t) 0) (dec (count history)))))))
