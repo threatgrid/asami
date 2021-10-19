@@ -113,7 +113,7 @@
                                                  new-node (node/new-node graph)]
                                              [[(find-tail head) :tg/rest new-node] [new-node :tg/first v] [head :tg/contains v]])) attr-heads)]
               (if (and limit (> (count append-triples) limit))
-                (throw (ex-info "Limit reached" {:overflowed true}))
+                (throw (ex-info "Limit reached" {:overflow true}))
                 [new-obj removals append-triples])))
           [obj nil nil])
 
@@ -171,7 +171,7 @@
                                                                                           (minus limit (count acc)))]
                                [(into acc triples) (into racc rtriples) new-ids new-top-ids])
                              (catch #?(:clj Exception :cljs :default) e
-                               (if-let [overflowed (:overflowed (ex-data e))]
+                               (if-let [overflow (:overflow (ex-data e))]
                                  (reduced last-result)
                                  (throw e))))
                            (if (and (seqable? obj)

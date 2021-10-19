@@ -42,6 +42,26 @@
     (is (instance? asami.multi_graph.MultiGraph (:graph (:db @(:state cm)))))
     (is (= "banana" (:name cm)))))
 
+(deftest test-input-limit
+  (let [c (connect "asami:mem://limit1")
+        maksim {:db/id -1
+                :name  "Maksim"
+                :age   45
+                :wife {:db/id -2}
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :name  "Anna"
+                :age   31
+                :husband {:db/id -1}
+                :aka   ["Anitzka"]}
+        {:keys [tx-data]} @(transact c {:tx-data [maksim anna]})
+        c2 (connect "asami:mem://limit2")
+        {tx-data2 :tx-data} @(transact c2 {:tx-data [maksim anna] :input-limit 15})]
+    (is (= 21 (count tx-data)))
+    (is (= 21 (q '[:find (count *) . :where [?s ?p ?o]] c)))
+    (is (= 13 (count tx-data2)))
+    (is (= 13 (q '[:find (count *) . :where [?s ?p ?o]] c2)))))
+
 (deftest load-data
   (let [c (connect "asami:mem://test1")
         r (transact c {:tx-data [{:db/ident "bobid"

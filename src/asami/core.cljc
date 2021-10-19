@@ -158,7 +158,8 @@
                                                     (s/one s/Any "attribute")
                                                     (s/one s/Any "value")]]
                      (s/optional-key :executor) s/Any
-                     (s/optional-key :update-fn) (s/pred fn?)}
+                     (s/optional-key :update-fn) (s/pred fn?)
+                     (s/optional-key :input-limit) s/Num}
                     [s/Any]))
 
 (s/defn transact-async
