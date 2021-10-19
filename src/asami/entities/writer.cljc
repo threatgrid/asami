@@ -33,6 +33,8 @@
 
 (def ^:dynamic *triples* nil)
 
+(def ^:dynamic *limit* nil)
+
 (def ^:dynamic *current-entity* nil)
 
 (def ^:dynamic *top-level-entities* nil)
@@ -43,6 +45,13 @@
 
 (declare value-triples map->triples)
 
+(defn add-triples!
+  [op data]
+  (vswap! *triples* op data)
+  (when (and *limit*
+             (> (count @*triples*) *limit*))
+    (throw (ex-info "overflow" {:overflow true}))))
+
 (defn list-triples
   "Creates the triples for a list. Returns a node and list of nodes representing contents of the list."
   [vlist]
@@ -52,9 +61,9 @@
         [list-ref value-nodes]
         (let [node-ref (node/new-node *current-graph*)
               _ (when last-ref
-                  (vswap! *triples* conj [last-ref :tg/rest node-ref]))
+                  (add-triples! conj [last-ref :tg/rest node-ref]))
               value-ref (value-triples v)]
-          (vswap! *triples* conj [node-ref (node/data-attribute *current-graph* value-ref) value-ref])
+          (add-triples! conj [node-ref (node/data-attribute *current-graph* value-ref) value-ref])
           (recur (or list-ref node-ref) node-ref (conj value-nodes value-ref) vs))))))
 
 (s/defn value-triples-list
@@ -62,7 +71,7 @@
   (if (seq vlist)
     (let [[node value-nodes] (list-triples vlist)]
       (doseq [vn value-nodes]
-        (vswap! *triples* conj [node (node/container-attribute *current-graph* vn) vn]))
+        (add-triples! conj [node (node/container-attribute *current-graph* vn) vn]))
       node)
     :tg/empty-list))
 
@@ -86,7 +95,7 @@
   (when-not (or (= node *current-entity*)
                 (@*top-level-entities* node)
                 (= node :tg/empty-list))
-    (vswap! *triples* conj [*current-entity* :tg/owns node]))
+    (add-triples! conj [*current-entity* :tg/owns node]))
   node)
 
 (defn value-triples
@@ -110,9 +119,9 @@
   (if (set? value)
     (doseq [v value]
       (let [vr (value-triples v)]
-        (vswap! *triples* conj [entity-ref property vr])))
+        (add-triples! conj [entity-ref property vr])))
     (let [v (value-triples value)]
-      (vswap! *triples* conj [entity-ref property v]))))
+      (add-triples! conj [entity-ref property v]))))
 
 (defn new-node
   [id]
@@ -185,22 +194,24 @@
   "Converts a single map to triples for an ID'ed map"
   ([graph :- GraphType
     j :- EntityMap]
-   (ident-map->triples graph j {} #{}))
+   (ident-map->triples graph j {} #{} nil))
   ([graph :- GraphType
     j :- EntityMap
     id-map :- {s/Any s/Any}
-    top-level-ids :- #{s/Any}]
+    top-level-ids :- #{s/Any}
+    limit :- (s/maybe s/Num)]
    (binding [*current-graph* graph
              *id-map* (volatile! id-map)
              *triples* (volatile! [])
+             *limit* limit
              *top-level-entities* (volatile! top-level-ids)]
      (let [derefed-id-map (ident-map->triples j)]
        [@*triples* derefed-id-map @*top-level-entities*])))
   ([j :- EntityMap]
    (let [node-ref (map->triples j)]
      (if (:db/ident j)
-       (vswap! *triples* conj [node-ref :tg/entity true])
-       (vswap! *triples* into [[node-ref :db/ident (name-for node-ref)] [node-ref :tg/entity true]]))
+       (add-triples! conj [node-ref :tg/entity true])
+       (add-triples! into [[node-ref :db/ident (name-for node-ref)] [node-ref :tg/entity true]]))
      @*id-map*)))
 
 (defn backtrack-unlink-top-entities

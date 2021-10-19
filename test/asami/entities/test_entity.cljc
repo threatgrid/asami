@@ -306,7 +306,7 @@
 (defn ident-map->graph
   ([m] (ident-map->graph m {}))
   ([m mp]
-   (let [[triples result-map] (ident-map->triples empty-graph m mp #{})]
+   (let [[triples result-map] (ident-map->triples empty-graph m mp #{} nil)]
      [(set triples) result-map])))
 
 (deftest test-ident-map->triples
