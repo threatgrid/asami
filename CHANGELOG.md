@@ -1,5 +1,9 @@
 # Change Log
 
+## [2.2.2] - 2021-10-19
+### Added
+- Added a new `:input-limit` option to transact. When included, the transaction will attempt to keep at or below this number of triples.
+
 ## [2.2.1] - 2021-10-16
 ### Fixed
 - Accepting java.time.Instant objects on the `since` and `as-of` database functions.
@@ -285,7 +289,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.1...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.2...HEAD
+[2.2.2]: https://github.com/threatgrid/asami/compare/2.2.1...2.2.2
 [2.2.1]: https://github.com/threatgrid/asami/compare/2.2.0...2.2.1
 [2.2.0]: https://github.com/threatgrid/asami/compare/2.1.3...2.2.0
 [2.1.3]: https://github.com/threatgrid/asami/compare/2.1.2...2.1.3

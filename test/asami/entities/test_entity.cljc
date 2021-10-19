@@ -14,7 +14,8 @@
                :cljs [schema.test :as st :refer-macros [deftest]])
             #?(:clj  [clojure.test :as t :refer [is]]
                :cljs [clojure.test :as t :refer-macros [is]]))
-  #?(:clj (:import [java.time ZonedDateTime])
+  #?(:clj (:import [java.time ZonedDateTime]
+                   [clojure.lang ExceptionInfo])
      :cljs (:import [goog.date DateTime])))
 
 (defn parseDateTime [s]
@@ -287,6 +288,23 @@
     (is (= data obj1))
     (is (= (assoc data :sub (dissoc d0 :db/ident)) obj2))))
 
+(deftest test-entity-limits
+  (let [m1 {:prop "val"}
+        m2 {:prop "val", :p2 2}
+        m3 {:prop "val", :p2 22, :p3 [42 54]}
+        m4 {:prop "val"}
+        m5 {:prop "val2"}
+        m6 {:prop "val" :arr [{:a 1} {:a 2} ["nested"]]}
+        m7 {:prop "val", :p2 22, :p3 []}]
+    (is (= 3 (count (first (ident-map->triples empty-graph m1 {} #{} 18)))))
+    (is (= 4 (count (first (ident-map->triples empty-graph m2 {} #{} 18)))))
+    (is (= 11 (count (first (ident-map->triples empty-graph m3 {} #{} 18)))))
+    (is (= 3 (count (first (ident-map->triples empty-graph m4 {} #{} 18)))))
+    (is (= 3 (count (first (ident-map->triples empty-graph m5 {} #{} 18)))))
+    (is (thrown-with-msg? ExceptionInfo #"overflow"
+                          (ident-map->triples empty-graph m6 {} #{} 18)))
+    (is (= 5 (count (first (ident-map->triples empty-graph m7 {} #{} 18)))))))
+
 (deftest test-looped-ref->entity
   (let [d1 {:db/ident :t1, :task/name "Task 1", :task/requires [#:db{:ident :t3}]}
         d2 {:db/ident :t2, :task/name "Task 2", :task/requires [#:db{:ident :t1}]}
@@ -306,7 +324,7 @@
 (defn ident-map->graph
   ([m] (ident-map->graph m {}))
   ([m mp]
-   (let [[triples result-map] (ident-map->triples empty-graph m mp #{})]
+   (let [[triples result-map] (ident-map->triples empty-graph m mp #{} nil)]
      [(set triples) result-map])))
 
 (deftest test-ident-map->triples

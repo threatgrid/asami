@@ -158,7 +158,8 @@
                                                     (s/one s/Any "attribute")
                                                     (s/one s/Any "value")]]
                      (s/optional-key :executor) s/Any
-                     (s/optional-key :update-fn) (s/pred fn?)}
+                     (s/optional-key :update-fn) (s/pred fn?)
+                     (s/optional-key :input-limit) s/Num}
                     [s/Any]))
 
 (s/defn transact-async
@@ -178,6 +179,7 @@
             Alternatively, a map may have a :tx-triples key. If so, then this is a seq of 3 element vectors.
             Each vector in a :tx-triples seq will contain the raw values for [entity attribute value]
             :executor An optional value in the tx-info containing an executor to be used to run the CompletableFuture
+            :input-limit contains an optional maximum number of statements to insert (approx)
   Entities and assertions may have attributes that are keywords with a trailing ' character.
   When these appear an existing attribute without that character will be replaced. This only occurs for the top level
   entity, and is not applied to attributes appearing in nested structures.
@@ -192,7 +194,7 @@
   :tx-data      sequence of datoms produced by the transaction
   :tempids      mapping of the temporary IDs in entities to the allocated nodes"
   [{:keys [name state] :as connection} :- ConnectionType
-   {:keys [tx-data tx-triples executor update-fn] :as tx-info} :- TransactData]
+   {:keys [tx-data tx-triples executor update-fn input-limit] :as tx-info} :- TransactData]
 
   ;; Detached databases need to be reattached when transacted into
   (check-attachment connection)
@@ -222,7 +224,9 @@
                                                                    (fn [graph]
                                                                      ;; building triples returns a tuple of assertions, retractions, tempids
                                                                      (let [[_ _ tempids :as result]
-                                                                           (entities/build-triples graph (seq-wrapper (or tx-data tx-info)))]
+                                                                           (entities/build-triples graph
+                                                                                                   (seq-wrapper (or tx-data tx-info))
+                                                                                                   input-limit)]
                                                                        (vreset! vtempids tempids)
                                                                        result))))
                      ;; pull out the info captured during the transaction
