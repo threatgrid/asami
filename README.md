@@ -329,7 +329,8 @@ The command will also work on `local` stores, which means that they can be loade
 
 ## License
 
-Copyright © 2016-2021 Cisco
+Copyright © 2016-2021 Cisco Systems
+Copyright © 2015-2021 Paula Gearon
 
 Portions of src/asami/cache.cljc are Copyright © Rich Hickey
 
