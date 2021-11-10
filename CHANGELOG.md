@@ -1,5 +1,15 @@
 # Change Log
 
+## [2.2.3] - 2021-11-10
+### Added
+- The `asami.core/entity` function now accepts Connections as well as Databases. This will select the latest database from the connection.
+
+### Changed
+- The third argument to the `asami.storage.Database/entity` function is now required. This change should not affect most users, as this is an internal function and should be accessed with `asami.core/entity`, which has not changed.
+
+### Fixed
+- Using an entity `:id` will now correctly select and update entities in transactions.
+
 ## [2.2.2] - 2021-10-19
 ### Added
 - Added a new `:input-limit` option to transact. When included, the transaction will attempt to keep at or below this number of triples.
@@ -289,7 +299,8 @@
 ### Added
 - Introduced Update Annotations
 
-[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.2...HEAD
+[Unreleased]: https://github.com/threatgrid/asami/compare/2.2.3...HEAD
+[2.2.3]: https://github.com/threatgrid/asami/compare/2.2.2...2.2.3
 [2.2.2]: https://github.com/threatgrid/asami/compare/2.2.1...2.2.2
 [2.2.1]: https://github.com/threatgrid/asami/compare/2.2.0...2.2.1
 [2.2.0]: https://github.com/threatgrid/asami/compare/2.1.3...2.2.0
