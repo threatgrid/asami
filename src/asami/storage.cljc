@@ -25,7 +25,7 @@
   (since [this t] "Retrieves a database since a given moment, exclusive")
   (since-t [this] "Returns the since point for a database")
   (graph [this] "Returns the internal graph for the database")
-  (entity [this id] [this id nested?] "Returns an entity for an identifier"))
+  (entity [this id nested?] "Returns an entity for an identifier"))
 
 (def UpdateData (s/pred #(and (instance? #?(:clj clojure.lang.Volatile :cljs Volatile) %)
                               (vector? (deref %))

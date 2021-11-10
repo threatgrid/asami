@@ -354,7 +354,7 @@
           data8 {:db/id -1 :prop #{"value1" "value2"} :attribute 2}
           [triples8 map8] (ident-map->graph data8)
           node9 (get map8 -1)]
-      (is (empty? map1))
+      (is (= {"1234" node1} map1))
       (is (= #{[node1 :db/ident node1]
                [node1 :tg/entity true]
                [node1 :id "1234"]

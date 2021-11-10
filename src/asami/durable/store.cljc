@@ -150,7 +150,6 @@
   (since [this t-val] (since* this t-val))
   (since-t [this] t)
   (graph [this] bgraph)
-  (entity [this id] (entity* this id false))
   (entity [this id nested?] (entity* this id nested?)))
 
 (s/defn db* :- DatabaseType

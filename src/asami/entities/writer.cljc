@@ -40,7 +40,7 @@
 (def ^:dynamic *top-level-entities* nil)
 
 (def Triple [(s/one s/Any "Entity")
-             (s/one s/Keyword "attribute")
+             (s/one s/Any "attribute")
              (s/one s/Any "value")])
 
 (declare value-triples map->triples)
@@ -132,7 +132,7 @@
 
 (s/defn get-ref
   "Returns the reference (a node-id) for an object, and a flag that is false if a new reference was generated"
-  [{id :db/id ident :db/ident ident2 :id :as data} :- {s/Keyword s/Any}]
+  [{id :db/id ident :db/ident ident2 :id :as data} :- EntityMap]
   (if-let [r (@*id-map* id)] ;; an ID that is already mapped
     [r false]
     (let [idd (or ident ident2)]
@@ -146,18 +146,18 @@
              [id false]
              (throw (ex-info ":db/id must be a value node type" {:db/id id})))
         ;; With no ID do an ident lookup
-        ident (if-let [r (@*id-map* idd)]
-                [r true]
-                (let [lookup (if ident
-                               (node/find-triple *current-graph* ['?n :db/ident ident])
-                               (node/find-triple *current-graph* ['?n :id ident2]))]
-                  (if (seq lookup)
-                    (let [read-id (ffirst lookup)]
-                      (when (top-level-entity? read-id)
-                        (vswap! *top-level-entities* conj read-id))
-                      (vswap! *id-map* assoc idd read-id)
-                      [read-id true]) ;; return the retrieved ref
-                    [(new-node idd) false]))) ;; nothing retrieved so generate a new ref
+        idd (if-let [r (@*id-map* idd)]
+              [r true]
+              (let [lookup (if ident
+                             (node/find-triple *current-graph* ['?n :db/ident ident])
+                             (node/find-triple *current-graph* ['?n :id ident2]))]
+                (if (seq lookup)
+                  (let [read-id (ffirst lookup)]
+                    (when (top-level-entity? read-id)
+                      (vswap! *top-level-entities* conj read-id))
+                    (vswap! *id-map* assoc idd read-id)
+                    [read-id true]) ;; return the retrieved ref
+                  [(new-node idd) false]))) ;; nothing retrieved so generate a new ref
         ;; generate an ID
         :default [(new-node nil) false]))))  ;; generate a new ref
 
@@ -165,7 +165,7 @@
 (s/defn map->triples
   "Converts a single map to triples. Returns the entity reference or node id.
    The triples are built up statefully in the volatile *triples*."
-  [data :- {s/Keyword s/Any}]
+  [data :- EntityMap]
   (let [[entity-ref ident?] (get-ref data)
         data (dissoc data :db/id)
         data (if ident? (dissoc data :db/ident) data)]

@@ -145,7 +145,6 @@
 (def since storage/since)
 (def since-t storage/since-t)
 (def graph storage/graph)
-(def entity storage/entity)
 (def release storage/release)
 (def now internal/now)
 (def instant internal/instant)
@@ -329,6 +328,15 @@
             (storage/graph database)
             (as-graph database))]
     (gr/resolve-pattern g '[?e ?a ?v ?t]))) ;; Note that transactions are not returned yet
+
+(defn entity
+  "Wrapper around the storage/entity function so that connections can be asked for entities.
+  d: a connection or database
+  id: an identifier for an entity"
+  ([d id] (entity d id false))
+  ([d id nested?]
+   (let [database (if (satisfies? storage/Database d) d (db d))]
+     (storage/entity database id nested?))))
 
 (defn export-str
   "A wrapper on export-data to serialize to a string"

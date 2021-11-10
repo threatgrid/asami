@@ -413,10 +413,10 @@
             :age 23
             :friends [{:name "Anastasia Christodoulopoulos" :age 23}
                       {:name "Anne Richardson" :age 25}]}
-         (entity db1 :a)))
+         (entity db1 :a false)))
     (is (= {:name "Persephone Konstantopoulos"
             :age 23
             :friends [{:name "Anastasia Christodoulopoulos" :age 23}
                       {:name "Anne Richardson" :age 25}]}
-         (entity db1 "p")))
+         (entity db1 "p" false)))
     (delete-database conn)))

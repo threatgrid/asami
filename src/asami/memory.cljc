@@ -51,7 +51,6 @@
   (since [this t] (since* this t))
   (since-t [this] (since-t* this))
   (graph [this] (graph* this))
-  (entity [this id] (entity* this id false))
   (entity [this id nested?] (entity* this id nested?)))
 
 ;; name is the name of the database
