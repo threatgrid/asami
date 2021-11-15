@@ -141,9 +141,9 @@
   (and (number? i) (neg? i)))
 
 (defn resolve-lookup-refs [graph i]
-  (if (writer/lookup-ref? i)
-    (ffirst (gr/resolve-triple graph '?r (first i) (second i)))
-    i))
+  (or (and (writer/lookup-ref? i)
+           (ffirst (gr/resolve-triple graph '?r (first i) (second i))))
+      i))
 
 (s/defn build-triples :- [(s/one [Triple] "Data to be asserted")
                           (s/one [Triple] "Data to be retracted")
