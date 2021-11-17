@@ -61,6 +61,9 @@
 (deftest test-wrap
   (do-load-test (new-graph data)))
 
+(deftest test-wrap-seqs
+  (do-load-test (new-graph (map list* data))))
+
 (deftest test-count
   (let [g (assert-data empty-graph data)
         r1 (count-pattern g '[:a ?a ?b])
