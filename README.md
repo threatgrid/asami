@@ -6,7 +6,16 @@ The latest version is :
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
-Asami is a _schemaless_ database, meaning that data may be inserted with no predefined schema. This flexibility has advantages and disadvantages. It is easier to load and evolve data over time without a schema. However, functionality like upsert and basic integrity checking is not available in the same way as with a graph with a predefined schema.
+## Goals
+Asami is both similar to and different from other graph databases. Some of the goals of the project are:
+- **Schema-less data**. Data can be loaded without prior knowledge of its structures.
+- **Stable**. Storage uses immutable structures to ensure that writes cannot lead to data corruption.
+- **Multiplatform**. Asami runs on the Java Virtual Machine and on JavaScript platforms (browsers, node.js, etc).
+- **Ease of setup**. Asami managed storage requires no provisioning, and can be created in a single statement.
+- **Plugable**. Storage is a pluggable system that allows for multiple storage types, both local and remote.
+- **Analytics**. Graph analytics are provided by using internal mechanisms for efficiency.
+
+Asami is a _schemaless_ database, meaning that data may be inserted with no predefined schema. This flexibility has advantages and disadvantages. It is easier to load and evolve data over time without a schema. However, functionality like upsert and basic integrity checking is not available in the same way as with a graph with a predefined schema. Optional schemas are on the roadmap to help with this.
 
 Asami also follows an _Open World Assumption_ model, in the same way that [RDF](http://www.w3.org/TR/rdf-primer) does. In practice, this has very little effect on the database, beyond what being schemaless provides.
 
@@ -330,7 +339,7 @@ The command will also work on `local` stores, which means that they can be loade
 ## License
 
 Copyright © 2016-2021 Cisco Systems
-Copyright © 2015-2021 Paula Gearon
+Copyright © 2015-2022 Paula Gearon
 
 Portions of src/asami/cache.cljc are Copyright © Rich Hickey
 
