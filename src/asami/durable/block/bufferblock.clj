@@ -58,29 +58,35 @@
         arr))
 
     (put-byte! [this offset v]
-      (.put ^ByteBuffer bb (+ byte-offset offset) v)
+      (.put ^ByteBuffer bb (int (+ byte-offset offset)) (byte v))
       this)
 
     (put-int! [this offset v]
-      (.put ^IntBuffer ib (+ int-offset offset) v)
+      (.put ^IntBuffer ib (int (+ int-offset offset)) (int v))
       this)
 
     (put-long! [this offset v]
-      (.put ^LongBuffer lb (+ long-offset offset) v)
+      (.put ^LongBuffer lb (int (+ long-offset offset)) ^long v)
       this)
 
     ;; a single writer allows for position/put
 
     (put-bytes! [this offset len the-bytes]
-      (doto ^ByteBuffer bb (.position (int (+ byte-offset offset))) (.put the-bytes 0 len))
+      (doto ^ByteBuffer bb
+        (.position (int (+ byte-offset offset)))
+        (.put ^bytes the-bytes (int 0) (int len)))
       this)
 
     (put-ints! [this offset len the-ints]
-      (doto ^IntBuffer ib (.position (int (+ int-offset offset))) (.put the-ints 0 len))
+      (doto ^IntBuffer ib
+        (.position (int (+ int-offset offset)))
+        (.put ^ints the-ints (int 0) (int len)))
       this)
 
     (put-longs! [this offset len the-longs]
-      (doto ^LongBuffer lb (.position (int (+ long-offset offset))) (.put the-longs 0 len))
+      (doto ^LongBuffer lb
+        (.position (int (+ long-offset offset)))
+        (.put ^longs the-longs (int 0) (int len)))
       this)
 
     (put-block!
