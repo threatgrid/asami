@@ -1,8 +1,8 @@
 # asami [![Build Status](https://travis-ci.org/threatgrid/asami.svg?branch=main)](https://travis-ci.org/threatgrid/asami) [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
 
-A graph database, for Clojure and ClojureScript.
+A graph database, for Clojure and ClojureScript. Named in honor of [Asami Soto](https://en.wikipedia.org/wiki/Asami_Sato).
 
-The latest version is :
+The latest version is:
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami)
 
