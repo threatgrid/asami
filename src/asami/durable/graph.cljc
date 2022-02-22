@@ -110,15 +110,17 @@
     [this subj pred obj]
     (let [[plain-pred trans-tag] (common-index/check-for-transitive pred)
           get-id (fn [e] (if (symbol? e) e (find-id pool e)))]
-      (if-let [s (get-id subj)]
-        (if-let [o (get-id obj)]
-          (if plain-pred
-            (when-let [p (get-id plain-pred)]
-              (log/trace "transitive resolving [" s " " p " " o "]")
-              (get-transitive-from-index this trans-tag s p o))
-            (when-let [p (get-id pred)]
-              (log/trace "resolving [" s " " p " " o "]")
-              (get-from-index this s p o)))))))
+      (or
+       (if-let [s (get-id subj)]
+         (if-let [o (get-id obj)]
+           (if plain-pred
+             (when-let [p (get-id plain-pred)]
+               (log/trace "transitive resolving [" s " " p " " o "]")
+               (get-transitive-from-index this trans-tag s p o))
+             (when-let [p (get-id pred)]
+               (log/trace "resolving [" s " " p " " o "]")
+               (get-from-index this s p o)))))
+       [])))
 
   (count-triple
     [this subj pred obj]

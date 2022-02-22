@@ -7,7 +7,9 @@
                                            long-type-mask date-type-mask inst-type-mask
                                            sstr-type-mask skey-type-mask node-type-mask
                                            boolean-true-bits boolean-false-bits]])
-    (:import [clojure.lang Keyword BigInt ISeq IPersistentMap IPersistentVector]
+    (:import [clojure.lang Keyword BigInt ISeq
+                           IPersistentMap IPersistentVector PersistentVector
+                           PersistentHashMap PersistentArrayMap PersistentTreeMap]
              [java.io RandomAccessFile]
              [java.math BigInteger BigDecimal]
              [java.net URI]
@@ -168,6 +170,21 @@
   "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
   #{Long Double Date Instant UUID})
 
+
+(defn map-header
+  "Common function for encoding the header of the various map types"
+  [this len]
+  (general-header (type->code IPersistentMap) len))
+
+(defn map-body
+  "Common function for encoding the body of the various map types"
+  [this]
+  ;; If this is an identified object, then save its location
+  (doseq [id-attr [:db/id :db/ident :id]]
+    (when-let [id (id-attr this)]
+      (vswap! *entity-offsets* assoc id @*current-offset*)))
+  (body (apply concat (seq this))))
+
 (extend-protocol FlatFile
   String
   (header [this len]
@@ -325,20 +342,27 @@
           (> rlen 0x7FFF) (vswap! *entity-offsets* update-lengths 3) ;; total 5 after the 2 already added
           (> rlen 0xFF) (vswap! *entity-offsets* update-lengths 1))  ;; total 3 after the 2 already added
         result)))
+  (encapsulate-id [this] nil)
 
-  IPersistentVector
+  PersistentVector
   (header [this len] (header (or (seq this) '()) len))
   (body [this] (body (or (seq this) '())))
+  (encapsulate-id [this] nil)
   
-  IPersistentMap
-  (header [this len]
-    (general-header (type->code IPersistentMap) len))
-  (body [this]
-    ;; If this is an identified object, then save it's location
-    (doseq [id-attr [:db/id :db/ident :id]]
-      (when-let [id (id-attr this)]
-        (vswap! *entity-offsets* assoc id @*current-offset*)))
-    (body (apply concat (seq this))))
+  PersistentArrayMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
+  
+  PersistentHashMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
+  
+  PersistentTreeMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
   
   Object
   (header [this len]
