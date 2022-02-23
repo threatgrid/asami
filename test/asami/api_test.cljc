@@ -465,6 +465,43 @@
     (is (= (set (q '[:find ?aka :where [?e :name "Maksim"] [?e :aka ?a] [?a :tg/contains ?aka]] db3))
            #{["Maks Otto von Stirlitz"]}))))
 
+(deftest test-update-struct
+  (let [c (connect "asami:mem://test6s")
+        maksim {:db/id -1
+                :db/ident [:maksim 45]
+                :name  "Maksim"
+                :age   45
+                :aka   ["Maks Otto von Stirlitz", "Jack Ryan"]}
+        anna   {:db/id -2
+                :db/ident :anna
+                :name  "Anna"
+                :age   31
+                :husband {:db/id -1}
+                :aka   ["Anitzka"]}
+        {db1 :db-after} @(transact c [maksim anna])
+        anne   {:db/ident :anna
+                :name' "Anne"
+                :age   32}
+        {db2 :db-after} @(transact c [anne])
+        maks   {:db/ident [:maksim 45]
+                :aka' ["Maks Otto von Stirlitz"]}
+        {db3 :db-after} @(transact c [maks])]
+    (is (= (set (q '[:find ?aka :where [?e :name "Maksim"] [?e :aka ?a] [?a :tg/contains ?aka]] db1))
+           #{["Maks Otto von Stirlitz"] ["Jack Ryan"]}))
+    (is (= (set (q '[:find ?aka :where [?e :db/ident [:maksim 45]] [?e :aka ?a] [?a :tg/contains ?aka]] db1))
+           #{["Maks Otto von Stirlitz"] ["Jack Ryan"]}))
+    (is (= (set (q '[:find ?age :where [?e :db/ident :anna] [?e :age ?age]] db1))
+           #{[31]}))
+    (is (= (set (q '[:find ?name :where [?e :db/ident :anna] [?e :name ?name]] db1))
+           #{["Anna"]}))
+    (is (= (set (q '[:find ?age :where [?e :db/ident :anna] [?e :age ?age]] db2))
+           #{[31] [32]}))
+    (is (= (set (q '[:find ?name :where [?e :db/ident :anna] [?e :name ?name]] db2))
+           #{["Anne"]}))
+    (is (= (set (q '[:find ?aka :where [?e :db/ident [:maksim 45]] [?e :aka ?a] [?a :tg/contains ?aka]] db3))
+           #{["Maks Otto von Stirlitz"]}))))
+
+
 (deftest test-append
   (let [c (connect "asami:mem://test7")
         maksim {:db/id -1

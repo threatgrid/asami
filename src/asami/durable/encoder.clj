@@ -7,7 +7,9 @@
                                            long-type-mask date-type-mask inst-type-mask
                                            sstr-type-mask skey-type-mask node-type-mask
                                            boolean-true-bits boolean-false-bits]])
-    (:import [clojure.lang Keyword BigInt ISeq IPersistentMap IPersistentVector]
+    (:import [clojure.lang Keyword BigInt ISeq
+                           IPersistentMap IPersistentVector PersistentVector
+                           PersistentHashMap PersistentArrayMap PersistentTreeMap]
              [java.io RandomAccessFile]
              [java.math BigInteger BigDecimal]
              [java.net URI]
@@ -107,7 +109,8 @@
 (defprotocol FlatFile
   (header [this len] "Returns a byte array containing a header")
   (body [this] "Returns a byte array containing the encoded data")
-  (encapsulate-id [this] "Returns an ID that encapsulates the type"))
+  (encapsulate-id [this] "Returns an ID that encapsulates the type")
+  (comparable [this] "Returns a version of this data that can be compared"))
 
 (def ^:const max-short-long  0x07FFFFFFFFFFFFFF)
 (def ^:const min-short-long -0x0800000000000000) ;; 0xF800000000000000
@@ -168,6 +171,43 @@
   "The set of types that can be encoded in a constant number of bytes. Used for homogenous sequences."
   #{Long Double Date Instant UUID})
 
+(defn type-compare
+  "Provides a regular comparison of objects of potentially different types"
+  [a b]
+  (let [ta (type a)
+        tb (type b)]
+    (if (= ta tb)
+      (compare (comparable a) (comparable b))
+      (let [tan (type->code ta)
+            tab (type->code tb)]
+        (if (and tan tab)
+          (compare tan tab)
+          (compare (str ta) (str tb)))))))
+
+(defn map-header
+  "Common function for encoding the header of the various map types"
+  [this len]
+  (general-header (type->code IPersistentMap) len))
+
+(defn map-body
+  "Common function for encoding the body of the various map types"
+  [this]
+  ;; If this is an identified object, then save its location
+  ;; only look for keyword keys if unsorted, or keys are keywords
+  (let [sorted-map? (sorted? this)]
+    (when (or (not sorted-map?) (keyword? (ffirst this)))
+      (doseq [id-attr [:db/id :db/ident :id]]
+        (when-let [id (get this id-attr)]
+          (vswap! *entity-offsets* assoc id @*current-offset*))))
+    (body (apply concat (if sorted-map?
+                          (seq this)
+                          (sort-by first type-compare this))))))
+
+(defn comparable-map
+  "Converts a map into a vector of the equivalent data, so it may be compared"
+  [m]
+  (into [] (sort-by first type-compare m)))
+
 (extend-protocol FlatFile
   String
   (header [this len]
@@ -178,6 +218,7 @@
     (.getBytes this ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr this sstr-type-mask))
+  (comparable [this] this)
 
   Boolean
   (header [this len]
@@ -186,6 +227,7 @@
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
   (encapsulate-id [this]
     (if this boolean-true-bits boolean-false-bits))
+  (comparable [this] this)
 
   URI
   (header [this len]
@@ -195,6 +237,7 @@
   (body [this]
     (.getBytes (str this) ^Charset utf8))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
   
   Keyword
   (header [this len]
@@ -205,6 +248,7 @@
     (.getBytes (subs (str this) 1) ^Charset utf8))
   (encapsulate-id [this]
     (encapsulate-sstr (subs (str this) 1) skey-type-mask))
+  (comparable [this] this)
   
   Long
   (header [this len]
@@ -216,6 +260,7 @@
   (encapsulate-id [this]
     (when-let [v (encapsulate-long this)]
       (bit-or long-type-mask v)))
+  (comparable [this] this)
 
   Double
   (header [this len]
@@ -227,6 +272,7 @@
       (.putDouble bb 0 this)
       b))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
 
   BigInt
   (header [this len]
@@ -234,6 +280,7 @@
   (body [this]
     (.toByteArray (biginteger this)))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
   
   BigDecimal
   (header [this len]
@@ -241,6 +288,7 @@
   (body [^BigDecimal this]
     (.getBytes (str this) ^Charset utf8))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
 
   Date
   (header [this len]
@@ -251,6 +299,7 @@
   (encapsulate-id [this]
     (when-let [v (encapsulate-long (.getTime ^Date this))]
       (bit-or date-type-mask v)))
+  (comparable [this] this)
 
   Instant
   (header [this len]
@@ -266,6 +315,7 @@
     (when-let [v (and (zero? (mod (.getNano ^Instant this) milli-nano))
                       (encapsulate-long (.toEpochMilli ^Instant this)))]
       (bit-or inst-type-mask v)))
+  (comparable [this] this)
 
   UUID
   (header [this len]
@@ -278,6 +328,7 @@
         (.putLong Long/BYTES (.getMostSignificantBits this)))
       b))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
 
   ISeq
   (header [this len]
@@ -325,20 +376,32 @@
           (> rlen 0x7FFF) (vswap! *entity-offsets* update-lengths 3) ;; total 5 after the 2 already added
           (> rlen 0xFF) (vswap! *entity-offsets* update-lengths 1))  ;; total 3 after the 2 already added
         result)))
+  (encapsulate-id [this] nil)
+  (comparable [this] (if (vector? this) this (into [] this)))
 
-  IPersistentVector
+  PersistentVector
   (header [this len] (header (or (seq this) '()) len))
   (body [this] (body (or (seq this) '())))
+  (encapsulate-id [this] nil)
+  (comparable [this] this)
   
-  IPersistentMap
-  (header [this len]
-    (general-header (type->code IPersistentMap) len))
-  (body [this]
-    ;; If this is an identified object, then save it's location
-    (doseq [id-attr [:db/id :db/ident :id]]
-      (when-let [id (id-attr this)]
-        (vswap! *entity-offsets* assoc id @*current-offset*)))
-    (body (apply concat (seq this))))
+  PersistentArrayMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
+  (comparable [this] (comparable-map this))
+  
+  PersistentHashMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
+  (comparable [this] (comparable-map this))
+  
+  PersistentTreeMap
+  (header [this len] (map-header this len))
+  (body [this] (map-body this))
+  (encapsulate-id [this] nil)
+  (comparable [this] (comparable-map this))
   
   Object
   (header [this len]
@@ -351,6 +414,7 @@
       (if-let [[_ encoder] (type-code this)]
         (encoder this))))
   (encapsulate-id [this] nil)
+  (comparable [this] this)
 
   asami.graph.InternalNode
   (header [this len]
@@ -358,7 +422,8 @@
   (body [this]
     (throw (ex-info "Unexpected encoding of internal node" {:node this})))
   (encapsulate-id [^asami.graph.InternalNode this]
-    (bit-or node-type-mask (bit-and data-mask (.id this)))))
+    (bit-or node-type-mask (bit-and data-mask (.id this))))
+  (comparable [this] (.id this)))
 
 (defn to-counted-bytes
   "Returns a tuple of byte arrays, representing the header and the body"

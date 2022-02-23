@@ -43,6 +43,10 @@
              (s/one s/Any "attribute")
              (s/one s/Any "value")])
 
+(def identity-prop?
+  "Tests if a property is a identifier property"
+  #{:id :db/ident})
+
 (declare value-triples map->triples)
 
 (defn add-triples!
@@ -116,12 +120,14 @@
    and builds triples around it"
   [entity-ref :- s/Any
    [property value] :- KeyValue]
-  (if (set? value)
-    (doseq [v value]
-      (let [vr (value-triples v)]
-        (add-triples! conj [entity-ref property vr])))
-    (let [v (value-triples value)]
-      (add-triples! conj [entity-ref property v]))))
+  (if (identity-prop? property)
+    (add-triples! conj [entity-ref property value])
+    (if (set? value)
+      (doseq [v value]
+        (let [vr (value-triples v)]
+          (add-triples! conj [entity-ref property vr])))
+      (let [v (value-triples value)]
+        (add-triples! conj [entity-ref property v])))))
 
 (defn new-node
   [id]
