@@ -275,8 +275,8 @@
     (zero? (bit-and 0x80 b)) 2   ;; string
     (zero? (bit-and 0x40 b)) 3   ;; uri
     (zero? (bit-and 0x20 b)) 10  ;; keyword
-    :default (let [tn (bit-and 0xF b)]
-               (if (or (= tn 4) (= tn 5)) 3 tn))))
+    ;; if short uris are permitted in the future then change to the URI code (3) here
+    :default (bit-and 0xF b)))
 
 (defn partials-len
   "Determine the number of bytes that form a partial character at the end of a UTF-8 byte array.
@@ -325,7 +325,9 @@
     3 (string-style-compare (str left-object) right-bytes)  ;; URI
     10 (string-style-compare (subs (str left-object) 1) right-bytes)  ;; Keyword
     ;; otherwise, skip the type byte in the right-bytes, and raw compare left bytes to right bytes
-    (or (first (drop-while zero? (map compare left-body (drop 1 right-bytes)))) 0)))
+    (or
+     (first (drop-while zero? (map compare left-body (drop 1 right-bytes)))) ;; includes right header and body
+     0)))
 
 (defn read-object-size
   "Reads an object from a paged-reader, at id=pos. Returns both the object and it's length."

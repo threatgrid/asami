@@ -4,12 +4,13 @@
   #?(:cljs (:refer-clojure :exclude [get]))
   (:require [asami.durable.codec :as codec]
             [asami.durable.encoder :as encoder :refer [to-bytes encapsulate-id]]
-            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id decode-length-node]]
+            [asami.durable.decoder :as decoder :refer [read-object unencapsulate-id decode-length-node
+                                                       type-info long-bytes-compare]]
             [asami.durable.common :refer [Paged refresh! read-byte read-short read-bytes read-bytes-into
                                           FlatStore write-object! get-object force!]]
             #?(:clj [asami.durable.flat-file :refer [paged-file]])
             [clojure.string :as s]
-            [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is]])
+            [clojure.test #?(:clj :refer :cljs :refer-macros) [deftest is testing]])
   #?(:clj
      (:import [java.io RandomAccessFile File]
               [java.nio ByteBuffer]
@@ -264,6 +265,25 @@
     (rt ["hello" :hello 2020 20.20 (str-of-len 130) (uri "http://data.org/?ref=1234567890")
          123456789012345678901234567890N 12345678901234567890.0987654321M (now)
          #uuid "1df3b523-357e-4339-a009-2d744e372d44" (byte-array (range 256)) :end "end"])))
+
+(deftest test-collection-compare
+  (testing "Does collection data compare correctly"
+    (let [ba (byte-array 2048)
+          bb (byte-buffer ba)
+          write! (fn [o]
+                   (let [[header body] (to-bytes o)
+                         body-size (byte-length body)]
+                     (.position bb 0)
+                     (.put bb header 0 1)  ;; only writing the first byte of the header
+                                           ;; this is what nodes use
+                     (.put bb body 0 body-size)))
+          compare-data (fn [o]
+                         (let [[header body] (to-bytes o)
+                               type-byte (byte (type-info (aget ^bytes header 0)))]
+                           (write! o)
+                           (is (zero? (long-bytes-compare type-byte header body o ba)))))]
+      (compare-data ["maksim" 42])
+      (compare-data {"maksim" 42}))))
 
 (deftest test-map-codecs
   (let [bb (byte-buffer (byte-array 2048))

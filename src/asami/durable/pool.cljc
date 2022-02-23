@@ -6,7 +6,7 @@
                                             find-tx get-tx append! commit! rewind! force! close delete!]]
               [asami.durable.common-utils :as common-utils]
               [asami.durable.tree :as tree]
-              [asami.durable.encoder :as encoder :refer [to-bytes]]
+              [asami.durable.encoder :as encoder :refer [to-bytes comparable]]
               [asami.durable.decoder :as decoder :refer [type-info long-bytes-compare]]
               [asami.durable.block.block-api :refer [get-long get-byte get-bytes put-byte! put-bytes! put-long! get-id
                                                      CountedBlocks get-block-count]]
@@ -54,7 +54,7 @@
             ;; node payload length and matches the header of the other string, then they match
             ;; and this next step is performed. Instead, in this case a +/- 1 can be returned.
             (let [stored-data (get-object data-store (get-object-ref node))]
-              (compare object stored-data))
+              (compare (comparable object) (comparable stored-data)))
             nc))
         c))))
 

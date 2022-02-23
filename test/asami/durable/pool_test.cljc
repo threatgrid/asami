@@ -67,6 +67,28 @@
       (recur nn)
       n)))
 
+(deftest test-short-store
+  (let [pool (create-pool "pool-short-test")
+        data [".......three hundred and twenty-five"
+              ".......four hundred and thirty-six"
+              ["data" :one 1]
+              {:id 1 :data ["two" 2]}
+              {:id 2 "data" 2}]
+        [ids pool] (reduce (fn [[ids p] d]
+                             (let [[id p'] (write! p d)]
+                               [(conj ids id) p']))
+                           [[] pool] data)
+        id-values (map vector ids data)]
+    (doseq [[id value] id-values]
+      (is (= value (find-object pool id))))
+
+    (is (= (nth ids 2) (find-id pool (nth data 2))))
+    (doseq [[id value] (map vector ids data)]
+      (is (= id (find-id pool value)) (str "data: " value)))
+    (close pool))
+
+  (recurse-delete "pool-short-test"))
+
 (deftest test-storage
   (let [pool (create-pool "pool-test")
         data ["abcdefgh"
@@ -79,7 +101,10 @@
               :seven-hundred-and-one
               :eight-hundred-and-two
               :nine-hundred-and-three
-              :ten-hundred-and-four]
+              :ten-hundred-and-four
+              ["data" :one 1]
+              {:id 1 :data ["two" 2]}
+              {:id 2 "data" 2}]
         [ids pool] (reduce (fn [[ids p] d]
                              (let [[id p'] (write! p d)]
                                [(conj ids id) p']))
@@ -118,6 +143,7 @@
               true
               :a
               :name
+              ["data" :one 1]
               "Persephone Konstantopoulos"
               :a
               :age
@@ -133,6 +159,7 @@
               :tg/node-c
               :tg/node-c
               :tg/first
+              {:id 1 :data ["two" 2]}
               :tg/node-2
               :tg/node-1
               :name
@@ -146,6 +173,7 @@
               :tg/node-2
               :age
               25
+              {:id 2 "data" 2}
               :tg/node-b
               :tg/contains
               :tg/node-1
