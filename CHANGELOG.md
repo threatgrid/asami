@@ -4,6 +4,9 @@
 ### Added
 - The `:db/ident` and `:id` attributes may now use compound keys.
 
+### Fixed
+- Fixed a problem where resolving a pattern on disk will lead to an error if the resolution is empty.
+
 ## [2.2.3] - 2021-11-10
 ### Added
 - The `asami.core/entity` function now accepts Connections as well as Databases. This will select the latest database from the connection.
