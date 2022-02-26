@@ -276,3 +276,27 @@
                            (doseq [pvs to-add] (property-vals node-ref pvs))
                            (backtrack-unlink-top-entities @*top-level-entities* @*triples*))]
       [triples-to-add triples-to-remove])))
+
+(s/defn remove-entity-owned :- [Triple]
+  "Returns all of the triples for an entity, and all of the sub-entities that it owns."
+  [graph :- GraphType
+   owned :- #{s/Any}
+   node-ref]
+  (let [incoming (map #(conj % node-ref) (node/find-triple graph ['?s '?p node-ref]))
+        prop-vals (node/find-triple graph [node-ref '?p '?o])
+        outgoing (map #(vec (cons node-ref %)) prop-vals)
+        nexts (sequence (comp
+                         (map second)
+                         (filter owned)
+                         (map #(remove-entity-owned graph owned %))) prop-vals)]
+    (apply concat incoming outgoing nexts)))
+
+(s/defn remove-entity :- [Triple]
+  "Returns all of the triples associated with an entity in order to remove it."
+  [graph :- GraphType
+   node-ref]
+  (let [owner (if (seq (node/find-triple graph [node-ref :tg/entity true]))
+                node-ref
+                (ffirst (node/find-triple graph ['?p :tg/owns node-ref])))
+        owned (set (map first (node/find-triple graph [owner :tg/owns '?e])))]
+    (remove-entity-owned graph owned node-ref)))
