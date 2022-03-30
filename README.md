@@ -1,3 +1,5 @@
+> This repository is no longer being maintained. For ongoing development, please see: https://github.com/quoll/asami.
+
 # asami [![Build Status](https://travis-ci.org/threatgrid/asami.svg?branch=main)](https://travis-ci.org/threatgrid/asami) [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-v2.0%20adopted-ff69b4.svg)](CODE_OF_CONDUCT.md)
 
 A graph database, for Clojure and ClojureScript.
